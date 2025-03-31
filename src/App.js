@@ -4,7 +4,7 @@ import SimpleReactFooter from './components/simple-react-footer/SimpleReactFoote
 
 const App = () => {
   const currentYear = new Date().getFullYear()
-  const copyrightYear = `2021-${currentYear} Unitary Fund`
+  const copyrightYear = `2021-${currentYear} Unitary Foundation`
 
   return (
     <div className='App'>
@@ -13,10 +13,10 @@ const App = () => {
         title='metriq'
         description='Quantum computing benchmarks by community contributors'
         copyright={copyrightYear}
-        discord='unitary.fund'
-        github='unitaryfund'
-        twitch='unitaryfund'
-        twitter='unitaryfund'
+        discord='unitary.foundation'
+        github='unitaryfoundation'
+        twitch='unitaryfoundation'
+        twitter='unitaryfoundation'
         youtube='UCDbDLAzGRTHnhkoMMOX7D1A'
         linkedin='unitary-fund'
         backgroundColor='#04165D'

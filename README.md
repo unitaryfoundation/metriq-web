@@ -44,9 +44,9 @@ the following lines into your `.bashrc`, making sure to alter the values of the
 ```bash
 export METRIQ_SECRET_KEY='[REDACTED]'
 export METRIQ_SUPPORT_EMAIL_SERVICE='gmail'
-export METRIQ_SUPPORT_EMAIL_ACCOUNT='metriq@unitary.fund'
+export METRIQ_SUPPORT_EMAIL_ACCOUNT='metriq@unitary.foundation'
 export METRIQ_SUPPORT_EMAIL_PASSWORD='[REDACTED]'
-export METRIQ_SUPPORT_EMAIL_ADDRESS='metriq@unitary.fund'
+export METRIQ_SUPPORT_EMAIL_ADDRESS='metriq@unitary.foundation'
 ```
 
 `METRIQ_SECRET_KEY` can be anything, but, for a realistic secret key, start the API project without this environment variable set at all. The app will automatically generate and print a random secret key for temporary use, and this can copied and pasted into `export METRIQ_SECRET_KEY=...` for permanent use.
@@ -115,7 +115,7 @@ to localhost URL.
 
 Once you have both `metriq-api` and `metriq-app` hosting locally, you can seed
 the local instance of the database with the data from the
-[`metriq-postgres`](https://github.com/unitaryfund/metriq-postgres) repo.
+[`metriq-postgres`](https://github.com/unitaryfoundation/metriq-postgres) repo.
 
 Following the instructions in the `README.md` file of the `metriq-postgres` repo will
 populate your local instance of the database with dummy data from the `.JSON`
