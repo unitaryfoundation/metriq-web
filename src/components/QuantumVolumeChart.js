@@ -1100,11 +1100,10 @@ function QuantumVolumeChart (props) {
             qubitCount: _d.qubitCount ? +_d.qubitCount : '',
             circuitDepth: _d.circuitDepth ? +_d.circuitDepth : '',
             provider: _d.providerName ? _d.providerName.toLowerCase() : 'Other',
-            tableDate: parseDate(_d.evaluatedAt),
-            dayIndexInEpoch: dayIndexInEpoch(_d.evaluatedAt),
+            tableDate: parseDate(!_d.evaluatedAt ? _d.createdAt.split('T')[0] : _d.evaluatedAt),
+            dayIndexInEpoch: dayIndexInEpoch(!_d.evaluatedAt ? _d.createdAt.split('T')[0] : _d.evaluatedAt),
             arXiv: _d.arXiv
           }))
-          .sort((a, b) => (props.taskId === 119) ? (a.metricValue > b.metricValue) : props.isQubits ? (a.qubitCount < b.qubitCount) : (a.dayIndexInEpoch > b.dayIndexInEpoch))
 
         // Filter same as with metric names
         const dataFiltered = []
