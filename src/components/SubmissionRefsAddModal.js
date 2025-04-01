@@ -117,7 +117,7 @@ const SubmissionRefsAddModal = (props) => {
       return
     }
 
-    let itemCopy = {...item}
+    const itemCopy = { ...item }
     itemCopy.parent = nItem.id
     setItem(itemCopy)
     handleValidation(itemCopy)
@@ -129,7 +129,7 @@ const SubmissionRefsAddModal = (props) => {
     }
 
     const fn = props.allNames.find(f => f.name === value)
-    let itemCopy = {...item}
+    const itemCopy = { ...item }
     if (fn) {
       itemCopy.parent = fn.id
       handleValidation(itemCopy)
@@ -150,7 +150,7 @@ const SubmissionRefsAddModal = (props) => {
       return
     }
 
-    let itemCopy = {...item}
+    const itemCopy = { ...item }
     itemCopy.id = nItem.id
     setItem(itemCopy)
     handleValidation(item)
@@ -158,7 +158,7 @@ const SubmissionRefsAddModal = (props) => {
 
   const handleOnChangeRef = (key, value) => {
     const fn = props.filteredNames.find(f => f.name === value)
-    let itemCopy = {...item}
+    const itemCopy = { ...item }
     if (fn) {
       itemCopy.id = fn.id
     } else {
@@ -169,7 +169,7 @@ const SubmissionRefsAddModal = (props) => {
   }
 
   const handleOnChangeName = (field, value) => {
-    let itemCopy = {...item}
+    const itemCopy = { ...item }
     itemCopy.name = value
     setItem(itemCopy)
     handleValidation(itemCopy)
@@ -178,7 +178,7 @@ const SubmissionRefsAddModal = (props) => {
   const handleReset = () => {
     setShowAccordion(false)
     setIsValid(false)
-    let itemCopy = {...item}
+    const itemCopy = { ...item }
     itemCopy.name = ''
     itemCopy.fullName = ''
     itemCopy.description = ''
@@ -195,7 +195,7 @@ const SubmissionRefsAddModal = (props) => {
     }
     console.log('Field: ' + field + ', value: ' + value)
 
-    let itemCopy = {...item}
+    const itemCopy = { ...item }
     itemCopy[field] = value
     setItem(itemCopy)
     handleValidation(itemCopy)

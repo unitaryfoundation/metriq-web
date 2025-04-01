@@ -40,20 +40,21 @@ function QuantumVolumeChart (props) {
   const chartRef = React.useRef()
   const legendRef = React.useRef()
   const legendColorRef = React.useRef()
-  const [key,] = React.useState(crypto.randomUUID())
-  const [chartId,] = React.useState('my_dataviz_' + key)
-  const [legendId,] = React.useState('legend_guide_' + key)
-  const [legendColorId,] = React.useState('legend-color-' + key)
-  const [labelClass,] = React.useState('labeltohide' + key)
-  const [svgLegendId,] = React.useState('svglegend' + key)
-  const [toolTipId,] = React.useState('#scatter-tooltip' + key)
-  const [svgId,] = React.useState('#svgscatter' + key)
+  const [key] = React.useState(crypto.randomUUID())
+  const [chartId] = React.useState('my_dataviz_' + key)
+  const [legendId] = React.useState('legend_guide_' + key)
+  const [legendColorId] = React.useState('legend-color-' + key)
+  const [labelClass] = React.useState('labeltohide' + key)
+  const [svgLegendId] = React.useState('svglegend' + key)
+  const [toolTipId] = React.useState('#scatter-tooltip' + key)
+  const [svgId] = React.useState('#svgscatter' + key)
   const [taskName, setTaskName] = React.useState('')
   const [metricName, setMetricName] = React.useState(props.metric)
   const [metricNames, setMetricNames] = React.useState([])
   const [areLabelsVisible, setAreLabelsVisible] = React.useState(false)
   const [areLabelsArxiv, setAreLabelsArxiv] = React.useState(false)
   const [isScaleLinear, setIsScaleLinear] = React.useState(parseInt(props.taskId) !== 34)
+  const [isHide, setIsHide] = React.useState(false)
   const [d, setD] = React.useState({})
 
   function parseDate (dateString) {
@@ -769,7 +770,7 @@ function QuantumVolumeChart (props) {
     tooltipLineTextBorder = 2.5,
     xlabelDistance = 19
   ) => {
-    if (!data || !data.filter) {
+    if (!data || !data.filter || !data.length) {
       return
     }
     data = data
@@ -798,6 +799,10 @@ function QuantumVolumeChart (props) {
 
       return 0
     })
+
+    if (!data.length) {
+      return
+    }
 
     const chronData = [...data]
     quickSort(chronData, 0, chronData.length - 1)
@@ -997,7 +1002,6 @@ function QuantumVolumeChart (props) {
     }
   }, [barplot, scatterplot, metricName, key, quickSort])
 
-
   React.useEffect(() => {
     const scroll = window.scrollY
     isMobile = window.outerWidth < breakpoint
@@ -1029,8 +1033,11 @@ function QuantumVolumeChart (props) {
         if (props.onLoadData) {
           props.onLoadData(task)
         }
+
+        // Count data per metric name
         const results = task.results
         let metric = ''
+        const mNames = []
         const metricNameCounts = []
         for (let i = 0; i < results.length; ++i) {
           if (results[i].submissionUrl.toLowerCase().startsWith('https://arxiv.org/')) {
@@ -1040,37 +1047,52 @@ function QuantumVolumeChart (props) {
             results[i].arXiv = results[i].methodName
           }
 
-          if (metricNames.includes(results[i].metricName)) {
-            ++metricNameCounts[metricNames.indexOf(results[i].metricName)]
+          if (mNames.includes(results[i].metricName)) {
+            ++metricNameCounts[mNames.indexOf(results[i].metricName)]
           } else {
-            metricNames.push(results[i].metricName)
+            // Special-case task default metrics
+            mNames.push(results[i].metricName)
             metricNameCounts.push(1)
-            if (results[i].metricName.toLowerCase() === 'quantum volume') {
+            if ((props.taskId === 43) && (results[i].metricName.toLowerCase() === 'quantum volume')) {
               metric = 'quantum volume'
-            } else if (props.isQubits && (results[i].metricName.toLowerCase() === 'iterations to 1e-3 error')) {
+            } else if ((props.taskId === 119) && props.isQubits && (results[i].metricName.toLowerCase() === 'iterations to 1e-3 error')) {
               metric = 'iterations to 1e-3 error'
             }
           }
         }
-        metricNames.sort((a, b) => a > b)
-        if (metric === '') {
-          let maxCount = metricNameCounts[0]
-          let maxCountIndex = 0
-          for (let i = 1; i < metricNames.length; ++i) {
-            if (metricNameCounts[i] > maxCount) {
-              maxCountIndex = i
-              maxCount = metricNameCounts[i]
-            }
-          }
-          metric = metricNames[maxCountIndex].toLowerCase()
-        } else {
-          const tmp = metricNames.indexOf(metric)
-          if (tmp > 0) {
-            metricNames[tmp] = metricNames[0]
-            metricNames[0] = metric
+
+        // Filter metric names with low counts of results
+        mNames.sort((a, b) => a > b)
+        const mNamesFiltered = []
+        const metricNameCountsFiltered = []
+        let isHideChart = true
+        for (let i = 0; i < metricNameCounts.length; ++i) {
+          if (metricNameCounts[i] > 2) {
+            mNamesFiltered.push(mNames[i])
+            metricNameCountsFiltered.push(metricNameCounts[i])
+            isHideChart = false
           }
         }
-        setMetricNames(metricNames)
+        if (isHideChart) {
+          setIsHide(true)
+          return
+        }
+
+        if (metric === '') {
+          let maxCount = metricNameCountsFiltered[0]
+          let maxCountIndex = 0
+          for (let i = 1; i < mNamesFiltered.length; ++i) {
+            if (metricNameCountsFiltered[i] > maxCount) {
+              maxCountIndex = i
+              maxCount = metricNameCountsFiltered[i]
+            }
+          }
+          metric = mNamesFiltered[maxCountIndex].toLowerCase()
+        } else {
+          const tmp = mNamesFiltered.indexOf(metric)
+          metric = mNamesFiltered[tmp]
+        }
+        setMetricNames(mNamesFiltered)
         if (!metricName) {
           setMetricName(metric)
         }
@@ -1090,7 +1112,13 @@ function QuantumVolumeChart (props) {
             arXiv: _d.arXiv
           }))
           .sort((a, b) => (props.taskId === 119) ? (a.metricValue > b.metricValue) : props.isQubits ? (a.qubitCount < b.qubitCount) : (a.dayIndexInEpoch > b.dayIndexInEpoch))
-        setD(data)
+        const dataFiltered = []
+        for (let i = 0; i < data.length; ++i) {
+          if (mNamesFiltered.includes(data[i].metricName)) {
+            dataFiltered.push(data[i])
+          }
+        }
+        setD(dataFiltered)
       })
       .catch(err => {
         console.log(err)
@@ -1105,7 +1133,7 @@ function QuantumVolumeChart (props) {
           <h4 align='left'>{props.isPreview ? <Link to={'/Task/' + props.taskId}>{taskName}</Link> : taskName}</h4>
         </div>
       </div>
-      <div id='cargo'>
+      {!isHide && <div id='cargo'>
         <div id={chartId} ref={chartRef} />
         <div id={legendId} ref={legendRef} style={{ textAlign: 'justify' }}>
           <div>
@@ -1152,7 +1180,7 @@ function QuantumVolumeChart (props) {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </span>
   )
 }
