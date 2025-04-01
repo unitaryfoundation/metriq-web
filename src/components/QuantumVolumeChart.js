@@ -462,12 +462,26 @@ function QuantumVolumeChart (props) {
     yAxisText,
     svg
   ) => {
+
+    // Different series might have the same platform
+    const series = {}
+    for (let i = 0; i < data.length; ++i) {
+      let s = (i.arXiv && ala) ? `arXiv:${i.arXiv}` : (data[i].platformName ? data[i].platformName : data[i].methodName)
+      if (s in series) {
+        ++series[s]
+        s += ' (' + series[s] + ')'
+      } else {
+        series[s] = 1
+      }
+      data[i].domainName = s
+    }
+
     const height = yRange[0] - yRange[1]
     const yMin = d3.min(Y)
     const yDomain = [yMin < 1 ? yMin : 1, d3.max(Y)]
     const x = d3.scaleBand()
       .range([xRange[0], xRange[1]])
-      .domain(data.map((i) => { if (i.arXiv && ala) { return `arXiv:${i.arXiv}` } else { return i.platformName ? i.platformName : i.methodName } }))
+      .domain(data.map((i) => i.domainName))
       .padding(0.2)
     svg.append('g')
       .attr('transform', 'translate(0,' + height + ')')
@@ -507,7 +521,7 @@ function QuantumVolumeChart (props) {
       .data(data)
       .enter()
       .append('rect')
-      .attr('x', (i) => { if (i.arXiv && ala) { return x(`arXiv:${i.arXiv}`) } else { return x(i.platformName ? i.platformName : i.methodName) } })
+      .attr('x', (i) => x(i.domainName))
       .attr('y', (i) => y(i.metricValue))
       .attr('width', x.bandwidth())
       .attr('height', (i) => (height - y(i.metricValue)))
