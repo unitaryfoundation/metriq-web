@@ -1062,7 +1062,6 @@ function QuantumVolumeChart (props) {
         }
 
         // Filter metric names with low counts of results
-        mNames.sort((a, b) => a > b)
         const mNamesFiltered = []
         const metricNameCountsFiltered = []
         let isHideChart = true
@@ -1078,7 +1077,7 @@ function QuantumVolumeChart (props) {
           return
         }
 
-        if (metric === '') {
+        if ((metric === '') || !mNamesFiltered.includes(metric)) {
           let maxCount = metricNameCountsFiltered[0]
           let maxCountIndex = 0
           for (let i = 1; i < mNamesFiltered.length; ++i) {
@@ -1093,9 +1092,7 @@ function QuantumVolumeChart (props) {
           metric = mNamesFiltered[tmp]
         }
         setMetricNames(mNamesFiltered)
-        if (!metricName) {
-          setMetricName(metric)
-        }
+        setMetricName(metric)
         const data = results
           .map((_d) => ({
             key: +_d.id,
