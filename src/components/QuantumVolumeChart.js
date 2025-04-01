@@ -462,7 +462,6 @@ function QuantumVolumeChart (props) {
     yAxisText,
     svg
   ) => {
-
     // Different series might have the same platform
     const series = {}
     for (let i = 0; i < data.length; ++i) {
@@ -1099,7 +1098,7 @@ function QuantumVolumeChart (props) {
 
         setMetricNames(mNamesFiltered)
         if (!metricName) {
-            setMetricName(metric)
+          setMetricName(metric)
         }
 
         // Map data to schema
@@ -1142,54 +1141,55 @@ function QuantumVolumeChart (props) {
           <h4 align='left'>{props.isPreview ? <Link to={'/Task/' + props.taskId}>{taskName}</Link> : taskName}</h4>
         </div>
       </div>
-      {!isHide && <div id='cargo'>
-        <div id={chartId} ref={chartRef} />
-        <div id={legendId} ref={legendRef} style={{ textAlign: 'justify' }}>
-          <div>
-            {!props.isQubits &&
-              <span>
-                <div id='legend-switch' style={{ marginTop: '10px' }}>
-                  <label className='switch'>
-                    <input id='labelSwitch' type='checkbox' onClick={onLabelSwitchClick} />
-                    <span className='slider round' />
-                  </label>
-                  <span className='legendTitle'>Show labels</span>
-                </div>
-                <div id='legend-switch' style={{ marginTop: '10px' }}>
-                  <label className='switch'>
-                    <input id='arXivSwitch' type='checkbox' onClick={onArxivSwitchClick} />
-                    <span className='slider round' />
-                  </label>
-                  <span className='legendTitle'>Labels | ID</span>
-                </div>
-              </span>}
-            <div id='legend-switch' style={{ marginTop: '10px' }}>
-              <label className='switch'>
-                <input id='isScaleLinearSwitch' type='checkbox' onClick={onScaleSwitchClick} />
-                <span className='slider round' />
-              </label>
-              <span className='legendTitle'>{parseInt(props.taskId) !== 34 ? 'Linear | Log' : 'Log | Linear'}</span>
+      {!isHide &&
+        <div id='cargo'>
+          <div id={chartId} ref={chartRef} />
+          <div id={legendId} ref={legendRef} style={{ textAlign: 'justify' }}>
+            <div>
+              {!props.isQubits &&
+                <span>
+                  <div id='legend-switch' style={{ marginTop: '10px' }}>
+                    <label className='switch'>
+                      <input id='labelSwitch' type='checkbox' onClick={onLabelSwitchClick} />
+                      <span className='slider round' />
+                    </label>
+                    <span className='legendTitle'>Show labels</span>
+                  </div>
+                  <div id='legend-switch' style={{ marginTop: '10px' }}>
+                    <label className='switch'>
+                      <input id='arXivSwitch' type='checkbox' onClick={onArxivSwitchClick} />
+                      <span className='slider round' />
+                    </label>
+                    <span className='legendTitle'>Labels | ID</span>
+                  </div>
+                </span>}
+              <div id='legend-switch' style={{ marginTop: '10px' }}>
+                <label className='switch'>
+                  <input id='isScaleLinearSwitch' type='checkbox' onClick={onScaleSwitchClick} />
+                  <span className='slider round' />
+                </label>
+                <span className='legendTitle'>{parseInt(props.taskId) !== 34 ? 'Linear | Log' : 'Log | Linear'}</span>
+              </div>
+              <div id='legend-switch' style={{ marginTop: '10px' }}>
+                <label className='switch' style={{ width: '50%' }}>
+                  <select id='metricSelect' style={{ width: '100%' }} onChange={onMetricSelectChange} value={metricName}>
+                    {metricNames.map((option, index) => <option key={index} value={option}>{option}</option>)}
+                  </select>
+                </label>
+                <span className='legendTitle' style={{ width: '50%', marginTop: '10px' }}> Metric</span>
+              </div>
             </div>
-            <div id='legend-switch' style={{ marginTop: '10px' }}>
-              <label className='switch' style={{ width: '50%' }}>
-                <select id='metricSelect' style={{ width: '100%' }} onChange={onMetricSelectChange} value={metricName}>
-                  {metricNames.map((option, index) => <option key={index} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <span className='legendTitle' style={{ width: '50%', marginTop: '10px' }}> Metric</span>
+            <div>
+              <span className='legendTitle'>{props.isQubits ? 'Qubits' : 'Providers'}</span>
+              <div id={legendColorId} ref={legendColorRef} style={{ marginTop: '10px' }} />
+            </div>
+            <div>
+              <div id='legend-stroke' style={{ marginTop: '10px' }}>
+                <button id='downloadButton' className='mybutton' onClick={onDownloadClick}>Download chart</button>
+              </div>
             </div>
           </div>
-          <div>
-            <span className='legendTitle'>{props.isQubits ? 'Qubits' : 'Providers'}</span>
-            <div id={legendColorId} ref={legendColorRef} style={{ marginTop: '10px' }} />
-          </div>
-          <div>
-            <div id='legend-stroke' style={{ marginTop: '10px' }}>
-              <button id='downloadButton' className='mybutton' onClick={onDownloadClick}>Download chart</button>
-            </div>
-          </div>
-        </div>
-      </div>}
+        </div>}
     </span>
   )
 }
