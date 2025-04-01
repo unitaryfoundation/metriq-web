@@ -7,7 +7,7 @@ const Partners = () => {
       <div className='col-md-8 text-justify'>
         <h2 className='text-center'>Open Quantum Benchmark Committee</h2>
         <div className='text-start'>
-          <p>The quantum computing landscape is rapidly evolving, with breakthroughs and advancements occurring regularly. However, amidst this progress, one challenge persists: how can researchers, developers, and enthusiasts effectively benchmark and compare different quantum computing platforms and technologies? To address this challenge head-on, Unitary Fund has established the Open Quantum Benchmark Committee. This committee will play a crucial role in furthering the development and adoption of quantum benchmarks to provide the community with a comprehensive and reliable framework for evaluating quantum computing systems.</p>
+          <p>The quantum computing landscape is rapidly evolving, with breakthroughs and advancements occurring regularly. However, amidst this progress, one challenge persists: how can researchers, developers, and enthusiasts effectively benchmark and compare different quantum computing platforms and technologies? To address this challenge head-on, Unitary Foundation has established the Open Quantum Benchmark Committee. This committee will play a crucial role in furthering the development and adoption of quantum benchmarks to provide the community with a comprehensive and reliable framework for evaluating quantum computing systems.</p>
           <p>The motivation behind the Open Quantum Benchmark Committee stems from the need to foster collaboration and standardization within the quantum computing community. By bringing together experts from various domains, including applications, compilers, error correction, hardware, and simulators, we aim to increase the size and improve the quality of the taxonomy captured by Metriq, our community-driven quantum benchmarks platform, and empower researchers and developers with the tools they need to navigate the complex landscape of quantum computing benchmarks.</p>
         </div>
         <div className='text-start'>
@@ -56,8 +56,8 @@ const Partners = () => {
           <p><strong>Yi-Ting (Tim) Chen</strong>&nbsp;
             Yi-Ting (Tim) Chen is an Applied Scientist at Amazon Braket. His current role focuses on quantum programming experience and accessing quantum hardware. His past research focused on applying atom manipulation to study atomic physics and condensed matter physics, as well as on simulating quantum systems. He studied at Stanford University, where he received his PhD in Applied Physics, and at National Taiwan University, where he received his BS in Physics.
           </p>
-          <p><strong>Metriq team at Unitary Fund</strong>&nbsp;
-            Also part of the committee are Unitary Fund staff members working on the Metriq project: Dan Strano, Vincent Russo, Kallie Ferguson, Ben Castanon, and Nathan Shammah.
+          <p><strong>Metriq team at Unitary Foundation</strong>&nbsp;
+            Also part of the committee are Unitary Foundation staff members working on the Metriq project: Dan Strano, Vincent Russo, Kallie Ferguson, Ben Castanon, and Nathan Shammah.
           </p>
         </div>
       </div>

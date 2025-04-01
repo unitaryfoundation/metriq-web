@@ -20,8 +20,8 @@ const AuthNavRight = () =>
   <Nav className='ml-auto metriq-navbar metriq-navbar-right'>
     <Nav.Link href='https://unitary.foundation' eventKey='8'><img width='96px' src={logo} alt='Unitary Foundation logo' style={{ 'margin-top': '4px' }} /></Nav.Link>
     <Nav.Link href='https://twitter.com/MetriqInfo' eventKey='9'> <FaTwitter color={`${'white'}`} size={25} className='metriq-navbar-social-icon' /> </Nav.Link>
-    <Nav.Link href='http://discord.unitary.fund' eventKey='10'> <FaDiscord color={`${'white'}`} size={25} className='metriq-navbar-social-icon' /> </Nav.Link>
-    <Nav.Link href='https://github.com/unitaryfund/metriq-app' eventKey='11'> <FaGithub color={`${'white'}`} size={25} className='metriq-navbar-social-icon' /> </Nav.Link>
+    <Nav.Link href='http://discord.unitary.foundation' eventKey='10'> <FaDiscord color={`${'white'}`} size={25} className='metriq-navbar-social-icon' /> </Nav.Link>
+    <Nav.Link href='https://github.com/unitaryfoundation/metriq-app' eventKey='11'> <FaGithub color={`${'white'}`} size={25} className='metriq-navbar-social-icon' /> </Nav.Link>
     <MainSearchBar />
     <NavDropdown title='Account' active='true' className='metriq-navbar-text' alignRight>
       <NavDropdown.Item as={Link} to='/Profile' eventKey='14'><p className='font-weight-bold'>Settings</p></NavDropdown.Item>

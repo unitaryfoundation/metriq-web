@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 3000
 const indexPath = path.resolve(__dirname, '..', 'build', 'index.html')
 
 const defaultTitle = 'Metriq - Community-driven Quantum Benchmarks'
-const defaultDescription = 'Quantum computing benchmarks, scientific social media Wiki community, for hardware, compilers, algorithms, simulators, and all things quantum, by Unitary Fund!'
+const defaultDescription = 'Quantum computing benchmarks, scientific social media Wiki community, for hardware, compilers, algorithms, simulators, and all things quantum, by Unitary Foundation!'
 
 const truncateBefore = function (str, pattern) {
   return str.slice(str.indexOf(pattern) + pattern.length)
