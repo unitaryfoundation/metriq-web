@@ -1073,10 +1073,12 @@ function QuantumVolumeChart (props) {
           }
         }
         if (isHideChart) {
+          // Chart doesn't have enough data to display at all
           setIsHide(true)
           return
         }
 
+        // Pick the default metric to display
         if ((metric === '') || !mNamesFiltered.includes(metric)) {
           let maxCount = metricNameCountsFiltered[0]
           let maxCountIndex = 0
@@ -1091,8 +1093,11 @@ function QuantumVolumeChart (props) {
           const tmp = mNamesFiltered.indexOf(metric)
           metric = mNamesFiltered[tmp]
         }
+
         setMetricNames(mNamesFiltered)
         setMetricName(metric)
+
+        // Map data to schema
         const data = results
           .map((_d) => ({
             key: +_d.id,
@@ -1109,12 +1114,15 @@ function QuantumVolumeChart (props) {
             arXiv: _d.arXiv
           }))
           .sort((a, b) => (props.taskId === 119) ? (a.metricValue > b.metricValue) : props.isQubits ? (a.qubitCount < b.qubitCount) : (a.dayIndexInEpoch > b.dayIndexInEpoch))
+
+        // Filter same as with metric names
         const dataFiltered = []
         for (let i = 0; i < data.length; ++i) {
           if (mNamesFiltered.includes(data[i].metricName)) {
             dataFiltered.push(data[i])
           }
         }
+
         setD(dataFiltered)
       })
       .catch(err => {
