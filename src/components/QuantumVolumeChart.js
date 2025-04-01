@@ -750,8 +750,7 @@ function QuantumVolumeChart (props) {
     isl = false,
     alv = false,
     ala = false,
-    mn = metricName,
-    yAxisText = 'Quantum Volume  →',
+    yAxisText = metricName,
     yName = 'metricValue', // the y column
     xAxisText = 'Date →',
     xName = 'tableDate', // the x column
@@ -784,7 +783,7 @@ function QuantumVolumeChart (props) {
     // list of IDs of data with max values
     // maxData with only max objects
 
-    const metricNameInvariant = mn.toLowerCase()
+    const metricNameInvariant = yAxisText.toLowerCase()
     const isQv = (metricNameInvariant === 'quantum volume')
 
     data = data.filter((x) => x.metricName.toLowerCase() === metricNameInvariant)
@@ -836,8 +835,9 @@ function QuantumVolumeChart (props) {
 
     const yScaleType = (isl || isQv) ? d3.scaleLinear : d3.scaleLog
     if (isQv && !isl) {
-      yAxisText = 'Log-2 Quantum Volume  →'
+      yAxisText = 'Log-2 Quantum Volume'
     }
+    yAxisText += ' →'
 
     // define aesthetic mappings
     const x = (d) => d[xName]
@@ -1036,7 +1036,6 @@ function QuantumVolumeChart (props) {
 
         // Count data per metric name
         const results = task.results
-        let metric = ''
         const mNames = []
         const metricNameCounts = []
         for (let i = 0; i < results.length; ++i) {
@@ -1050,36 +1049,29 @@ function QuantumVolumeChart (props) {
           if (mNames.includes(results[i].metricName)) {
             ++metricNameCounts[mNames.indexOf(results[i].metricName)]
           } else {
-            // Special-case task default metrics
             mNames.push(results[i].metricName)
             metricNameCounts.push(1)
-            if ((props.taskId === 43) && (results[i].metricName.toLowerCase() === 'quantum volume')) {
-              metric = 'quantum volume'
-            } else if ((props.taskId === 119) && props.isQubits && (results[i].metricName.toLowerCase() === 'iterations to 1e-3 error')) {
-              metric = 'iterations to 1e-3 error'
-            }
           }
         }
 
         // Filter metric names with low counts of results
         const mNamesFiltered = []
         const metricNameCountsFiltered = []
-        let isHideChart = true
         for (let i = 0; i < metricNameCounts.length; ++i) {
           if (metricNameCounts[i] > 2) {
             mNamesFiltered.push(mNames[i])
             metricNameCountsFiltered.push(metricNameCounts[i])
-            isHideChart = false
           }
         }
-        if (isHideChart) {
+        if (!mNamesFiltered.length) {
           // Chart doesn't have enough data to display at all
           setIsHide(true)
           return
         }
 
         // Pick the default metric to display
-        if ((metric === '') || !mNamesFiltered.includes(metric)) {
+        let metric = mNamesFiltered[0]
+        if (!mNamesFiltered.includes(metric)) {
           let maxCount = metricNameCountsFiltered[0]
           let maxCountIndex = 0
           for (let i = 1; i < mNamesFiltered.length; ++i) {
@@ -1088,14 +1080,13 @@ function QuantumVolumeChart (props) {
               maxCount = metricNameCountsFiltered[i]
             }
           }
-          metric = mNamesFiltered[maxCountIndex].toLowerCase()
-        } else {
-          const tmp = mNamesFiltered.indexOf(metric)
-          metric = mNamesFiltered[tmp]
+          metric = mNamesFiltered[maxCountIndex]
         }
 
         setMetricNames(mNamesFiltered)
-        setMetricName(metric)
+        if (!metricName) {
+            setMetricName(metric)
+        }
 
         // Map data to schema
         const data = results
