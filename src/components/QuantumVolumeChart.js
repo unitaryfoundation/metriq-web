@@ -40,20 +40,21 @@ function QuantumVolumeChart (props) {
   const chartRef = React.useRef()
   const legendRef = React.useRef()
   const legendColorRef = React.useRef()
-  const [key,] = React.useState(crypto.randomUUID())
-  const [chartId,] = React.useState('my_dataviz_' + key)
-  const [legendId,] = React.useState('legend_guide_' + key)
-  const [legendColorId,] = React.useState('legend-color-' + key)
-  const [labelClass,] = React.useState('labeltohide' + key)
-  const [svgLegendId,] = React.useState('svglegend' + key)
-  const [toolTipId,] = React.useState('#scatter-tooltip' + key)
-  const [svgId,] = React.useState('#svgscatter' + key)
+  const [key] = React.useState(crypto.randomUUID())
+  const [chartId] = React.useState('my_dataviz_' + key)
+  const [legendId] = React.useState('legend_guide_' + key)
+  const [legendColorId] = React.useState('legend-color-' + key)
+  const [labelClass] = React.useState('labeltohide' + key)
+  const [svgLegendId] = React.useState('svglegend' + key)
+  const [toolTipId] = React.useState('#scatter-tooltip' + key)
+  const [svgId] = React.useState('#svgscatter' + key)
   const [taskName, setTaskName] = React.useState('')
   const [metricName, setMetricName] = React.useState(props.metric)
   const [metricNames, setMetricNames] = React.useState([])
   const [areLabelsVisible, setAreLabelsVisible] = React.useState(false)
   const [areLabelsArxiv, setAreLabelsArxiv] = React.useState(false)
   const [isScaleLinear, setIsScaleLinear] = React.useState(parseInt(props.taskId) !== 34)
+  const [isHide, setIsHide] = React.useState(false)
   const [d, setD] = React.useState({})
 
   function parseDate (dateString) {
@@ -461,12 +462,25 @@ function QuantumVolumeChart (props) {
     yAxisText,
     svg
   ) => {
+    // Different series might have the same platform
+    const series = {}
+    for (let i = 0; i < data.length; ++i) {
+      let s = (i.arXiv && ala) ? `arXiv:${i.arXiv}` : (data[i].platformName ? data[i].platformName : data[i].methodName)
+      if (s in series) {
+        ++series[s]
+        s += ' (' + series[s] + ')'
+      } else {
+        series[s] = 1
+      }
+      data[i].domainName = s
+    }
+
     const height = yRange[0] - yRange[1]
     const yMin = d3.min(Y)
     const yDomain = [yMin < 1 ? yMin : 1, d3.max(Y)]
     const x = d3.scaleBand()
       .range([xRange[0], xRange[1]])
-      .domain(data.map((i) => { if (i.arXiv && ala) { return `arXiv:${i.arXiv}` } else { return i.platformName ? i.platformName : i.methodName } }))
+      .domain(data.map((i) => i.domainName))
       .padding(0.2)
     svg.append('g')
       .attr('transform', 'translate(0,' + height + ')')
@@ -506,7 +520,7 @@ function QuantumVolumeChart (props) {
       .data(data)
       .enter()
       .append('rect')
-      .attr('x', (i) => { if (i.arXiv && ala) { return x(`arXiv:${i.arXiv}`) } else { return x(i.platformName ? i.platformName : i.methodName) } })
+      .attr('x', (i) => x(i.domainName))
       .attr('y', (i) => y(i.metricValue))
       .attr('width', x.bandwidth())
       .attr('height', (i) => (height - y(i.metricValue)))
@@ -749,8 +763,7 @@ function QuantumVolumeChart (props) {
     isl = false,
     alv = false,
     ala = false,
-    mn = metricName,
-    yAxisText = 'Quantum Volume  →',
+    yAxisText = metricName,
     yName = 'metricValue', // the y column
     xAxisText = 'Date →',
     xName = 'tableDate', // the x column
@@ -769,7 +782,7 @@ function QuantumVolumeChart (props) {
     tooltipLineTextBorder = 2.5,
     xlabelDistance = 19
   ) => {
-    if (!data || !data.filter) {
+    if (!data || !data.filter || !data.length) {
       return
     }
     data = data
@@ -783,7 +796,7 @@ function QuantumVolumeChart (props) {
     // list of IDs of data with max values
     // maxData with only max objects
 
-    const metricNameInvariant = mn.toLowerCase()
+    const metricNameInvariant = yAxisText.toLowerCase()
     const isQv = (metricNameInvariant === 'quantum volume')
 
     data = data.filter((x) => x.metricName.toLowerCase() === metricNameInvariant)
@@ -798,6 +811,10 @@ function QuantumVolumeChart (props) {
 
       return 0
     })
+
+    if (!data.length) {
+      return
+    }
 
     const chronData = [...data]
     quickSort(chronData, 0, chronData.length - 1)
@@ -831,8 +848,9 @@ function QuantumVolumeChart (props) {
 
     const yScaleType = (isl || isQv) ? d3.scaleLinear : d3.scaleLog
     if (isQv && !isl) {
-      yAxisText = 'Log-2 Quantum Volume  →'
+      yAxisText = 'Log-2 Quantum Volume'
     }
+    yAxisText += ' →'
 
     // define aesthetic mappings
     const x = (d) => d[xName]
@@ -997,7 +1015,6 @@ function QuantumVolumeChart (props) {
     }
   }, [barplot, scatterplot, metricName, key, quickSort])
 
-
   React.useEffect(() => {
     const scroll = window.scrollY
     isMobile = window.outerWidth < breakpoint
@@ -1029,8 +1046,10 @@ function QuantumVolumeChart (props) {
         if (props.onLoadData) {
           props.onLoadData(task)
         }
+
+        // Count data per metric name
         const results = task.results
-        let metric = ''
+        const mNames = []
         const metricNameCounts = []
         for (let i = 0; i < results.length; ++i) {
           if (results[i].submissionUrl.toLowerCase().startsWith('https://arxiv.org/')) {
@@ -1040,40 +1059,49 @@ function QuantumVolumeChart (props) {
             results[i].arXiv = results[i].methodName
           }
 
-          if (metricNames.includes(results[i].metricName)) {
-            ++metricNameCounts[metricNames.indexOf(results[i].metricName)]
+          if (mNames.includes(results[i].metricName)) {
+            ++metricNameCounts[mNames.indexOf(results[i].metricName)]
           } else {
-            metricNames.push(results[i].metricName)
+            mNames.push(results[i].metricName)
             metricNameCounts.push(1)
-            if (results[i].metricName.toLowerCase() === 'quantum volume') {
-              metric = 'quantum volume'
-            } else if (props.isQubits && (results[i].metricName.toLowerCase() === 'iterations to 1e-3 error')) {
-              metric = 'iterations to 1e-3 error'
-            }
           }
         }
-        metricNames.sort((a, b) => a > b)
-        if (metric === '') {
-          let maxCount = metricNameCounts[0]
+
+        // Filter metric names with low counts of results
+        const mNamesFiltered = []
+        const metricNameCountsFiltered = []
+        for (let i = 0; i < metricNameCounts.length; ++i) {
+          if (metricNameCounts[i] > 2) {
+            mNamesFiltered.push(mNames[i])
+            metricNameCountsFiltered.push(metricNameCounts[i])
+          }
+        }
+        if (!mNamesFiltered.length) {
+          // Chart doesn't have enough data to display at all
+          setIsHide(true)
+          return
+        }
+
+        // Pick the default metric to display
+        let metric = mNamesFiltered[0]
+        if (!mNamesFiltered.includes(metric)) {
+          let maxCount = metricNameCountsFiltered[0]
           let maxCountIndex = 0
-          for (let i = 1; i < metricNames.length; ++i) {
-            if (metricNameCounts[i] > maxCount) {
+          for (let i = 1; i < mNamesFiltered.length; ++i) {
+            if (metricNameCountsFiltered[i] > maxCount) {
               maxCountIndex = i
-              maxCount = metricNameCounts[i]
+              maxCount = metricNameCountsFiltered[i]
             }
           }
-          metric = metricNames[maxCountIndex].toLowerCase()
-        } else {
-          const tmp = metricNames.indexOf(metric)
-          if (tmp > 0) {
-            metricNames[tmp] = metricNames[0]
-            metricNames[0] = metric
-          }
+          metric = mNamesFiltered[maxCountIndex]
         }
-        setMetricNames(metricNames)
+
+        setMetricNames(mNamesFiltered)
         if (!metricName) {
           setMetricName(metric)
         }
+
+        // Map data to schema
         const data = results
           .map((_d) => ({
             key: +_d.id,
@@ -1085,12 +1113,20 @@ function QuantumVolumeChart (props) {
             qubitCount: _d.qubitCount ? +_d.qubitCount : '',
             circuitDepth: _d.circuitDepth ? +_d.circuitDepth : '',
             provider: _d.providerName ? _d.providerName.toLowerCase() : 'Other',
-            tableDate: parseDate(_d.evaluatedAt),
-            dayIndexInEpoch: dayIndexInEpoch(_d.evaluatedAt),
+            tableDate: parseDate(!_d.evaluatedAt ? _d.createdAt.split('T')[0] : _d.evaluatedAt),
+            dayIndexInEpoch: dayIndexInEpoch(!_d.evaluatedAt ? _d.createdAt.split('T')[0] : _d.evaluatedAt),
             arXiv: _d.arXiv
           }))
-          .sort((a, b) => (props.taskId === 119) ? (a.metricValue > b.metricValue) : props.isQubits ? (a.qubitCount < b.qubitCount) : (a.dayIndexInEpoch > b.dayIndexInEpoch))
-        setD(data)
+
+        // Filter same as with metric names
+        const dataFiltered = []
+        for (let i = 0; i < data.length; ++i) {
+          if (mNamesFiltered.includes(data[i].metricName)) {
+            dataFiltered.push(data[i])
+          }
+        }
+
+        setD(dataFiltered)
       })
       .catch(err => {
         console.log(err)
@@ -1105,54 +1141,55 @@ function QuantumVolumeChart (props) {
           <h4 align='left'>{props.isPreview ? <Link to={'/Task/' + props.taskId}>{taskName}</Link> : taskName}</h4>
         </div>
       </div>
-      <div id='cargo'>
-        <div id={chartId} ref={chartRef} />
-        <div id={legendId} ref={legendRef} style={{ textAlign: 'justify' }}>
-          <div>
-            {!props.isQubits &&
-              <span>
-                <div id='legend-switch' style={{ marginTop: '10px' }}>
-                  <label className='switch'>
-                    <input id='labelSwitch' type='checkbox' onClick={onLabelSwitchClick} />
-                    <span className='slider round' />
-                  </label>
-                  <span className='legendTitle'>Show labels</span>
-                </div>
-                <div id='legend-switch' style={{ marginTop: '10px' }}>
-                  <label className='switch'>
-                    <input id='arXivSwitch' type='checkbox' onClick={onArxivSwitchClick} />
-                    <span className='slider round' />
-                  </label>
-                  <span className='legendTitle'>Labels | ID</span>
-                </div>
-              </span>}
-            <div id='legend-switch' style={{ marginTop: '10px' }}>
-              <label className='switch'>
-                <input id='isScaleLinearSwitch' type='checkbox' onClick={onScaleSwitchClick} />
-                <span className='slider round' />
-              </label>
-              <span className='legendTitle'>{parseInt(props.taskId) !== 34 ? 'Linear | Log' : 'Log | Linear'}</span>
+      {!isHide &&
+        <div id='cargo'>
+          <div id={chartId} ref={chartRef} />
+          <div id={legendId} ref={legendRef} style={{ textAlign: 'justify' }}>
+            <div>
+              {!props.isQubits &&
+                <span>
+                  <div id='legend-switch' style={{ marginTop: '10px' }}>
+                    <label className='switch'>
+                      <input id='labelSwitch' type='checkbox' onClick={onLabelSwitchClick} />
+                      <span className='slider round' />
+                    </label>
+                    <span className='legendTitle'>Show labels</span>
+                  </div>
+                  <div id='legend-switch' style={{ marginTop: '10px' }}>
+                    <label className='switch'>
+                      <input id='arXivSwitch' type='checkbox' onClick={onArxivSwitchClick} />
+                      <span className='slider round' />
+                    </label>
+                    <span className='legendTitle'>Labels | ID</span>
+                  </div>
+                </span>}
+              <div id='legend-switch' style={{ marginTop: '10px' }}>
+                <label className='switch'>
+                  <input id='isScaleLinearSwitch' type='checkbox' onClick={onScaleSwitchClick} />
+                  <span className='slider round' />
+                </label>
+                <span className='legendTitle'>{parseInt(props.taskId) !== 34 ? 'Linear | Log' : 'Log | Linear'}</span>
+              </div>
+              <div id='legend-switch' style={{ marginTop: '10px' }}>
+                <label className='switch' style={{ width: '50%' }}>
+                  <select id='metricSelect' style={{ width: '100%' }} onChange={onMetricSelectChange} value={metricName}>
+                    {metricNames.map((option, index) => <option key={index} value={option}>{option}</option>)}
+                  </select>
+                </label>
+                <span className='legendTitle' style={{ width: '50%', marginTop: '10px' }}> Metric</span>
+              </div>
             </div>
-            <div id='legend-switch' style={{ marginTop: '10px' }}>
-              <label className='switch' style={{ width: '50%' }}>
-                <select id='metricSelect' style={{ width: '100%' }} onChange={onMetricSelectChange} value={metricName}>
-                  {metricNames.map((option, index) => <option key={index} value={option}>{option}</option>)}
-                </select>
-              </label>
-              <span className='legendTitle' style={{ width: '50%', marginTop: '10px' }}> Metric</span>
+            <div>
+              <span className='legendTitle'>{props.isQubits ? 'Qubits' : 'Providers'}</span>
+              <div id={legendColorId} ref={legendColorRef} style={{ marginTop: '10px' }} />
+            </div>
+            <div>
+              <div id='legend-stroke' style={{ marginTop: '10px' }}>
+                <button id='downloadButton' className='mybutton' onClick={onDownloadClick}>Download chart</button>
+              </div>
             </div>
           </div>
-          <div>
-            <span className='legendTitle'>{props.isQubits ? 'Qubits' : 'Providers'}</span>
-            <div id={legendColorId} ref={legendColorRef} style={{ marginTop: '10px' }} />
-          </div>
-          <div>
-            <div id='legend-stroke' style={{ marginTop: '10px' }}>
-              <button id='downloadButton' className='mybutton' onClick={onDownloadClick}>Download chart</button>
-            </div>
-          </div>
-        </div>
-      </div>
+        </div>}
     </span>
   )
 }
