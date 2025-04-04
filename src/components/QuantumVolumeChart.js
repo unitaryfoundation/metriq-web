@@ -1148,43 +1148,43 @@ function QuantumVolumeChart (props) {
             <div>
               {!props.isQubits &&
                 <span>
-                  <div id='legend-switch' style={{ 'margin-top': '10px' }}>
+                  <div id='legend-switch'>
                     <label className='switch'>
                       <input id='labelSwitch' type='checkbox' onClick={onLabelSwitchClick} />
                       <span className='slider round' />
                     </label>
-                    <span className='legendTitle'>Show labels</span>
+                    <span className='switchLabel'>Show labels</span>
                   </div>
-                  <div id='legend-switch' style={{ 'margin-top': '10px' }}>
+                  <div id='legend-switch'>
                     <label className='switch'>
                       <input id='arXivSwitch' type='checkbox' onClick={onArxivSwitchClick} />
                       <span className='slider round' />
                     </label>
-                    <span className='legendTitle'>Labels | ID</span>
+                    <span className='switchLabel'>Labels | ID</span>
                   </div>
                 </span>}
-              <div id='legend-switch' style={{ 'margin-top': '10px' }}>
+              <div id='legend-switch'>
                 <label className='switch'>
                   <input id='isScaleLinearSwitch' type='checkbox' onClick={onScaleSwitchClick} />
                   <span className='slider round' />
                 </label>
-                <span className='legendTitle'>{parseInt(props.taskId) !== 34 ? 'Linear | Log' : 'Log | Linear'}</span>
+                <span className='switchLabel'>{parseInt(props.taskId) !== 34 ? 'Linear | Log' : 'Log | Linear'}</span>
               </div>
-              <div id='legend-switch' style={{ 'margin-top': '10px' }}>
+              <div id='legend-switch'>
                 <label className='switch' style={{ width: '50%' }}>
                   <select id='metricSelect' style={{ width: '100%' }} onChange={onMetricSelectChange} value={metricName}>
                     {metricNames.map((option, index) => <option key={index} value={option}>{option}</option>)}
                   </select>
                 </label>
-                <span className='legendTitle' style={{ width: '50%', 'margin-top': '10px' }}> Metric</span>
+                <span className='switchLabel' style={{ width: '50%' }}> Metric</span>
               </div>
             </div>
             <div>
               <span className='legendTitle'>{props.isQubits ? 'Qubits' : 'Providers'}</span>
-              <div id={legendColorId} ref={legendColorRef} style={{ 'margin-top': '10px' }} />
+              <div id={legendColorId} ref={legendColorRef}/>
             </div>
             <div>
-              <div id='legend-stroke' style={{ 'margin-top': '10px' }}>
+              <div id='legend-stroke'>
                 <button id='downloadButton' className='mybutton' onClick={onDownloadClick}>Download chart</button>
               </div>
             </div>

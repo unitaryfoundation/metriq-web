@@ -111,12 +111,20 @@ div#label-button {
   grid-template-rows: 1fr 1fr 1fr;
 }
 
-.legendTitle {
+.switchLabel {
   font-size: 14px;
   color: gray;
   font-family: Helvetica;
   position: relative;
   bottom: 3px;
+}
+
+.legendTitle {
+  font-size: 14px;
+  color: gray;
+  font-family: Helvetica;
+  position: relative;
+  bottom: -5px;
 }
 
 .mybutton {
