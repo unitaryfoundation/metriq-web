@@ -366,45 +366,48 @@ function QuantumVolumeChart (props) {
         .style('visibility', 'visible')
 
       const idData = data.filter((d) => d.id === targetID)[0]
+      let otherCircles
       try {
-        const otherCircles = d3.selectAll(`circle.${targetClass}`)
-        d3.select(toolTipId)
-        // Main tooltip
-          .style('visibility', 'visible')
-          .style('top', `${circleY}px`)
-          .style('font-size', `${smallLabelSize}px`)
-          .style('font-family', fontType)
-          .style('border', border)
-          .style('border-style', 'solid')
-          .style('border-color', borderColor)
-          .style('border-radius', borderRadius)
-          .style('padding', padding)
-          .style('background-color', backgroundColor)
-          .style(
-            'transform',
-          `translateY(-50%) translateY(${selectedCircle.width / 2}px)`
-          )
-          .html(
-          `
-        <div>
-          ${[...otherCircles._groups[0]]
-            .map(
-              (crcl) =>
-                `<div style="font-size: 1.5em;">${crcl.__data__.platformName}</div>`
-            )
-            .join('')}
-          ${d3.utcFormat('%B %d, %Y')(idData.tableDate)}<br>
-          ${idData.methodName}<br>
-          <a href="https://metriq.info/Submission/${
-            idData.submissionId
-          }" style="color: ${
-            colors[props.isQubits ? idData.qubitCount - 1 : domainIndex[idData.domain]]
-          }; filter: brightness(0.85)">→ explore submission</a>
-        </div>`
-          )
+        otherCircles = d3.selectAll(`circle.${targetClass}`)
       } catch {
-        // Intentionally left blank
+        otherCircles = null
       }
+
+      d3.select(toolTipId)
+      // Main tooltip
+        .style('visibility', 'visible')
+        .style('top', `${circleY}px`)
+        .style('font-size', `${smallLabelSize}px`)
+        .style('font-family', fontType)
+        .style('border', border)
+        .style('border-style', 'solid')
+        .style('border-color', borderColor)
+        .style('border-radius', borderRadius)
+        .style('padding', padding)
+        .style('background-color', backgroundColor)
+        .style(
+          'transform',
+        `translateY(-50%) translateY(${selectedCircle.width / 2}px)`
+        )
+        .html(
+        `
+      <div>
+        ${otherCircles ? [...otherCircles._groups[0]]
+          .map(
+            (crcl) =>
+              `<div style="font-size: 1.5em;">${crcl.__data__.platformName ? crcl.__data__.platformName : crcl.__data__.methodName}</div>`
+          )
+          .join('')
+          : ('<div style="font-size: 1.5em;">' + (idData.platformName ? idData.platformName : idData.methodName) + '</div>') }
+        ${d3.utcFormat('%B %d, %Y')(idData.tableDate)}<br>
+        ${!otherCircles && !idData.platformName ? '' : (idData.methodName + '<br>')}
+        <a href="https://metriq.info/Submission/${
+          idData.submissionId
+        }" style="color: ${
+          colors[props.isQubits ? idData.qubitCount - 1 : domainIndex[idData.domain]]
+        }; filter: brightness(0.85)">→ explore submission</a>
+      </div>`
+        )
 
       if (xPerc < turnTooltip) {
         d3.select(toolTipId)
