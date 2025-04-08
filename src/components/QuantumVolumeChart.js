@@ -314,6 +314,7 @@ function QuantumVolumeChart (props) {
     marginRight,
     xRange,
     data,
+    svg,
     colors,
     domainIndex,
     fontType, // font size in pixel
@@ -335,7 +336,7 @@ function QuantumVolumeChart (props) {
     const targetID = e.target.id
     const targetClass = e.target.className.baseVal
 
-    const selectedCircle = d3
+    const selectedCircle = svg
       .select(`circle#${targetID}`)
       .node()
       .getBoundingClientRect()
@@ -349,26 +350,26 @@ function QuantumVolumeChart (props) {
     const mouseDist = Math.sqrt((circleX - mouseX) ** 2 + (circleY - mouseY) ** 2)
 
     if (mouseDist <= selectionRadius) {
-      d3.selectAll('line.selectedLine')
+      svg.selectAll('line.selectedLine')
         .attr('class', null)
         .style('visibility', 'hidden')
 
-      d3.selectAll('text.selectedText')
+      svg.selectAll('text.selectedText')
         .attr('class', null)
         .style('visibility', 'hidden')
 
-      d3.selectAll(`line#${targetID}`)
+      svg.selectAll(`line#${targetID}`)
         .attr('class', 'selectedLine')
         .style('visibility', 'visible')
 
-      d3.selectAll(`text#${targetID}`)
+      svg.selectAll(`text#${targetID}`)
         .attr('class', 'selectedText')
         .style('visibility', 'visible')
 
       const idData = data.filter((d) => d.id === targetID)[0]
       let otherCircles
       try {
-        otherCircles = d3.selectAll(`circle.${targetClass}`)
+        otherCircles = svg.selectAll(`circle.${targetClass}`)
       } catch {
         otherCircles = null
       }
@@ -392,13 +393,14 @@ function QuantumVolumeChart (props) {
         .html(
         `
       <div>
-        ${otherCircles ? [...otherCircles._groups[0]]
+        ${otherCircles
+? [...otherCircles._groups[0]]
           .map(
             (crcl) =>
               `<div style="font-size: 1.5em;">${crcl.__data__.platformName ? crcl.__data__.platformName : crcl.__data__.methodName}</div>`
           )
           .join('')
-          : ('<div style="font-size: 1.5em;">' + (idData.platformName ? idData.platformName : idData.methodName) + '</div>') }
+          : ('<div style="font-size: 1.5em;">' + (idData.platformName ? idData.platformName : idData.methodName) + '</div>')}
         ${d3.utcFormat('%B %d, %Y')(idData.tableDate)}<br>
         ${!otherCircles && !idData.platformName ? '' : (idData.methodName + '<br>')}
         <a href="https://metriq.info/Submission/${
@@ -443,11 +445,11 @@ function QuantumVolumeChart (props) {
     } else {
       d3.select(toolTipId).style('visibility', 'hidden')
 
-      d3.selectAll('line.selectedLine')
+      svg.selectAll('line.selectedLine')
         .attr('class', null)
         .style('visibility', 'hidden')
 
-      d3.selectAll('text.selectedText')
+      svg.selectAll('text.selectedText')
         .attr('class', null)
         .style('visibility', 'hidden')
     }
@@ -661,6 +663,7 @@ function QuantumVolumeChart (props) {
           marginRight,
           xRange,
           data,
+          svg,
           colors,
           domainIndex,
           fontType,
@@ -711,6 +714,7 @@ function QuantumVolumeChart (props) {
           marginRight,
           xRange,
           data,
+          svg,
           colors,
           domainIndex,
           fontType,
@@ -1184,7 +1188,7 @@ function QuantumVolumeChart (props) {
             </div>
             <div>
               <span className='legendTitle'>{props.isQubits ? 'Qubits' : 'Providers'}</span>
-              <div id={legendColorId} ref={legendColorRef}/>
+              <div id={legendColorId} ref={legendColorRef} />
             </div>
             <div>
               <div id='legend-stroke'>
