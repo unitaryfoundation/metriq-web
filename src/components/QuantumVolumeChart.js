@@ -1141,6 +1141,14 @@ function QuantumVolumeChart (props) {
       // eslint-disable-next-line
   }, [props.taskId])
 
+
+  React.useEffect(() => {
+    return () => {
+      // On cleanup, hide the tooltip!
+      d3.select(toolTipId).style('visibility', 'hidden')
+    };
+  }, [toolTipId]);
+
   return (
     <span>
       <div className='row'>
