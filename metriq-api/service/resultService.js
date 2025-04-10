@@ -257,7 +257,7 @@ class ResultService extends ModelService {
 
     // Platform must be not null and valid (present in database) for a valid result object.
     if (reqBody.platform) {
-      const platform = (await submissionPlatformRefService.getByFks(submissionId, parseInt(reqBody.platform)))
+      const platform = (await submissionPlatformRefService.getByFks(reqBody.submissionId, parseInt(reqBody.platform)))
       if (platform.isDataSet) {
         return { success: false, error: 'Invalid platform reference specified.' }
       }
@@ -268,7 +268,7 @@ class ResultService extends ModelService {
 
     // Data Set must be not null and valid (present in database) for a valid result object.
     if (reqBody.dataSet) {
-      const dataSet = (await submissionPlatformRefService.getByFks(submissionId, parseInt(reqBody.dataSet)))
+      const dataSet = (await submissionPlatformRefService.getByFks(reqBody.submissionId, parseInt(reqBody.dataSet)))
       if (!dataSet.isDataSet) {
         return { success: false, error: 'Invalid dataSet reference specified.' }
       }
