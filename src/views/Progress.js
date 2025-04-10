@@ -4,7 +4,7 @@ const Progress = () => {
   return (
     <div id='metriq-main-content'>
       <div className='row'>
-        <div className='col-md-9'>
+        <div className='col-md-12'>
           <QuantumLandscapeChart />
         </div>
       </div>
