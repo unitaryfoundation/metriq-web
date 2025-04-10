@@ -670,6 +670,9 @@ function QuantumVolumeChart (props) {
           smallLabelSize
         )
       )
+      .on('mouseout touchend', (e) => {
+        d3.select(toolTipId).style('visibility', 'hidden')
+      })
 
     // append circles
     svg
@@ -722,6 +725,9 @@ function QuantumVolumeChart (props) {
           smallLabelSize
         )
       )
+      .on('mouseout touchend', (e) => {
+        d3.select(toolTipId).style('visibility', 'hidden')
+      })
 
     // label
     svg.selectAll('circle').each(function (d, i) {
@@ -763,7 +769,7 @@ function QuantumVolumeChart (props) {
           .text(`${svg.select(`circle#${id}`).attr('label')}`)
       }
     })
-  }, [props.isQubits, mousemove, labelClass, svgId])
+  }, [props.isQubits, mousemove, labelClass, svgId, toolTipId])
 
   // Function to draw plot
   const plot = React.useCallback((
