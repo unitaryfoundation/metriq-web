@@ -889,7 +889,11 @@ function QuantumVolumeChart (props) {
     // domains
     const yMin = d3.min(Y)
     const yMax = d3.max(Y)
-    const xDomain = [d3.min(X), d3.max(X)]
+    const xMin = new Date(d3.min(X))
+    const xMax = new Date(d3.max(X))
+    xMin.setMonth(xMin.getMonth() - 3)
+    xMax.setMonth(xMax.getMonth() + 3)
+    const xDomain = [xMin, xMax]
     const yDomain = [yMin < 1 ? yMin : 1, yMax > 1 ? (d3.max(Y) + d3.max(Y) * rangeMult) : 1]
 
     // scale
