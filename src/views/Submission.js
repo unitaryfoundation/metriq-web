@@ -10,7 +10,6 @@ import { library } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faEdit, faLink, faHeart, faMobileAlt, faStickyNote, faSuperscript, faBell, faBellSlash, faCode, faDownload } from '@fortawesome/free-solid-svg-icons'
 import logo from './../images/metriq_logo_secondary_blue.png'
-import Commento from '../components/Commento'
 import FormFieldWideRow from '../components/FormFieldWideRow'
 import SocialShareIcons from '../components/SocialShareIcons'
 import { metricValueRegex, nonblankRegex } from '../components/ValidationRegex'
@@ -956,10 +955,6 @@ class Submission extends React.Component {
           <div className='text-center'>
             Notice something about this submission that needs moderation? <span className='link' onClick={this.handleModerationReport}>Let us know.</span>
           </div>
-        </FormFieldWideRow>
-        <FormFieldWideRow>
-          <hr />
-          <Commento id={'submission-' + toString(this.state.item.id)} />
         </FormFieldWideRow>
         <Suspense fallback={<span />}>
           <SubmissionRefsAddModal
