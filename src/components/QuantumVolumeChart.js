@@ -700,7 +700,8 @@ function QuantumVolumeChart (props) {
       .attr('class', (i) => makeClass(x(i), y(i)))
       .attr('submissionId', (i) => i.submissionId)
       .attr('label', (i) => {
-        if (i.arXiv && ala) { return `arXiv:${i.arXiv}` } else return i.platformName ? i.platformName : i.methodName
+        if (i.arXiv && ala) { return `arXiv:${i.arXiv}` }
+        return i.platformName ? i.platformName : i.methodName
       })
       .on('click', function () {
         if (!isMobile) {
@@ -1063,7 +1064,7 @@ function QuantumVolumeChart (props) {
             const parts = results[i].submissionUrl.split('/')
             results[i].arXiv = (parts[parts.length - 1] === '') ? parts[parts.length - 2] : parts[parts.length - 1]
           } else {
-            results[i].arXiv = results[i].methodName
+            results[i].arXiv = null
           }
 
           if (mNames.includes(results[i].metricName)) {
@@ -1141,13 +1142,12 @@ function QuantumVolumeChart (props) {
       // eslint-disable-next-line
   }, [props.taskId])
 
-
   React.useEffect(() => {
     return () => {
       // On cleanup, hide the tooltip!
       d3.select(toolTipId).style('visibility', 'hidden')
-    };
-  }, [toolTipId]);
+    }
+  }, [toolTipId])
 
   return (
     <span>
