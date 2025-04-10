@@ -24,8 +24,9 @@ const ResultsAddModal = (props) => {
 
   useEffect(() => {
     if (!result.evaluatedAt) {
-      result.evaluatedAt = props.evaluatedAt
-      setResult(result)
+      const resultCopy = {...result}
+      resultCopy.evaluatedAt = props.evaluatedAt
+      setResult(resultCopy)
       setKey(Math.random())
     } else {
       setTask(result.task)
@@ -41,8 +42,9 @@ const ResultsAddModal = (props) => {
   }
 
   const handleOnChange = (field, value) => {
-    result[field] = value
-    setResult(result)
+    const resultCopy = {...result}
+    resultCopy[field] = value
+    setResult(resultCopy)
     if (field in setterDict) {
       setterDict[field](result)
     }
@@ -81,76 +83,74 @@ const ResultsAddModal = (props) => {
   }
 
   const handleAddModalSubmit = (isDuplicating) => {
-    if (!nonblankRegex.test(result.metricName)) {
+    const resultCopy = {...result}
+    if (!nonblankRegex.test(resultCopy.metricName)) {
       window.alert('Error: Metric Name cannot be blank.')
       return
     }
-    if (!metricValueRegex.test(result.metricValue)) {
+    if (!metricValueRegex.test(resultCopy.metricValue)) {
       window.alert('Error: Metric Value cannot be blank.')
       return
     }
-    if (result.standardError && !standardErrorRegex.test(result.standardError)) {
+    if (resultCopy.standardError && !standardErrorRegex.test(resultCopy.standardError)) {
       window.alert('Error: Standard error is not a valid number.')
       return
     }
-    if (result.standardError) {
-      result.standardError = parseFloat(result.standardError)
+    if (resultCopy.standardError) {
+      resultCopy.standardError = parseFloat(resultCopy.standardError)
     }
-    if (result.sampleSize && !numeralRegex.test(result.sampleSize)) {
+    if (resultCopy.sampleSize && !numeralRegex.test(resultCopy.sampleSize)) {
       window.alert('Error: Sample size is not a valid number.')
       return
     }
-    if (result.sampleSize) {
-      result.sampleSize = parseInt(result.sampleSize)
+    if (resultCopy.sampleSize) {
+      resultCopy.sampleSize = parseInt(resultCopy.sampleSize)
     }
-    if (result.qubitCount && !numeralRegex.test(result.qubitCount)) {
+    if (resultCopy.qubitCount && !numeralRegex.test(resultCopy.qubitCount)) {
       window.alert('Error: Qubit count is not a valid number.')
       return
     }
-    result.qubitCount = result.qubitCount ? parseInt(result.qubitCount) : null
-    if (result.circuitDepth && !numeralRegex.test(result.circuitDepth)) {
+    resultCopy.qubitCount = resultCopy.qubitCount ? parseInt(resultCopy.qubitCount) : null
+    if (resultCopy.circuitDepth && !numeralRegex.test(resultCopy.circuitDepth)) {
       window.alert('Error: Circuit depth is not a valid number.')
       return
     }
-    result.circuitDepth = result.circuitDepth ? parseInt(result.circuitDepth) : null
-    if (result.shots && !numeralRegex.test(result.shots)) {
+    resultCopy.circuitDepth = resultCopy.circuitDepth ? parseInt(resultCopy.circuitDepth) : null
+    if (resultCopy.shots && !numeralRegex.test(resultCopy.shots)) {
       window.alert('Error: Shots is not a valid number.')
       return
     }
-    result.shots = result.shots ? parseInt(result.shots) : null
-    if (!result.evaluatedAt) {
-      result.evaluatedAt = (new Date()).toISOString().split('T')[0]
-    } else if (!dateRegex.test(result.evaluatedAt)) {
+    resultCopy.shots = resultCopy.shots ? parseInt(resultCopy.shots) : null
+    if (!resultCopy.evaluatedAt) {
+      resultCopy.evaluatedAt = (new Date()).toISOString().split('T')[0]
+    } else if (!dateRegex.test(resultCopy.evaluatedAt)) {
       window.alert('Error: "Evaluated at" is not a date.')
       return
     }
-    if (!result.task) {
-      result.task = props.submission.tasks[0].id
+    if (!resultCopy.task) {
+      resultCopy.task = props.submission.tasks[0].id
     }
-    if (!result.method) {
-      result.method = props.submission.methods[0].id
+    if (!resultCopy.method) {
+      resultCopy.method = props.submission.methods[0].id
     }
-    if (isNaN(result.task)) {
-      result.task = result.task.id
+    if (isNaN(resultCopy.task)) {
+      resultCopy.task = resultCopy.task.id
     }
-    if (isNaN(result.method)) {
-      result.method = result.method.id
+    if (isNaN(resultCopy.method)) {
+      resultCopy.method = resultCopy.method.id
     }
-    if (result.dataSet && isNaN(result.dataSet)) {
-      result.dataSet = result.dataSet.id
-    } else {
-      result.dataSet = null
+    if (resultCopy.dataSet && isNaN(resultCopy.dataSet)) {
+      resultCopy.dataSet = resultCopy.dataSet.id
     }
-    if (result.platform && isNaN(result.platform)) {
-      result.platform = result.platform.id
-    } else {
-      result.platform = null
+    if (resultCopy.platform && isNaN(resultCopy.platform)) {
+      resultCopy.platform = resultCopy.platform.id
     }
+    setResult(resultCopy)
     const resultRoute = config.api.getUriPrefix() + (result.id ? ('/result/' + result.id) : ('/submission/' + props.submission.id + '/result'))
-    axios.post(resultRoute, result)
+    axios.post(resultRoute, resultCopy)
       .then(res => {
+        setSubmission(res.data.data)
         if (isDuplicating) {
-          setSubmission(res.data.data)
           window.alert("Added result! The form is prepopulated with your old result, if you'd like to add anothher.")
         } else {
           props.onAddOrEdit(res.data.data)
