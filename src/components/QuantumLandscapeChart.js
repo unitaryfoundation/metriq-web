@@ -319,6 +319,9 @@ function scatterplot (
         smallLabelSize
       )
     )
+    .on('mouseout touchend', (e) => {
+      d3.select('#scatter-tooltip').style('visibility', 'hidden')
+    })
 
   // append circles
   svg
@@ -360,6 +363,9 @@ function scatterplot (
         smallLabelSize
       )
     )
+    .on('mouseout touchend', (e) => {
+      d3.select('#scatter-tooltip').style('visibility', 'hidden')
+    })
     .style('cursor', 'pointer')
 
   // label placement
