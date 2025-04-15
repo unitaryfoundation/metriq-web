@@ -99,6 +99,7 @@ function QuantumVolumeChart (props) {
     setAreLabelsVisible(!areLabelsVisible)
   }
   function onArxivSwitchClick () {
+    setAreLabelsVisible(true)
     setAreLabelsArxiv(!areLabelsArxiv)
   }
   function onScaleSwitchClick () {
@@ -1175,7 +1176,7 @@ function QuantumVolumeChart (props) {
                 <span>
                   <div id='legend-switch'>
                     <label className='switch'>
-                      <input id='labelSwitch' type='checkbox' onClick={onLabelSwitchClick} />
+                      <input id='labelSwitch' type='checkbox' onClick={onLabelSwitchClick} checked={areLabelsVisible} />
                       <span className='slider round' />
                     </label>
                     <span className='switchLabel'>Show labels</span>
