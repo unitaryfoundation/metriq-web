@@ -10,7 +10,6 @@ const FormFieldTypeaheadRow = React.lazy(() => import('./FormFieldTypeaheadRow')
 
 const ResultsAddModal = (props) => {
   const [isValidated, setIsValidated] = useState(false)
-  const [isUpdated, setIsUpdated] = useState(false)
   const [result, setResult] = useState(props.result)
   const [submission, setSubmission] = useState({})
   const [key, setKey] = useState(Math.random())
@@ -23,8 +22,18 @@ const ResultsAddModal = (props) => {
   const setterDict = { task: setTask, method: setMethod, dataSet: setDataSet, platform: setPlatform }
 
   useEffect(() => {
+    if (props.show) {
+      setResult(props.result)
+      setTask(props.result.task)
+      setMethod(props.result.method)
+      setDataSet(props.result.dataSet)
+      setPlatform(props.result.platform)
+    }
+  }, [props.result, props.show])
+
+  useEffect(() => {
     if (!result.evaluatedAt) {
-      const resultCopy = {...result}
+      const resultCopy = { ...result }
       resultCopy.evaluatedAt = props.evaluatedAt
       setResult(resultCopy)
       setKey(Math.random())
@@ -34,15 +43,10 @@ const ResultsAddModal = (props) => {
       setDataSet(result.dataSet)
       setPlatform(result.platform)
     }
-  }, [props.evaluatedAt, result, setResult, setKey])
-
-  if (!isUpdated && props.show) {
-    setIsUpdated(true)
-    setResult(props.result)
-  }
+  }, [props.evaluatedAt, result])
 
   const handleOnChange = (field, value) => {
-    const resultCopy = {...result}
+    const resultCopy = { ...result }
     resultCopy[field] = value
     setResult(resultCopy)
     if (field in setterDict) {
@@ -52,7 +56,6 @@ const ResultsAddModal = (props) => {
   }
 
   const onHide = () => {
-    setIsUpdated(false)
     if (submission.id) {
       props.onAddOrEdit({ ...submission })
       setSubmission({})
@@ -83,7 +86,7 @@ const ResultsAddModal = (props) => {
   }
 
   const handleAddModalSubmit = (isDuplicating) => {
-    const resultCopy = {...result}
+    const resultCopy = { ...result }
     if (!nonblankRegex.test(resultCopy.metricName)) {
       window.alert('Error: Metric Name cannot be blank.')
       return
@@ -155,7 +158,6 @@ const ResultsAddModal = (props) => {
         } else {
           props.onAddOrEdit(res.data.data)
         }
-        setIsUpdated(false)
       })
       .catch(err => {
         window.alert('Error: ' + ErrorHandler(err) + '\nSorry! Check your connection and login status, and try again.')
@@ -174,7 +176,6 @@ const ResultsAddModal = (props) => {
         axios.get(submissionRoute)
           .then(subRes => {
             props.onAddOrEdit(subRes.data.data)
-            setIsUpdated(false)
           })
           .catch(err => {
             window.alert('Error: ' + ErrorHandler(err) + '\nSorry! Check your connection and login status, and try again.')
