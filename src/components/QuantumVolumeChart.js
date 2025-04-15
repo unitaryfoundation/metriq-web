@@ -2,13 +2,12 @@
 
 import React from 'react'
 import * as d3 from 'd3'
-import { saveAs } from 'file-saver'
-import XMLSerializer from 'xmlserializer'
 import '../viz-style.css'
 import axios from 'axios'
 import { sortByCounts } from './SortFunctions'
 import config from '../config'
 import { Link } from 'react-router-dom/cjs/react-router-dom.min'
+import d3ToPng from 'd3-svg-to-png'
 
 const fontType = 'Helvetica'
 const smallLabelSize = 15 // font size in pixel
@@ -110,12 +109,7 @@ function QuantumVolumeChart (props) {
   }
 
   function onDownloadClick () {
-    const svgElement = d3.select(chartRef.current).node()
-    const svgString = new XMLSerializer().serializeToString(svgElement)
-    const blob = new Blob([svgString], {
-      type: 'image/svg+xml;charset=utf-8'
-    })
-    saveAs(blob, 'chart.svg')
+    d3ToPng(svgId, 'chart')
   }
 
   const quickSort = React.useCallback((arr, low, high) => {
