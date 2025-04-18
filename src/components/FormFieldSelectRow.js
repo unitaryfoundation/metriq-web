@@ -1,4 +1,4 @@
-import React, { useState, Suspense } from 'react'
+import React, { Suspense } from 'react'
 import { Button } from 'react-bootstrap'
 import FormFieldValidator from './FormFieldValidator'
 const TooltipTrigger = React.lazy(() => import('./TooltipTrigger'))
@@ -15,40 +15,29 @@ const FormFieldSelectRow = (props) => {
     commonOptions = options
   }
 
-  const [value, setValue] = useState(props.value
-    ? props.value
-    : (props.defaultValue
-        ? props.defaultValue
-        : options.length && !props.isNullDefault
-          ? options[0].id
-          : ''))
-  if (props.value && props.value !== value) {
-    setValue(props.value)
-  }
-
   const handleOnFieldChange = (event) => {
     // For a regular input field, read field name and value from the event.
+    if (!props.onChange) {
+      return
+    }
     const fieldName = event.target.name
     let fieldValue = (props.inputType === 'checkbox') ? event.target.checked : event.target.value
     if (props.inputType === 'select') {
       fieldValue = options[event.target.value]
     }
-    if (fieldValue !== value) {
-      if (props.onChange) {
-        props.onChange(fieldName, fieldValue)
-      }
-      setValue(fieldValue)
+    if (fieldValue !== props.value) {
+      props.onChange(fieldName, fieldValue)
     }
   }
 
   const handleOnFieldBlur = (event) => {
+    if (!props.onBlur) {
+      return
+    }
     const fieldName = event.target.name
     const fieldValue = (props.inputType === 'checkbox') ? event.target.checked : event.target.value
-    if (fieldValue !== value) {
-      if (props.onBlur) {
-        props.onBlur(fieldName, fieldValue)
-      }
-      setValue(fieldValue)
+    if (fieldValue !== props.value) {
+      props.onBlur(fieldName, fieldValue)
     }
   }
 
@@ -76,7 +65,7 @@ const FormFieldSelectRow = (props) => {
           name={props.inputName}
           disabled={props.disabled}
           className='form-control'
-          value={value}
+          value={props.value}
           onChange={handleOnFieldChange}
           onBlur={handleOnFieldBlur}
         >
@@ -91,7 +80,7 @@ const FormFieldSelectRow = (props) => {
           )}
         </select>
       </div>
-      {props.onClickAdd && <Button variant='primary' className='submission-ref-button' onClick={() => props.onClickAdd(value || (options.length ? options[0].id : 0))} disabled={props.disabled}>Add</Button>}
+      {props.onClickAdd && <Button variant='primary' className='submission-ref-button' onClick={() => props.onClickAdd(props.value || (options.length ? options[0].id : 0))} disabled={props.disabled}>Add</Button>}
       {props.onClickNew && <Button variant='primary' className='submission-ref-button' onClick={props.onClickNew} disabled={props.disabled}>New</Button>}
       {!props.onClickAdd && !props.onClickNew && <div className='col col-md-3'><Suspense fallback={<div>Loading...</div>}><FormFieldValidator message={props.validatorMessage} /></Suspense></div>}
     </div>

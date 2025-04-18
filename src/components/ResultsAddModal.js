@@ -18,41 +18,32 @@ const ResultsAddModal = (props) => {
   const [method, setMethod] = useState(props.result.method)
   const [dataSet, setDataSet] = useState(props.result.dataSet)
   const [platform, setPlatform] = useState(props.result.platform)
-
-  const setterDict = { task: setTask, method: setMethod, dataSet: setDataSet, platform: setPlatform }
+  const [evaluatedAt, setEvaluatedAt] = useState(props.result.evaluatedAt)
 
   useEffect(() => {
     if (props.show) {
       setResult(props.result)
-      setTask(props.result.task)
-      setMethod(props.result.method)
-      setDataSet(props.result.dataSet)
-      setPlatform(props.result.platform)
     }
   }, [props.result, props.show])
 
   useEffect(() => {
-    if (!result.evaluatedAt) {
-      const resultCopy = { ...result }
-      resultCopy.evaluatedAt = props.evaluatedAt
-      setResult(resultCopy)
-      setKey(Math.random())
-    } else {
-      setTask(result.task)
-      setMethod(result.method)
-      setDataSet(result.dataSet)
-      setPlatform(result.platform)
-    }
-  }, [props.evaluatedAt, result])
+    setTask(result.task)
+    setMethod(result.method)
+    setDataSet(result.dataSet)
+    setPlatform(result.platform)
+    setEvaluatedAt(result.evaluatedAt)
+    setKey(Math.random())
+  }, [result])
+
+  useEffect(() => {
+    setEvaluatedAt(props.evaluatedAt)
+  }, [props.evaluatedAt])
 
   const handleOnChange = (field, value) => {
     const resultCopy = { ...result }
     resultCopy[field] = value
-    setResult(resultCopy)
-    if (field in setterDict) {
-      setterDict[field](result)
-    }
     setIsValidated(false)
+    setResult(resultCopy)
   }
 
   const onHide = () => {
@@ -70,7 +61,7 @@ const ResultsAddModal = (props) => {
     if (!metricValueRegex.test(result.metricValue)) {
       return false
     }
-    if (!dateRegex.test(result.evaluatedAt)) {
+    if (!dateRegex.test(evaluatedAt)) {
       return false
     }
     if (!standardErrorRegex.test(result.standardError)) {
@@ -124,11 +115,13 @@ const ResultsAddModal = (props) => {
       return
     }
     resultCopy.shots = resultCopy.shots ? parseInt(resultCopy.shots) : null
-    if (!resultCopy.evaluatedAt) {
+    if (!evaluatedAt) {
       resultCopy.evaluatedAt = (new Date()).toISOString().split('T')[0]
-    } else if (!dateRegex.test(resultCopy.evaluatedAt)) {
+    } else if (!dateRegex.test(evaluatedAt)) {
       window.alert('Error: "Evaluated at" is not a date.')
       return
+    } else {
+      resultCopy.evaluatedAt = evaluatedAt
     }
     if (!resultCopy.task) {
       resultCopy.task = props.submission.tasks[0].id
@@ -207,21 +200,21 @@ const ResultsAddModal = (props) => {
             <FormFieldSelectRow
               inputName='task' label='Task'
               options={props.submission.tasks}
-              defaultValue={task}
+              value={task}
               onChange={handleOnChange}
               tooltip='Task from submission, used in this result'
             /><br />
             <FormFieldSelectRow
               inputName='method' label='Method'
               options={props.submission.methods}
-              defaultValue={method}
+              value={method}
               onChange={handleOnChange}
               tooltip='Method from submission, used in this result'
             /><br />
             <FormFieldSelectRow
               inputName='dataSet' label='Data Set'
               options={props.submission.dataSets}
-              defaultValue={dataSet}
+              value={dataSet}
               isNullDefault
               onChange={handleOnChange}
               tooltip='The quantum data set used by the task for this result'
@@ -229,7 +222,7 @@ const ResultsAddModal = (props) => {
             <FormFieldSelectRow
               inputName='platform' label='Platform'
               options={props.submission.platforms}
-              defaultValue={platform}
+              value={platform}
               isNullDefault
               onChange={handleOnChange}
               tooltip='The quantum computer platform used by the method for this result'
@@ -244,7 +237,7 @@ const ResultsAddModal = (props) => {
             /><br />
             <FormFieldRow
               inputName='metricValue' inputType='number' label='Metric value'
-              value={result.metricValue}
+              dvalue={result.metricValue}
               validRegex={metricValueRegex}
               onChange={handleOnChange}
               tooltip='The value of the measure of performance, for this combination of task and method, for this submission'
@@ -252,7 +245,7 @@ const ResultsAddModal = (props) => {
             <FormFieldRow
               inputName='evaluatedAt' inputType='date' label='Evaluated'
               key={key}
-              value={result.evaluatedAt}
+              value={evaluatedAt}
               validRegex={dateRegex}
               onChange={handleOnChange}
               tooltip='Publication date. If not published, latest arXiv/submission date.'
