@@ -398,7 +398,7 @@ function QuantumVolumeChart (props) {
           : ('<div style="font-size: 1.5em;">' + (idData.platformName ? idData.platformName : idData.methodName) + '</div>')}
         ${d3.utcFormat('%B %d, %Y')(idData.tableDate)}<br>
         ${!otherCircles && !idData.platformName ? '' : (idData.methodName + '<br>')}
-        <a href="https://metriq.info/Submission/${
+        <a href="/Submission/${
           idData.submissionId
         }" style="color: ${
           colors[props.isQubits ? idData.qubitCount - 1 : domainIndex[idData.domain]]
@@ -704,7 +704,7 @@ function QuantumVolumeChart (props) {
       .on('click', function () {
         if (!isMobile) {
           const submissionId = d3.select(this).attr('submissionId')
-          window.open(`https://metriq.info/Submission/${submissionId}`)
+          window.open(`/Submission/${submissionId}`)
         }
       })
       .on('mousemove touchstart', (e) =>

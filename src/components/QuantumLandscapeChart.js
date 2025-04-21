@@ -350,7 +350,7 @@ function scatterplot (
     .on('click', function () {
       if (!isMobile) {
         const submissionId = d3.select(this).attr('submission_id')
-        window.open(`https://metriq.info/Submission/${submissionId}`)
+        window.open(`/Submission/${submissionId}`)
       }
     })
     .on('mousemove touchstart', (e) =>
@@ -476,7 +476,7 @@ function mousemove (
         <div style="font-size: 1.5em;">${idData.task_name}</div>
         ${idData.reference}<br>
         ${idData.year}<br>
-        <a href="https://metriq.info/Submission/${
+        <a href="/Submission/${
           idData.submission_id
         }" style="color: ${
         colors[domainIndex[idData.domain]]
