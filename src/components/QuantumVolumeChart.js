@@ -109,7 +109,11 @@ function QuantumVolumeChart (props) {
   }
 
   function onDownloadClick () {
-    d3ToPng(svgId, 'chart')
+    d3ToPng('#' + chartId, 'chart', {
+      scale: 3,
+      quality: 1,
+      background: 'white'
+    })
   }
 
   const quickSort = React.useCallback((arr, low, high) => {
