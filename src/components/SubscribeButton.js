@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import axios from 'axios'
 import { Button } from 'react-bootstrap'
 import { useHistory } from 'react-router-dom'
@@ -9,6 +9,10 @@ import ErrorHandler from './ErrorHandler'
 const SubscribeButton = (props) => {
   const history = useHistory()
   const [isSubscribed, setIsSubscribed] = useState(props.item.isSubscribed)
+
+  useEffect(() => {
+    setIsSubscribed(props.item.isSubscribed)
+  }, [props.item.isSubscribed])
 
   const handleLoginRedirect = (type) => {
     if (type === 'tag') {
