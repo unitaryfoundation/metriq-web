@@ -38,7 +38,7 @@ class TaskService extends ModelService {
       return { success: false, error: 'Task not found.' }
     }
 
-    task.dataValues.isSubscribed = ((userId > 0) && await taskSubscriptionService.getByFks(userId, taskId))
+    task.dataValues.isSubscribed = ((userId > 0) && !!(await taskSubscriptionService.getByFks(userId, taskId)))
     task.dataValues.parentTask = await this.getByPk(task.dataValues.taskId)
     delete task.dataValues.taskId
 

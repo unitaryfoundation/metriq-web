@@ -44,7 +44,7 @@ class TagService extends ModelService {
 
     for (let i = 0; i < result.length; ++i) {
       const tag = result[i]
-      tag.isSubscribed = ((userId > 0) && await tagSubscriptionService.getByFks(userId, tag.id))
+      tag.isSubscribed = ((userId > 0) && !!(await tagSubscriptionService.getByFks(userId, tag.id)))
     }
 
     return { success: true, body: result }
@@ -62,7 +62,7 @@ class TagService extends ModelService {
       await tag.save()
     }
 
-    tag.isSubscribed = ((userId > 0) && await tagSubscriptionService.getByFks(userId, tag.id))
+    tag.isSubscribed = ((userId > 0) && !!(await tagSubscriptionService.getByFks(userId, tag.id)))
 
     return { success: true, body: tag }
   }

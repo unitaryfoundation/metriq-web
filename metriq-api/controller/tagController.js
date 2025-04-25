@@ -24,7 +24,7 @@ exports.readMeta = async function (req, res) {
         return { success: false, error: 'Tag does not exist.' }
       }
 
-      tag.isSubscribed = ((userId > 0) && await tagSubscriptionService.getByFks(userId, tag.id))
+      tag.isSubscribed = ((userId > 0) && !!(await tagSubscriptionService.getByFks(userId, tag.id)))
 
       return { success: true, body: tag }
     },

@@ -238,7 +238,7 @@ class PlatformService extends ModelService {
       return { success: false, error: 'Platform not found.' }
     }
 
-    platform.dataValues.isSubscribed = ((userId > 0) && await platformSubscriptionService.getByFks(userId, platformId))
+    platform.dataValues.isSubscribed = ((userId > 0) && !!(await platformSubscriptionService.getByFks(userId, platformId)))
 
     if (platform.dataValues.architectureId) {
       platform.dataValues.architecture = await architectureService.getByPk(platform.dataValues.architectureId)

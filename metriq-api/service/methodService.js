@@ -30,7 +30,7 @@ class MethodService extends ModelService {
       return { success: false, error: 'Method not found.' }
     }
 
-    method.dataValues.isSubscribed = ((userId > 0) && await methodSubscriptionService.getByFks(userId, methodId))
+    method.dataValues.isSubscribed = ((userId > 0) && !!(await methodSubscriptionService.getByFks(userId, methodId)))
     method.dataValues.parentMethod = await this.getByPk(method.dataValues.methodId)
     delete method.dataValues.methodId
 
