@@ -450,7 +450,6 @@ class SubmissionService extends ModelService {
   async getpagemetadata(userId, reqBody) {
     console.log('getpagemetadata ', userId, reqBody);
 
-    // Validate user
     const user = await userService.getByPk(userId);
     if (!user) {
       return { success: false, error: 'User not found.' };
@@ -472,8 +471,8 @@ class SubmissionService extends ModelService {
       result.ExistingDraftId = (result.isAlreadyInDatabase && (existing.userId === userId) && (!existing.publishedAt) && (!existing.deletedAt)) ? existing.id : 0;
 
       return { success: true, body: result };
-    } catch (error) {
-      console.error('Error parsing metadata:', error);
+    } catch (err) {
+      console.error('Error parsing metadata:', err);
       return { success: false, error: 'Failed to fetch or parse metadata.' };
     }
   }
