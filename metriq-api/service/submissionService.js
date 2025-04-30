@@ -1,7 +1,7 @@
 // submissionService.js
 
 const { Op } = require('sequelize')
-const parser  = require('html-metadata')
+const parser = require('html-metadata')
 // Data Access Layer
 const ModelService = require('./modelService')
 // Database Model
@@ -41,7 +41,6 @@ const likeService = new LikeService()
 const SubmissionTagRefService = require('./submissionTagRefService')
 const submissionTagRefService = new SubmissionTagRefService()
 const SubmissionSubscriptionService = require('./submissionSubscriptionService')
-const e = require('express')
 const submissionSubscriptionService = new SubmissionSubscriptionService()
 
 class SubmissionService extends ModelService {
