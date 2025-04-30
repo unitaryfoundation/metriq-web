@@ -1,7 +1,7 @@
 // submissionService.js
 
 const { Op } = require('sequelize')
-const { parser } = require('html-metadata-parser')
+const parser  = require('html-metadata')
 // Data Access Layer
 const ModelService = require('./modelService')
 // Database Model
@@ -41,6 +41,7 @@ const likeService = new LikeService()
 const SubmissionTagRefService = require('./submissionTagRefService')
 const submissionTagRefService = new SubmissionTagRefService()
 const SubmissionSubscriptionService = require('./submissionSubscriptionService')
+const e = require('express')
 const submissionSubscriptionService = new SubmissionSubscriptionService()
 
 class SubmissionService extends ModelService {
@@ -447,17 +448,35 @@ class SubmissionService extends ModelService {
     return { success: true, body: submission }
   }
 
-  async getpagemetadata (userId, reqBody) {
-    console.log('getpagemetadata ', userId, reqBody)
-    const user = await userService.getByPk(userId)
+  async getpagemetadata(userId, reqBody) {
+    console.log('getpagemetadata ', userId, reqBody);
+
+    // Validate user
+    const user = await userService.getByPk(userId);
     if (!user) {
-      return { success: false, error: 'User not found.' }
+      return { success: false, error: 'User not found.' };
     }
-    const result = await parser(reqBody.url)
-    const existing = await this.getByUrl(reqBody.url)
-    result.isAlreadyInDatabase = !!existing
-    result.ExistingDraftId = (result.isAlreadyInDatabase && (existing.userId === userId) && (!existing.publishedAt) && (!existing.deletedAt)) ? existing.id : 0
-    return { success: true, body: result }
+
+    if (!reqBody.url || typeof reqBody.url !== 'string' || reqBody.url.trim() === '') {
+      return { success: false, error: 'Invalid or missing URL.' };
+    }
+
+    try {
+      const result = await parser(reqBody.url.trim());
+      if (!result) {
+        return { success: false, error: 'Could not parse page.' };
+      }
+
+      result.og = result.openGraph || {};
+      const existing = await this.getByUrl(reqBody.url.trim());
+      result.isAlreadyInDatabase = !!existing;
+      result.ExistingDraftId = (result.isAlreadyInDatabase && (existing.userId === userId) && (!existing.publishedAt) && (!existing.deletedAt)) ? existing.id : 0;
+
+      return { success: true, body: result };
+    } catch (error) {
+      console.error('Error parsing metadata:', error);
+      return { success: false, error: 'Failed to fetch or parse metadata.' };
+    }
   }
 
   async getByUserId (userId, startIndex, count) {
