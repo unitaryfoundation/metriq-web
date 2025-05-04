@@ -38,16 +38,10 @@ function sortPopular (a, b) {
   return 0
 }
 
-function sortAlphabetical (a, b) {
-  const keyA = a.name.toLowerCase()
-  const keyB = b.name.toLowerCase()
-  if (keyA < keyB) {
-    return -1
-  }
-  if (keyB < keyA) {
-    return 1
-  }
-  return 0
+function sortAlphabetical(a, b) {
+  const keyA = a.name?.toLowerCase().trim() || ""
+  const keyB = b.name?.toLowerCase().trim() || ""
+  return keyA.localeCompare(keyB)
 }
 
 function sortByCounts (a, b) {
