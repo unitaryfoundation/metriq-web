@@ -44,20 +44,19 @@ class Methods extends React.Component {
   componentDidMount () {
     axios.get(config.api.getUriPrefix() + '/method/submissionCount')
       .then(res => {
-        const common = [...res.data.data]
-        common.sort(sortCommon)
+        const rawData = res.data.data || []
+
+        const common = [...rawData].sort(sortCommon)
+        const popular = [...rawData].sort(sortPopular)
+        const alphabetical = [...rawData].sort(sortAlphabetical)
+
         this.setState({
           requestFailedMessage: '',
-          common
+          common,
+          popular,
+          alphabetical,
+          isLoading: false
         })
-
-        const popular = [...res.data.data]
-        popular.sort(sortPopular)
-        this.setState({ popular })
-
-        const alphabetical = res.data.data
-        alphabetical.sort(sortAlphabetical)
-        this.setState({ alphabetical, isLoading: false })
       })
       .catch(err => {
         this.setState({ requestFailedMessage: ErrorHandler(err) })
