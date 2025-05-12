@@ -567,7 +567,23 @@ class SubmissionService extends ModelService {
     }
     const tagId = tag.id
 
-    const result = (await sequelize.query(submissionSqlService.sqlTagLike(tagId, userId, '"upvotesCount"', true, count, startIndex)))[0]
+    // Validate userId to ensure it is a valid identifier
+    if (userId && typeof userId !== 'string') {
+      return { success: false, error: 'Invalid user ID' }
+    }
+
+    // Use parameterized query to prevent SQL injection
+    const query = `
+      SELECT * FROM submissions
+      WHERE tagId = :tagId AND userId = :userId
+      ORDER BY "upvotesCount" DESC
+      LIMIT :count OFFSET :startIndex
+    `;
+    const result = (await sequelize.query(query, {
+      replacements: { tagId, userId, count, startIndex },
+      type: sequelize.QueryTypes.SELECT
+    }));
+
     for (let i = 0; i < result.length; i++) {
       result[i].submissionTagRefs = (await submissionTagRefService.getBySubmissionId(result[i].id))
       await submissionSqlService.populateTags(result[i])
