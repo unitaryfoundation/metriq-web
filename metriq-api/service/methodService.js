@@ -130,8 +130,9 @@ class MethodService extends ModelService {
 
   async getChildren (parentId) {
     return (await sequelize.query(
-      'SELECT * FROM methods WHERE methods."methodId" = ' + parentId + ';'
-    ))[0]
+      'SELECT * FROM methods WHERE methods."methodId" = :parentId;',
+      { replacements: { parentId }, type: sequelize.QueryTypes.SELECT }
+    ))
   }
 
   async getByName (name) {
