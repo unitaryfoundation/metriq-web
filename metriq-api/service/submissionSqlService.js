@@ -69,9 +69,9 @@ class SubmissionSqlService {
             'LIMIT ' + limit + ' OFFSET ' + offset
   }
 
-  sqlByTask (taskId) {
+  sqlByTask () {
     return 'WITH RECURSIVE c AS ( ' +
-        '    SELECT ' + taskId + ' as id ' +
+        '    SELECT $1 as id ' +
         '    UNION ALL ' +
         '    SELECT t.id FROM tasks AS t ' +
         '    JOIN c on c.id = t."taskId" ' +
@@ -114,7 +114,7 @@ class SubmissionSqlService {
   }
 
   async getByTaskId (taskId) {
-    const result = (await sequelize.query(this.sqlByTask(taskId)))[0]
+    const result = (await sequelize.query(this.sqlByTask(), { replacements: [taskId], type: sequelize.QueryTypes.SELECT }))[0]
     return { success: true, body: result }
   }
 
