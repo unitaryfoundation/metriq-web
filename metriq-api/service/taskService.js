@@ -108,8 +108,9 @@ class TaskService extends ModelService {
 
   async getNamesAndCounts (parentId, userId) {
     const parentTask = (await sequelize.query(
-      'SELECT id, name, description, "taskId" FROM tasks WHERE tasks.id = ' + parentId + ';'
-    ))[0][0]
+      'SELECT id, name, description, "taskId" FROM tasks WHERE tasks.id = ?;',
+      { replacements: [parentId], type: sequelize.QueryTypes.SELECT }
+    ))[0]
     parentTask.submissionCount = await this.getParentSubmissionCount(parentId)
     parentTask.upvoteTotal = await this.getParentLikeCount(parentId)
     parentTask.resultCount = await this.getParentResultCount(parentId)
