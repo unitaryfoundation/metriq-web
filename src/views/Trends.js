@@ -9,14 +9,18 @@ import ErrorHandler from '../components/ErrorHandler'
 import FormFieldValidator from '../components/FormFieldValidator'
 import FormFieldAlertRow from '../components/FormFieldAlertRow'
 import QuantumVolumeChart from '../components/QuantumVolumeChart'
+import AggregatedMetricsTable from '../components/AggregatedMetricsTable'
 
 library.add(faHeart, faExternalLinkAlt, faChartLine)
+
+const METRIQ_GYM_SUBMISSION_ID = 800
 
 class Trends extends React.Component {
   constructor (props) {
     super(props)
     this.state = {
       isLoading: true,
+      results: [],
       alphabetical: [],
       allNames: [],
       platforms: [],
@@ -48,6 +52,15 @@ class Trends extends React.Component {
   }
 
   componentDidMount () {
+    axios.get(`${config.api.getUriPrefix()}/submission/${METRIQ_GYM_SUBMISSION_ID}/results`)
+      .then(res => {
+        const results = res.data.data || []
+        this.setState({ results: results, isLoading: false })
+      })
+      .catch(err => {
+        this.setState({ requestFailedMessage: ErrorHandler(err), isLoading: false })
+      })
+
     axios.get(config.api.getUriPrefix() + '/task/submissionCount')
       .then(res => {
         const alphabetical = res.data.data
@@ -100,12 +113,11 @@ class Trends extends React.Component {
           <br />
         </div>
         <div id='metriq-main-content'>
-          <p className='text-start'>Metriq is a platform for tracking and sharing quantum technology benchmarks. Users can make new <Link to='/Submissions'>submissions</Link> that show the performance of different <Link to='/Methods'>methods</Link> on <Link to='/Platforms'>platforms</Link> against <Link to='/Tasks'>tasks</Link>.</p>
-          <p className='text-start'>We have highlighted tasks here and you can <Link to='/Tasks'>search for more</Link>:</p>
           <br />
           <div className='row'>
             <div className='col'>
               <h4 align='left'>Featured Tasks</h4>
+              <p className='text-start'>We have highlighted tasks here and you can <Link to='/Tasks'>search for more</Link>:</p>
             </div>
           </div>
           <div className='row'>
@@ -126,6 +138,14 @@ class Trends extends React.Component {
               )}
             </div>
           </div>
+          <div className='row'>
+            <div className='col'>
+              <h4 align='left'><a href={`/submission/${METRIQ_GYM_SUBMISSION_ID}`}>Metriq-gym results</a></h4>
+              <br />
+              <AggregatedMetricsTable results={this.state.results} />
+            </div>
+          </div>
+          <br />
           <br />
           <FormFieldAlertRow>
             <FormFieldValidator invalid={!!this.state.requestFailedMessage} message={this.state.requestFailedMessage} />
