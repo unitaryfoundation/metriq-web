@@ -100,11 +100,11 @@ class SubmissionSqlService {
             '    WHERE s."deletedAt" IS NULL AND s."publishedAt" IS NOT NULL AND str."deletedAt" IS NULL AND str."dataSetId" = ' + dataSetId
   }
 
-  sqlByPlatform (platformId) {
+  sqlByPlatform () {
     return 'SELECT s.*, CAST(l."upvoteCount" AS integer) AS "upvoteCount" FROM submissions AS s ' +
             '    RIGHT JOIN public."submissionPlatformRefs" AS str ON s.id = str."submissionId" ' +
             '    LEFT JOIN (SELECT "submissionId", COUNT(*) as "upvoteCount" from likes GROUP BY "submissionId") as l on l."submissionId" = s.id ' +
-            '    WHERE s."deletedAt" IS NULL AND s."publishedAt" IS NOT NULL AND str."deletedAt" IS NULL AND str."platformId" = ' + platformId
+            '    WHERE s."deletedAt" IS NULL AND s."publishedAt" IS NOT NULL AND str."deletedAt" IS NULL AND str."platformId" = :platformId'
   }
 
   sqlSubmittedToday () {
@@ -124,7 +124,7 @@ class SubmissionSqlService {
   }
 
   async getByPlatformId (platformId) {
-    const result = (await sequelize.query(this.sqlByPlatform(platformId)))[0]
+    const result = (await sequelize.query(this.sqlByPlatform(), { replacements: { platformId }, type: sequelize.QueryTypes.SELECT }))[0]
     return { success: true, body: result }
   }
 
