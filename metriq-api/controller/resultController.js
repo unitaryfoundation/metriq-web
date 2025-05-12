@@ -14,6 +14,12 @@ exports.new = async function (req, res) {
     'New result added to submission!', req.auth ? req.auth.id : 0)
 }
 
+exports.read = async function (req, res) {
+  routeWrapper(res,
+    async () => await resultService.getBySubmissionId(req.params.id),
+    'Retrieved all results by submission Id.', req.auth ? req.auth.id : 0)
+}
+
 exports.update = async function (req, res) {
   routeWrapper(res,
     async () => await resultService.update(req.auth.id, req.params.id, req.body),

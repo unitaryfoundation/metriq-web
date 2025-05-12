@@ -67,6 +67,18 @@ class ResultService extends ModelService {
     '    WHERE str."deletedAt" IS NULL AND s.id = ' + submissionId + ';'
   }
 
+  sqlBySubmission (submissionId) {
+    return 'SELECT r.*, p.name AS device, pr.name AS provider, t.name AS "taskName"'  +
+    '    FROM "submissionTaskRefs" AS str ' +
+    '    JOIN results AS r on r."submissionTaskRefId" = str.id AND r."deletedAt" IS NULL ' +
+    '    LEFT JOIN "submissionPlatformRefs" AS spr on r."submissionPlatformRefId" = spr.id AND spr."deletedAt" IS NULL ' +
+    '    LEFT JOIN platforms AS p on spr."platformId" = p.id ' +
+    '    LEFT JOIN providers AS pr on p."providerId" = pr.id ' +
+    '    LEFT JOIN tasks AS t on str."taskId" = t.id ' +
+    '    LEFT JOIN submissions AS s on str."submissionId" = s.id AND s."deletedAt" IS NULL ' +
+    '    WHERE str."deletedAt" IS NULL AND s.id = ' + submissionId + ';'
+  }
+
   sqlByMethodSubmission (methodId, submissionId) {
     return 'WITH RECURSIVE c AS ( ' +
     '    SELECT ' + methodId + ' as id ' +
@@ -126,6 +138,11 @@ class ResultService extends ModelService {
     '    LEFT JOIN platforms AS p on spr."platformId" = p.id ' +
     '    LEFT JOIN platforms AS d on sdr."platformId" = d.id ' +
     '    WHERE str."deletedAt" IS NULL AND s.id = ' + submissionId + ';'
+  }
+
+  async getBySubmissionId (submissionId) {
+    const result = (await sequelize.query(this.sqlBySubmission(submissionId)))[0]
+    return { success: true, body: result }
   }
 
   async getByTaskId (taskId) {
