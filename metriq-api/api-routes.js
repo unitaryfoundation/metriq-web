@@ -39,8 +39,16 @@ router.route('/recover')
   .post(accountController.recover)
 router.route('/password')
   .post(accountController.password)
+const rateLimit = require('express-rate-limit');
+
+const updatePasswordLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5, // Limit each IP to 5 requests per windowMs
+  message: 'Too many password update attempts from this IP, please try again after a minute.'
+});
+
 router.route('/user/password')
-  .post(accountController.update_password)
+  .post(updatePasswordLimiter, accountController.update_password)
 router.route('/user')
   .get(userController.read)
   .post(userController.update)
