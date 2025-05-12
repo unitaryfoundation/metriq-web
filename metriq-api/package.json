@@ -41,7 +41,8 @@
     "sequelize": "^6.6.5",
     "standard": "^16.0.3",
     "twitter-api-v2": "^1.12.5",
-    "uuid": "^8.3.2"
+    "uuid": "^8.3.2",
+    "express-rate-limit": "^7.5.0"
   },
   "jest": {
     "testEnvironment": "node"
