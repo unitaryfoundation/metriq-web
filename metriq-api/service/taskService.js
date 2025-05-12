@@ -174,8 +174,9 @@ class TaskService extends ModelService {
 
   async getChildren (parentId) {
     return (await sequelize.query(
-      'SELECT * FROM tasks WHERE tasks."taskId" = ' + parentId + ';'
-    ))[0]
+      'SELECT * FROM tasks WHERE tasks."taskId" = ?;',
+      { replacements: [parentId], type: sequelize.QueryTypes.SELECT }
+    ))
   }
 
   async getNetworkGraphGroups () {
