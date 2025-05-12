@@ -35,7 +35,8 @@ class PlatformService extends ModelService {
     return (await sequelize.query(
       'SELECT COUNT(*) FROM "resultPlatformRefs" ' +
       '  RIGHT JOIN platforms on platforms.id = "resultPlatformRefs"."platformId" AND ("resultPlatformRefs"."deletedAt" IS NULL) ' +
-      '  WHERE platforms.id = ' + platformId
+      '  WHERE platforms.id = :platformId',
+      { replacements: { platformId } }
     ))[0][0].count
   }
 
@@ -46,7 +47,8 @@ class PlatformService extends ModelService {
       '  RIGHT JOIN results on results."submissionTaskRefId" = "submissionTaskRefs".id AND (results."deletedAt" IS NULL) ' +
       '  RIGHT JOIN "resultPlatformRefs" on "resultPlatformRefs"."resultId" = results.id AND ("resultPlatformRefs"."deletedAt" IS NULL) ' +
       '  RIGHT JOIN platforms on platforms.id = "resultPlatformRefs"."platformId" ' +
-      '  WHERE platforms.id = ' + platformId
+      '  WHERE platforms.id = :platformId',
+      { replacements: { platformId } }
     ))[0][0].count
   }
 
@@ -58,7 +60,8 @@ class PlatformService extends ModelService {
       '  RIGHT JOIN results on results."submissionTaskRefId" = "submissionTaskRefs".id AND (results."deletedAt" IS NULL) ' +
       '  RIGHT JOIN "resultPlatformRefs" on "resultPlatformRefs"."resultId" = results.id AND ("resultPlatformRefs"."deletedAt" IS NULL) ' +
       '  RIGHT JOIN platforms on platforms.id = "resultPlatformRefs"."platformId" ' +
-      '  WHERE platforms.id = ' + platformId
+      '  WHERE platforms.id = :platformId',
+      { replacements: { platformId } }
     ))[0][0].count
   }
 
@@ -68,7 +71,8 @@ class PlatformService extends ModelService {
       '  LEFT JOIN "platformDataTypeValues" on platforms.id = "platformDataTypeValues"."platformId" ' +
       '  LEFT JOIN "platformDataTypes" on "platformDataTypes".id = "platformDataTypeValues"."platformDataTypeId" ' +
       '  LEFT JOIN "dataTypes" on "platformDataTypes"."dataTypeId" = "dataTypes".id ' +
-      '  WHERE platforms.id = ' + platformId
+      '  WHERE platforms.id = :platformId',
+      { replacements: { platformId } }
     ))[0]
   }
 
