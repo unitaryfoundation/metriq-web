@@ -130,21 +130,22 @@ class TaskService extends ModelService {
   async getParentSubmissionCount (parentId) {
     return (await sequelize.query(
       'WITH RECURSIVE c AS ( ' +
-      '  SELECT ' + parentId + ' as id ' +
+      '  SELECT :parentId as id ' +
       '  UNION ALL ' +
       '  SELECT tasks.id as id FROM tasks ' +
       '    JOIN c on c.id = tasks."taskId" ' +
       ') ' +
       'SELECT COUNT(*) FROM "submissionTaskRefs" AS tr ' +
       '  RIGHT JOIN c on c.id = tr."taskId" ' +
-      '  WHERE tr."deletedAt" IS NULL AND tr.id IS NOT NULL '
+      '  WHERE tr."deletedAt" IS NULL AND tr.id IS NOT NULL ',
+      { replacements: { parentId } }
     ))[0][0].count
   }
 
   async getParentLikeCount (parentId) {
     return (await sequelize.query(
       'WITH RECURSIVE c AS ( ' +
-      '  SELECT ' + parentId + ' as id ' +
+      '  SELECT :parentId as id ' +
       '  UNION ALL ' +
       '  SELECT tasks.id as id FROM tasks ' +
       '    JOIN c on c.id = tasks."taskId" ' +
@@ -153,14 +154,15 @@ class TaskService extends ModelService {
       '  RIGHT JOIN submissions on likes."submissionId" = submissions.id ' +
       '  RIGHT JOIN "submissionTaskRefs" tr on submissions.id = tr."submissionId" ' +
       '  RIGHT JOIN c on c.id = tr."taskId" ' +
-      '  WHERE submissions."deletedAt" IS NULL AND tr."deletedAt" IS NULL AND tr.id IS NOT NULL '
+      '  WHERE submissions."deletedAt" IS NULL AND tr."deletedAt" IS NULL AND tr.id IS NOT NULL ',
+      { replacements: { parentId } }
     ))[0][0].count
   }
 
   async getParentResultCount (parentId) {
     return (await sequelize.query(
       'WITH RECURSIVE c AS ( ' +
-      '  SELECT ' + parentId + ' as id ' +
+      '  SELECT :parentId as id ' +
       '  UNION ALL ' +
       '  SELECT tasks.id as id FROM tasks ' +
       '    JOIN c on c.id = tasks."taskId" ' +
@@ -168,7 +170,8 @@ class TaskService extends ModelService {
       'SELECT COUNT(*) FROM results ' +
       '  RIGHT JOIN "submissionTaskRefs" tr on results."submissionTaskRefId" = tr.id ' +
       '  RIGHT JOIN c on c.id = tr."taskId" ' +
-      '  WHERE tr."deletedAt" IS NULL AND tr.id IS NOT NULL AND results."deletedAt" IS NULL '
+      '  WHERE tr."deletedAt" IS NULL AND tr.id IS NOT NULL AND results."deletedAt" IS NULL ',
+      { replacements: { parentId } }
     ))[0][0].count
   }
 
