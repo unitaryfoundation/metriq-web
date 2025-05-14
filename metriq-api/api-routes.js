@@ -24,6 +24,7 @@ const submissionController = require('./controller/submissionController')
 const tagController = require('./controller/tagController')
 const taskController = require('./controller/taskController')
 const userController = require('./controller/userController')
+const rateLimit = require('express-rate-limit');
 
 // Register routes.
 router.route('/register')
@@ -39,7 +40,6 @@ router.route('/recover')
   .post(accountController.recover)
 router.route('/password')
   .post(accountController.password)
-const rateLimit = require('express-rate-limit');
 
 const updatePasswordLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
