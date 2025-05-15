@@ -2,6 +2,7 @@
 
 // Initialize ExpressJS router.
 const router = require('express').Router()
+const rateLimit = require('express-rate-limit');
 
 // Set default API response.
 router.get('/', function (req, res) {
@@ -29,8 +30,14 @@ const rateLimit = require('express-rate-limit');
 // Register routes.
 router.route('/register')
   .post(accountController.new)
+const loginRateLimiter = require('express-rate-limit')({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 5, // Limit each IP to 5 login requests per `windowMs`
+  message: 'Too many login attempts from this IP, please try again after a minute.'
+});
+
 router.route('/login')
-  .post(accountController.login)
+  .post(loginRateLimiter, accountController.login)
 router.route('/logout')
   .get(accountController.logout)
 router.route('/token')
