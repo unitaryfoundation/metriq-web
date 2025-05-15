@@ -24,14 +24,14 @@ class ResultService extends ModelService {
     super(Result)
   }
 
-  sqlByTask (taskId) {
+  sqlByTask () {
     return 'WITH RECURSIVE c AS ( ' +
-    '    SELECT ' + taskId + ' as id ' +
+    '    SELECT $1 as id ' +
     '    UNION ALL ' +
     '    SELECT t.id FROM tasks AS t ' +
     '    JOIN c on c.id = t."taskId" ' +
     ') ' +
-    'SELECT r.*, s.name AS "submissionName", pr.name AS "providerName", s."contentUrl" AS "submissionUrl", s.id AS "submissionId", CASE WHEN t.id = ' + taskId + ' THEN m.name ELSE m.name || \' | \' || t.name END AS "methodName", COALESCE(d.name, \'\') as "dataSetName", COALESCE(p.name, \'\') as "platformName" FROM "submissionTaskRefs" AS str ' +
+    'SELECT r.*, s.name AS "submissionName", pr.name AS "providerName", s."contentUrl" AS "submissionUrl", s.id AS "submissionId", CASE WHEN t.id = $1 THEN m.name ELSE m.name || \' | \' || t.name END AS "methodName", COALESCE(d.name, \'\') as "dataSetName", COALESCE(p.name, \'\') as "platformName" FROM "submissionTaskRefs" AS str ' +
     '    RIGHT JOIN c on c.id = str."taskId" ' +
     '    JOIN results AS r on r."submissionTaskRefId" = str.id AND r."deletedAt" IS NULL ' +
     '    LEFT JOIN submissions AS s on str."submissionId" = s.id AND s."deletedAt" IS NULL ' +
@@ -149,7 +149,10 @@ class ResultService extends ModelService {
   }
 
   async getByTaskId (taskId) {
-    const result = (await sequelize.query(this.sqlByTask(taskId)))[0]
+    const result = (await sequelize.query(this.sqlByTask(), {
+      replacements: [taskId],
+      type: sequelize.QueryTypes.SELECT
+    }))[0]
     return { success: true, body: result }
   }
 
