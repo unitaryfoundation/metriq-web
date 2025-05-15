@@ -119,26 +119,29 @@ class PlatformService extends ModelService {
 
   async getTopLevelNamesByArchitecture (architectureId) {
     return (await sequelize.query(
-      'SELECT id, name, description, url FROM platforms WHERE platforms."platformId" is NULL AND platforms."isDataSet" = FALSE AND platforms."architectureId" = ' + architectureId
+      'SELECT id, name, description, url FROM platforms WHERE platforms."platformId" is NULL AND platforms."isDataSet" = FALSE AND platforms."architectureId" = $1',
+      { bind: [architectureId], type: sequelize.QueryTypes.SELECT }
     ))[0]
   }
 
   async getTopLevelNamesByProvider (providerId) {
     return (await sequelize.query(
-      'SELECT id, name, description, url FROM platforms WHERE platforms."platformId" is NULL AND platforms."isDataSet" = FALSE AND platforms."providerId" = ' + providerId
+      'SELECT id, name, description, url FROM platforms WHERE platforms."platformId" is NULL AND platforms."isDataSet" = FALSE AND platforms."providerId" = $1',
+      { bind: [providerId], type: sequelize.QueryTypes.SELECT }
     ))[0]
   }
 
   async getParentSubmissionCount (parentId) {
     return (await sequelize.query(
       'WITH RECURSIVE c AS ( ' +
-      '  SELECT ' + parentId + ' as id ' +
+      '  SELECT $1 as id ' +
       '  UNION ALL ' +
       '  SELECT platforms.id as id FROM platforms ' +
       '    JOIN c on c.id = platforms."platformId" ' +
       ') ' +
       'SELECT COUNT(*) FROM "submissionPlatformRefs" AS spr ' +
-      '  RIGHT JOIN c on c.id = spr."platformId" AND spr."deletedAt" IS NULL AND spr.id IS NOT NULL '
+      '  RIGHT JOIN c on c.id = spr."platformId" AND spr."deletedAt" IS NULL AND spr.id IS NOT NULL ',
+      { bind: [parentId], type: sequelize.QueryTypes.SELECT }
     ))[0][0].count
   }
 
