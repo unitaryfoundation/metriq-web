@@ -40,7 +40,10 @@ class ProviderService extends ModelService {
   }
 
   async getAllNamesByArchitecture (architectureId) {
-    const result = (await sequelize.query('SELECT DISTINCT providers.id, providers.name FROM providers RIGHT JOIN platforms on providers.id = platforms."providerId" WHERE platforms.id IS NOT NULL AND platforms."architectureId" = ' + architectureId))[0]
+    const result = (await sequelize.query(
+      'SELECT DISTINCT providers.id, providers.name FROM providers RIGHT JOIN platforms on providers.id = platforms."providerId" WHERE platforms.id IS NOT NULL AND platforms."architectureId" = :architectureId',
+      { replacements: { architectureId }, type: sequelize.QueryTypes.SELECT }
+    ));
     return { success: true, body: result }
   }
 
