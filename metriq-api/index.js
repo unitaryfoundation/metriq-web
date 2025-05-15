@@ -1,8 +1,5 @@
 process.env.METRIQ_MODE = undefined
 
-function sanitizeConnectionString(connectionString) {
-  return connectionString.replace(/:(.*?)@/, ':<REDACTED>@');
-}
 // Get the connection string
 const config = require('./config')
 // Import express
