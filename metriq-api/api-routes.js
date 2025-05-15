@@ -27,8 +27,14 @@ const taskController = require('./controller/taskController')
 const userController = require('./controller/userController')
 
 // Register routes.
+const registerLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message: 'Too many registration attempts from this IP, please try again after a minute.'
+})
+
 router.route('/register')
-  .post(accountController.new)
+  .post(registerLimiter, accountController.new)
 const loginRateLimiter = require('express-rate-limit')({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 5, // Limit each IP to 5 login requests per `windowMs`
