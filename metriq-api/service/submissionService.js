@@ -504,7 +504,9 @@ class SubmissionService extends ModelService {
   }
 
   async getTrending (startIndex, count, userId) {
-    const result = (await sequelize.query(submissionSqlService.sqlTrending(userId, '"upvotesPerHour"', true, count, startIndex)))[0]
+    const result = (await sequelize.query(submissionSqlService.sqlTrending('"upvotesPerHour"', true, count, startIndex), {
+      replacements: { userId }
+    }))[0]
     for (let i = 0; i < result.length; i++) {
       result[i].submissionTagRefs = (await submissionTagRefService.getBySubmissionId(result[i].id))
       await submissionSqlService.populateTags(result[i])
@@ -513,7 +515,9 @@ class SubmissionService extends ModelService {
   }
 
   async getLatest (startIndex, count, userId) {
-    const result = (await sequelize.query(submissionSqlService.sqlLike(userId, 'submissions."createdAt"', true, count, startIndex)))[0]
+    const result = (await sequelize.query(submissionSqlService.sqlLike('submissions."createdAt"', true, count, startIndex), {
+      replacements: { userId }
+    }))[0]
     for (let i = 0; i < result.length; i++) {
       result[i].submissionTagRefs = (await submissionTagRefService.getBySubmissionId(result[i].id))
       await submissionSqlService.populateTags(result[i])
@@ -522,7 +526,9 @@ class SubmissionService extends ModelService {
   }
 
   async getPopular (startIndex, count, userId) {
-    const result = (await sequelize.query(submissionSqlService.sqlLike(userId, '"upvotesCount"', true, count, startIndex)))[0]
+    const result = (await sequelize.query(submissionSqlService.sqlLike('"upvotesCount"', true, count, startIndex), {
+      replacements: { userId }
+    }))[0]
     for (let i = 0; i < result.length; i++) {
       result[i].submissionTagRefs = (await submissionTagRefService.getBySubmissionId(result[i].id))
       await submissionSqlService.populateTags(result[i])
@@ -537,7 +543,9 @@ class SubmissionService extends ModelService {
     }
     const tagId = tag.id
 
-    const result = (await sequelize.query(submissionSqlService.sqlTagTrending(tagId, userId, '"upvotesPerHour"', true, count, startIndex)))[0]
+    const result = (await sequelize.query(submissionSqlService.sqlTagTrending(tagId, '"upvotesPerHour"', true, count, startIndex), {
+      replacements: { userId }
+    }))[0]
     for (let i = 0; i < result.length; i++) {
       result[i].submissionTagRefs = (await submissionTagRefService.getBySubmissionId(result[i].id))
       await submissionSqlService.populateTags(result[i])
@@ -552,7 +560,9 @@ class SubmissionService extends ModelService {
     }
     const tagId = tag.id
 
-    const result = (await sequelize.query(submissionSqlService.sqlTagLike(tagId, userId, 'submissions."createdAt"', true, count, startIndex)))[0]
+    const result = (await sequelize.query(submissionSqlService.sqlTagLike(tagId, 'submissions."createdAt"', true, count, startIndex), {
+      replacements: { userId }
+    }))[0]
     for (let i = 0; i < result.length; i++) {
       result[i].submissionTagRefs = (await submissionTagRefService.getBySubmissionId(result[i].id))
       await submissionSqlService.populateTags(result[i])
