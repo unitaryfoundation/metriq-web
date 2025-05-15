@@ -86,11 +86,11 @@ class SubmissionSqlService {
         '    WHERE s."deletedAt" IS NULL AND s."publishedAt" IS NOT NULL;'
   }
 
-  sqlByMethod (methodId) {
+  sqlByMethod () {
     return 'SELECT s.*, CAST(l."upvoteCount" AS integer) AS "upvoteCount" FROM submissions AS s ' +
             '    RIGHT JOIN public."submissionMethodRefs" AS str ON s.id = str."submissionId" ' +
             '    LEFT JOIN (SELECT "submissionId", COUNT(*) as "upvoteCount" from likes GROUP BY "submissionId") as l on l."submissionId" = s.id ' +
-            '    WHERE s."deletedAt" IS NULL AND s."publishedAt" IS NOT NULL AND str."deletedAt" IS NULL AND str."methodId" = ' + methodId
+            '    WHERE s."deletedAt" IS NULL AND s."publishedAt" IS NOT NULL AND str."deletedAt" IS NULL AND str."methodId" = :methodId'
   }
 
   sqlByDataSet (dataSetId) {
@@ -119,7 +119,7 @@ class SubmissionSqlService {
   }
 
   async getByMethodId (methodId) {
-    const result = (await sequelize.query(this.sqlByMethod(methodId)))[0]
+    const result = (await sequelize.query(this.sqlByMethod(), { replacements: { methodId }, type: sequelize.QueryTypes.SELECT }))[0]
     return { success: true, body: result }
   }
 
