@@ -63,7 +63,7 @@ const TopSubmitters = (props) => {
           ]}
           data={data.allTime}
           key={Math.random()}
-          onRowClick={(record) => history.push('/User/' + record.id + '/Submissions')} // <-- Change here
+          onRowClick={(record) => history.push('/User/' + record.id + '/Submissions')}
           tableLayout='auto'
           rowClassName='link text-center'
         />}
