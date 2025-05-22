@@ -3,9 +3,12 @@ import axios from 'axios'
 import { Tabs, Tab } from 'react-bootstrap'
 import config from '../config'
 import SortingTable from '../components/SortingTable'
+import { useHistory } from 'react-router-dom'
 
 const TopSubmitters = (props) => {
   const [data, setData] = useState({ weekly: [], monthly: [], allTime: [] })
+  const history = useHistory()
+  
   useEffect(() => {
     if (data.allTime.length) {
       return
@@ -35,6 +38,7 @@ const TopSubmitters = (props) => {
         setData(ts)
       })
   })
+
   return (
     <span>
       <h5>Top Submitters</h5>
@@ -59,7 +63,7 @@ const TopSubmitters = (props) => {
           ]}
           data={data.allTime}
           key={Math.random()}
-          onRowClick={(record) => this.props.history.push('/User/' + record.id + '/Submissions')}
+          onRowClick={(record) => history.push('/User/' + record.id + '/Submissions')}
           tableLayout='auto'
           rowClassName='link text-center'
         />}
@@ -87,7 +91,7 @@ const TopSubmitters = (props) => {
                 ]}
                 data={data.weekly}
                 key={Math.random()}
-                onRowClick={(record) => this.props.history.push('/User/' + record.id + '/Submissions')}
+                onRowClick={(record) => history.push('/User/' + record.id + '/Submissions')}
                 tableLayout='auto'
                 rowClassName='link text-center'
               />
@@ -114,7 +118,7 @@ const TopSubmitters = (props) => {
                 ]}
                 data={data.monthly}
                 key={Math.random()}
-                onRowClick={(record) => this.props.history.push('/User/' + record.id + '/Submissions')}
+                onRowClick={(record) => history.push('/User/' + record.id + '/Submissions')}
                 tableLayout='auto'
                 rowClassName='link text-center'
               />
@@ -141,7 +145,7 @@ const TopSubmitters = (props) => {
                 ]}
                 data={data.allTime}
                 key={Math.random()}
-                onRowClick={(record) => this.props.history.push('/User/' + record.id + '/Submissions')}
+                onRowClick={(record) => history.push('/User/' + record.id + '/Submissions')}
                 tableLayout='auto'
                 rowClassName='link text-center'
               />
