@@ -984,7 +984,7 @@ function QuantumVolumeChart (props) {
       .style('visibility', 'hidden')
       .style('font-size', `${smallLabelSize}px`)
       .style('font-family', fontType)
-      .text((i) => d3.format('.2s')(y(i)))
+      .text((i) => d3.format('.2f')(y(i)))
 
     if (isSameDate) {
       barplot(
