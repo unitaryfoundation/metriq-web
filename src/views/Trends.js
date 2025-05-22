@@ -138,14 +138,6 @@ class Trends extends React.Component {
               )}
             </div>
           </div>
-          <div className='row'>
-            <div className='col'>
-              <h4 align='left'><a href={`/submission/${METRIQ_GYM_SUBMISSION_ID}`}>Metriq-gym results</a></h4>
-              <br />
-              <AggregatedMetricsTable results={this.state.results} />
-            </div>
-          </div>
-          <br />
           <br />
           <FormFieldAlertRow>
             <FormFieldValidator invalid={!!this.state.requestFailedMessage} message={this.state.requestFailedMessage} />
