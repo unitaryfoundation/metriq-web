@@ -595,7 +595,7 @@ function QuantumVolumeChart (props) {
       )
     const yAxis = d3.axisLeft(yScale)
     .ticks(5)
-    .tickFormat(d => d3.format('.2f')(d))
+    .tickFormat(d => Number.isInteger(d) ? d3.format("d")(d) : d3.format(".2f")(d))
 
     // append y axis
     svg
