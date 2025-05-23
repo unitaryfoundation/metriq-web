@@ -593,7 +593,9 @@ function QuantumVolumeChart (props) {
           .attr('text-anchor', 'end')
           .text(xAxisText)
       )
-    const yAxis = d3.axisLeft(yScale).tickFormat(d => Number.isInteger(d) ? d3.format('d')(d) : d3.format('.2f')(d))
+    const yAxis = d3.axisLeft(yScale)
+    .ticks(5)
+    .tickFormat(d => Number.isInteger(d) ? d3.format("d")(d) : d3.format(".2f")(d))
 
     // append y axis
     svg
@@ -984,7 +986,7 @@ function QuantumVolumeChart (props) {
       .style('visibility', 'hidden')
       .style('font-size', `${smallLabelSize}px`)
       .style('font-family', fontType)
-      .text((i) => d3.format('.2s')(y(i)))
+      .text((i) => Number.isInteger(y(i)) ? d3.format('d')(y(i)) : d3.format('.2f')(y(i)))
 
     if (isSameDate) {
       barplot(
