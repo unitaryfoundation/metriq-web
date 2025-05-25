@@ -25,3 +25,10 @@ Quantum resource estimates for computing binary elliptic curve discrete logarith
 Quantum resource estimates for computing binary elliptic curve discrete logarithms,arXiv:2503.02984,2025,Cryptography,ECC-233,228,829,3035,3520000,false,Both
 Fast quantum simulation of electronic structure by spectrum amplification,arXiv:2502.15882,2025,Physics simulation,FeMoco-54,228,830,1137,341000000,false,Both
 Fast quantum simulation of electronic structure by spectrum amplification,arXiv:2502.15882,2025,Physics simulation,FeMoco-76,228,830,1459,999000000,false,Both
+How to factor 2048 bit RSA integers with less than a million noisy qubits,arXiv:2505.15917,2025,Cryptography,Factoring,0,840,897864,?,false,Both
+Surface codes: Towards practical large-scale quantum computation,arXiv:1208.0928,2012,Cryptography,Factoring,0,841,1000000000,?,false,Both
+How to factor 2048 bit RSA integers in 8 hours using 20 million noisy qubits,arXiv:1905.09749,2019,Cryptography,Factoring,0,761,20000000,?,false,Both
+Benchmarking the quantum cryptanalysis of symmetric public-key and hash-based cryptographic schemes,arXiv:1902.02332,2019,Cryptography,Factoring,0,843,170000000,?,false,Both
+Quantum computation with realistic magic state factories,arXiv:1605.07197,2016,Cryptography,Factoring,0,844,230000000,?,false,Both
+Layered architecture for quantum computing,arXiv:1010.5022,2012,Cryptography,Factoring,0,845,620000000,?,false,Both
+Distributed Quantum Computation Architecture Using Semiconductor Nanophotonics,arXiv:0906.2686,2009,Cryptography,Factoring,0,846,6500000000,?,false,Both
