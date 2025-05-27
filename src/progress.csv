@@ -26,4 +26,4 @@ Quantum resource estimates for computing binary elliptic curve discrete logarith
 Fast quantum simulation of electronic structure by spectrum amplification,arXiv:2502.15882,2025,Physics simulation,FeMoco-54,228,830,1137,341000000,false,Both
 Fast quantum simulation of electronic structure by spectrum amplification,arXiv:2502.15882,2025,Physics simulation,FeMoco-76,228,830,1459,999000000,false,Both
 How to factor 2048 bit RSA integers with less than a million noisy qubits,arXiv:2505.15917,2025,Cryptography,Factoring,0,840,897864,10000000000,false,Both
-How to factor 2048 bit RSA integers in 8 hours using 20 million noisy qubits,arXiv:1905.09749,2019,Cryptography,Factoring,0,761,20000000,2700000000,false,Both
+How to factor 2048 bit RSA integers in 8 hours using 20 million noisy qubits,"Quantum 5, 433 (2021) volume5, page 433",2021,Cryptography,Factoring,0,761,20000000,2700000000,false,Both
