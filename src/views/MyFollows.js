@@ -29,7 +29,7 @@ const MyFollows = () => {
       <ViewHeader>Your Followed Tasks</ViewHeader>
       <br />
       {tasks.length === 0 &&
-        <p><b>You aren\'t following any tasks yet. Visit a Task page to follow one.</b></p>}
+        <p><b>You aren't following any tasks yet. Visit a Task page to follow one.</b></p>}
       {tasks.map((item, index) =>
         <FormFieldWideRow key={index}>
           <CategoryItemBox item={item} type='task' isLoggedIn />
