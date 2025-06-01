@@ -84,7 +84,7 @@ app.get('*', (req, res, next) => {
         await (axios.get(route)
           .then(subRes => {
             const response = subRes.data.data
-            title = response.username
+            title = response.name
             description = response.affiliation || ''
           }))
       }

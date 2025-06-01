@@ -16,6 +16,7 @@ import Profile from './views/Profile'
 import AddSubmission from './views/AddSubmission'
 import MySubmissions from './views/MySubmissions'
 import SubmissionsPublic from './views/SubmissionsPublic'
+import UserProfile from './views/UserProfile'
 import Token from './views/Token'
 import Password from './views/Password'
 import Methods from './views/Methods'
@@ -34,7 +35,6 @@ import Qedc from './views/Qedc'
 import Vqa from './views/Vqa'
 import Progress from './views/Progress'
 import Sota from './views/Sota'
-import User from './views/User'
 
 const MainRouter = (props) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -271,7 +271,7 @@ const MainRouter = (props) => {
         <Route
           exact
           path='/User/:userId'
-          render={(p) => <User {...p} isLoggedIn={isLoggedIn} onLogin={handleLogin} />}
+          render={(p) => <UserProfile {...p} isLoggedIn={isLoggedIn} onLogin={handleLogin} />}
         />
         <Route
           exact
