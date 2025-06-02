@@ -459,11 +459,13 @@ class UserService extends ModelService {
       name: sub.task.name
     }))
 
-    const recentUpvotes = (await sequelize.query(
+    const recentUpvotes = await sequelize.query(
       'SELECT s.id, s.name FROM likes l ' +
       'JOIN submissions s ON l."submissionId" = s.id ' +
-      'WHERE l."userId" = ' + userId +
-      ' ORDER BY l."createdAt" DESC LIMIT 5'))[0]
+      'WHERE l."userId" = $userId ' +
+      'ORDER BY l."createdAt" DESC LIMIT 5',
+      { bind: { userId }, type: sequelize.QueryTypes.SELECT }
+    )
 
     return {
       success: true,
