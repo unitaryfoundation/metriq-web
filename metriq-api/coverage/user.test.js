@@ -2,6 +2,7 @@
 
 const dbHandler = require('./db-handler')
 const UserService = require('../service/userService')
+const TaskService = require('../service/taskService')
 
 /**
  * Connect to a new in-memory database before running any tests.
@@ -110,6 +111,20 @@ describe('user', () => {
         // Assert
         expect(result.success).toBe(true)
     })
+
+    it('lists followed tasks', async () => {
+        const userService = new UserService()
+        const taskService = new TaskService()
+        const registerResult = await userService.register(registration1)
+        const userId = registerResult.body.id
+        const task = await taskService.submit(userId, task1)
+        await taskService.subscribe(task.body.id, userId)
+
+        const followed = await userService.getFollowedTasks(userId)
+
+        expect(followed.success).toBe(true)
+        expect(followed.body.length).toBe(1)
+    })
 })
 
 const registration1 = {
@@ -146,4 +161,10 @@ const recovery2 = {
     password:'TestUserSuper1!',
     passwordConfirm: 'TestUserSuper1!',
     uuid: ''
+}
+
+const task1 = {
+    name: 'Task',
+    fullName: 'Task',
+    description: 'Description'
 }
