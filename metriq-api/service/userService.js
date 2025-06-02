@@ -449,11 +449,15 @@ class UserService extends ModelService {
       return { success: false, error: 'User not found.' }
     }
 
-    const recentTasks = (await sequelize.query(
-      'SELECT t.id, t.name FROM "taskSubscriptions" ts ' +
-      'JOIN tasks t ON ts."taskId" = t.id ' +
-      'WHERE ts."userId" = ' + userId +
-      ' ORDER BY ts."createdAt" DESC LIMIT 5'))[0]
+    const taskSubs = await user.getTaskSubscriptions({
+      include: [{ model: db.task, attributes: ['id', 'name'] }],
+      order: [['createdAt', 'DESC']],
+      limit: 5
+    })
+    const recentTaskSubs = taskSubs.map(sub => ({
+      id: sub.task.id,
+      name: sub.task.name
+    }))
 
     const recentUpvotes = (await sequelize.query(
       'SELECT s.id, s.name FROM likes l ' +
@@ -468,7 +472,7 @@ class UserService extends ModelService {
         affiliation: user.affiliation,
         twitterHandle: user.twitterHandle,
         createdAt: user.createdAt,
-        recentTasks: recentTasks,
+        recentTaskSubs: recentTaskSubs,
         recentUpvotes: recentUpvotes
       }
     }
