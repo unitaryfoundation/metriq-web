@@ -25,7 +25,7 @@ class UserProfile extends React.Component {
         affiliation: '',
         twitterHandle: '',
         createdAt: '',
-        recentTasks: [],
+        recentTaskSubs: [],
         recentUpvotes: []
       },
       requestFailedMessage: ''
@@ -73,20 +73,20 @@ class UserProfile extends React.Component {
   }
 
   renderTabs () {
-    const { recentTasks, recentUpvotes } = this.state.data
-    if (recentTasks.length === 0 && recentUpvotes.length === 0) return null
+    const { recentTaskSubs, recentUpvotes } = this.state.data
+    if (recentTaskSubs.length === 0 && recentUpvotes.length === 0) return null
 
     return (
       <Tabs
         variant='tabs'
         id='user-activity-tabs'
         className='mb-3 user-activity-tabs'
-        defaultActiveKey={recentTasks.length > 0 ? 'tasks' : 'upvotes'}
+        defaultActiveKey={recentTaskSubs.length > 0 ? 'tasks' : 'upvotes'}
       >
-        {recentTasks.length > 0 && (
-          <Tab eventKey='tasks' title={`Recent Tasks (${recentTasks.length})`}>
+        {recentTaskSubs.length > 0 && (
+          <Tab eventKey='tasks' title={`Recent Subscribed Tasks (${recentTaskSubs.length})`}>
             <ul className='list-unstyled pt-3'>
-              {recentTasks.map(task => (
+              {recentTaskSubs.map(task => (
                 <li key={task.id} className='pb-2'>
                   <Link to={`/Task/${task.id}`}>{task.name}</Link>
                 </li>
