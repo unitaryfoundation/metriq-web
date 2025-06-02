@@ -379,6 +379,24 @@ class UserService extends ModelService {
     return { success: true, body: user }
   }
 
+  async getFollowedTasks (userId) {
+    const user = await this.getByPk(userId)
+    if (!user) {
+      return { success: false, error: 'User not found.' }
+    }
+
+    const subscriptions = await user.getTaskSubscriptions()
+    const tasks = []
+    for (let i = 0; i < subscriptions.length; ++i) {
+      const task = await subscriptions[i].getTask()
+      if (task) {
+        tasks.push(task)
+      }
+    }
+
+    return { success: true, body: tasks }
+  }
+
   async setNewSubmissionSubscription (userId, isSubscribed) {
     const user = await this.getByPk(userId)
     if (!user) {
