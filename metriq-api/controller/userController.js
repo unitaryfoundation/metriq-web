@@ -66,6 +66,12 @@ exports.topSubmitters = async function (req, res) {
     'Successfully retrieved top submitters.', req.auth ? req.auth.id : 0)
 }
 
+exports.readPublic = async function (req, res) {
+  routeWrapper(res,
+    async () => await userService.getPublicProfile(req.params.userId),
+    'Successfully retrieved user.', req.auth ? req.auth.id : 0)
+}
+
 exports.followedTasks = async function (req, res) {
   routeWrapper(res,
     async () => await userService.getFollowedTasks(req.auth.id),

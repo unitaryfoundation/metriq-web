@@ -442,6 +442,43 @@ class UserService extends ModelService {
       }
     }
   }
+
+  async getPublicProfile (userId) {
+    const user = await this.getByPk(userId)
+    if (!user) {
+      return { success: false, error: 'User not found.' }
+    }
+
+    const taskSubs = await user.getTaskSubscriptions({
+      include: [{ model: db.task, attributes: ['id', 'name'] }],
+      order: [['createdAt', 'DESC']],
+      limit: 5
+    })
+    const recentTaskSubs = taskSubs.map(sub => ({
+      id: sub.task.id,
+      name: sub.task.name
+    }))
+
+    const recentUpvotes = await sequelize.query(
+      'SELECT s.id, s.name FROM likes l ' +
+      'JOIN submissions s ON l."submissionId" = s.id ' +
+      'WHERE l."userId" = $userId ' +
+      'ORDER BY l."createdAt" DESC LIMIT 5',
+      { bind: { userId }, type: sequelize.QueryTypes.SELECT }
+    )
+
+    return {
+      success: true,
+      body: {
+        username: user.username,
+        affiliation: user.affiliation,
+        twitterHandle: user.twitterHandle,
+        createdAt: user.createdAt,
+        recentTaskSubs: recentTaskSubs,
+        recentUpvotes: recentUpvotes
+      }
+    }
+  }
 }
 
 module.exports = UserService
