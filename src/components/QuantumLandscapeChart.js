@@ -71,7 +71,7 @@ function scatterplot (
   xName = 'num_gates', // the x column
   xAxisText = 'Logical Operations [n] →',
   yName = 'num_qubits', // the y column
-  yAxisText = 'Qubits [n]  →',
+  yAxisText = 'Logical Qubits [n]  →',
   chartTarget = '#my_dataviz', // html target element to attach chart
   chartHeight = 600, // chart height
   marginTop = 40, // top margin, in pixels
