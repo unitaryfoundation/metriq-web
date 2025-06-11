@@ -19,6 +19,16 @@ const AggregatedMetricsTable = (props) => {
   const aggregatedData = results.reduce((acc, row) => {
     const providerName = row.provider || '(Unknown Provider)'
     const deviceName = row.device || '(Unknown Device)'
+    const platformId = row.platformId || {}
+    const deviceProperties = 
+      Array.isArray(row.platform?.properties) && row.platform.properties.length > 0
+          ? row.platform.properties
+              .map(
+                p =>
+                  `${p.name ?? 'Unknown'}: ${p.value ?? 'N/A'}`
+              )
+              .join(', ')
+          : 'N/A'
     const key = `${providerName}-${deviceName}`
 
     if (!acc[key]) {
@@ -26,12 +36,18 @@ const AggregatedMetricsTable = (props) => {
         key,
         providerName,
         deviceName,
+        platformId,
+        deviceProperties,
         metrics: {}
       }
     }
 
     const metricKey = `${row.taskName || '(Unknown Task)'} – ${row.metricName}`
-    acc[key].metrics[metricKey] = row.metricValue
+    const metricValue =
+      typeof row.metricValue === 'number'
+        ? Number(row.metricValue.toFixed(3))
+        : row.metricValue
+    acc[key].metrics[metricKey] = metricValue
     return acc
   }, {})
 
@@ -54,19 +70,27 @@ const AggregatedMetricsTable = (props) => {
                   {
                     title: 'Provider',
                     key: 'providerName',
-                    width: 150
+                    width: 100
                   },
                   {
                     title: 'Device',
                     key: 'deviceName',
-                    width: 150
+                    width: 120
+                  },
+                  {
+                    title: 'Device Properties',
+                    key: 'deviceProperties',
+                    width: 130
                   },
                   ...metricColumns
                 ]}
                 data={tableData.map(row => ({
                   key: row.key,
                   providerName: row.providerName,
-                  deviceName: row.deviceName,
+                  deviceName: (
+                    <a href={`/platform/${row.platformId}`}>{row.deviceName}</a>
+                  ),
+                  deviceProperties: row.deviceProperties || '',
                   ...row.metrics
                 }))}
                 tableLayout='auto'
