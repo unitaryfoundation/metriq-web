@@ -68,7 +68,7 @@ class ResultService extends ModelService {
   }
 
   sqlBySubmission() {
-    return 'SELECT r.*, p.name AS device, pr.name AS provider, t.name AS "taskName"'  +
+    return 'SELECT r.*, p.name AS device, pr.name AS provider, p.id AS "platformId", t.name AS "taskName"'  +
       ' FROM "submissionTaskRefs" AS str' +
       ' JOIN results AS r on r."submissionTaskRefId" = str.id AND r."deletedAt" IS NULL' +
       ' LEFT JOIN "submissionPlatformRefs" AS spr on r."submissionPlatformRefId" = spr.id AND spr."deletedAt" IS NULL' +
