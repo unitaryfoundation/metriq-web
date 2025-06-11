@@ -53,9 +53,25 @@ class Trends extends React.Component {
 
   componentDidMount () {
     axios.get(`${config.api.getUriPrefix()}/submission/${METRIQ_GYM_SUBMISSION_ID}/results`)
-      .then(res => {
+      .then(async res => {
         const results = res.data.data || []
-        this.setState({ results: results, isLoading: false })
+        const platformIds = [...new Set(results.map(r => r.platformId).filter(Boolean))]
+        const platformResponses = await Promise.all(
+          platformIds.map(id =>
+            axios.get(`${config.api.getUriPrefix()}/platform/${id}`)
+              .then(res => ({ id, data: res.data.data }))
+              .catch(() => ({ id, data: null }))
+          )
+        )
+        const platformMap = {}
+        platformResponses.forEach(({ id, data }) => {
+          platformMap[id] = data
+        })
+        const enrichedResults = results.map(r => ({
+          ...r,
+          platform: platformMap[r.platformId] || {}
+        }))
+        this.setState({ results: enrichedResults, isLoading: false })
       })
       .catch(err => {
         this.setState({ requestFailedMessage: ErrorHandler(err), isLoading: false })
