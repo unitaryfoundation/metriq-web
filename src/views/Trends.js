@@ -9,11 +9,8 @@ import ErrorHandler from '../components/ErrorHandler'
 import FormFieldValidator from '../components/FormFieldValidator'
 import FormFieldAlertRow from '../components/FormFieldAlertRow'
 import QuantumVolumeChart from '../components/QuantumVolumeChart'
-import AggregatedMetricsTable from '../components/AggregatedMetricsTable'
 
 library.add(faHeart, faExternalLinkAlt, faChartLine)
-
-const METRIQ_GYM_SUBMISSION_ID = 800
 
 class Trends extends React.Component {
   constructor (props) {
@@ -52,31 +49,6 @@ class Trends extends React.Component {
   }
 
   componentDidMount () {
-    axios.get(`${config.api.getUriPrefix()}/submission/${METRIQ_GYM_SUBMISSION_ID}/results`)
-      .then(async res => {
-        const results = res.data.data || []
-        const platformIds = [...new Set(results.map(r => r.platformId).filter(Boolean))]
-        const platformResponses = await Promise.all(
-          platformIds.map(id =>
-            axios.get(`${config.api.getUriPrefix()}/platform/${id}`)
-              .then(res => ({ id, data: res.data.data }))
-              .catch(() => ({ id, data: null }))
-          )
-        )
-        const platformMap = {}
-        platformResponses.forEach(({ id, data }) => {
-          platformMap[id] = data
-        })
-        const enrichedResults = results.map(r => ({
-          ...r,
-          platform: platformMap[r.platformId] || {}
-        }))
-        this.setState({ results: enrichedResults, isLoading: false })
-      })
-      .catch(err => {
-        this.setState({ requestFailedMessage: ErrorHandler(err), isLoading: false })
-      })
-
     axios.get(config.api.getUriPrefix() + '/task/submissionCount')
       .then(res => {
         const alphabetical = res.data.data
@@ -152,13 +124,6 @@ class Trends extends React.Component {
                   <br />
                 </span>
               )}
-            </div>
-          </div>
-          <div className='row'>
-            <div className='col'>
-              <h4 align='left'><a href={`/submission/${METRIQ_GYM_SUBMISSION_ID}`}>Metriq-gym results</a></h4>
-              <br />
-              <AggregatedMetricsTable results={this.state.results} />
             </div>
           </div>
           <br />
