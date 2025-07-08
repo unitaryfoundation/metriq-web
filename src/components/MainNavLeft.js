@@ -14,7 +14,15 @@ const MainNavLeft = () => {
       <Nav.Link as={NavLink} activeClassName='active-navlink' to='/Trends' className='metriq-navbar-text' eventKey='5' isActive={(match, location) => (location.pathname === '/Trends' || location.pathname === '/')}>Trends</Nav.Link>
       <Nav.Link as={NavLink} activeClassName='active-navlink' to='/Progress' className='metriq-navbar-text' eventKey='6'>Progress</Nav.Link>
       <Nav.Link as={NavLink} activeClassName='active-navlink' to='/Data' className='metriq-navbar-text' eventKey='7'>Data</Nav.Link>
-      <Nav.Link as={NavLink} activeClassName='active-navlink' to='/MetriqGym' className='metriq-navbar-text' eventKey='8'>metriq-gym <span role="img" aria-label="new">🆕</span></Nav.Link>
+      <Nav.Link
+        as={NavLink}
+        activeClassName='active-navlink'
+        to='/MetriqGym'
+        className='metriq-navbar-text'
+        eventKey='8'
+      >
+        metriq-gym<span style={{ fontSize: '0.7em', color: '#888', marginLeft: 2, verticalAlign: 'super' }}>Beta</span>
+      </Nav.Link>
     </Nav>
   )
 }
