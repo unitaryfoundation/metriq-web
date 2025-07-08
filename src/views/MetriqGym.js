@@ -76,7 +76,7 @@ class MetriqGym extends React.Component {
                         display: "block"
                     }}
                 >
-                  Benchmark results in this page are collected using the <a href='https://github.com/unitaryfoundation/metriq-gym'>metriq-gym</a> toolkit.
+                  Benchmark results in this page are collected using the <a href='https://github.com/unitaryfoundation/metriq-gym' target="_blank" rel="noopener noreferrer">metriq-gym</a> toolkit.
                   They are run by the Unitary Foundation team on a variety of platforms.
                 </p>
               <br />
