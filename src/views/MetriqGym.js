@@ -64,7 +64,7 @@ class MetriqGym extends React.Component {
 }
         return (            
             <div id='metriq-main-content' className='container'>
-              <h3 align='left'><a href={`/submission/${METRIQ_GYM_SUBMISSION_ID}`}>metriq-gym results</a></h3>
+              <h3 style={{ textAlign: "left" }}><a href={`/submission/${METRIQ_GYM_SUBMISSION_ID}`}>metriq-gym results</a></h3>
                 <p
                     style={{
                         textAlign: "left",
