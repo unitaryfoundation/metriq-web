@@ -36,6 +36,7 @@ import Qedc from './views/Qedc'
 import Vqa from './views/Vqa'
 import Progress from './views/Progress'
 import Sota from './views/Sota'
+import MetriqGym from './views/MetriqGym'
 
 const MainRouter = (props) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
@@ -313,6 +314,11 @@ const MainRouter = (props) => {
           exact
           path='/Provider/:id'
           render={(p) => <Platforms {...p} isDataSet={false} isLoggedIn={isLoggedIn} onLogin={handleLogin} isProvider key={Math.random()} />}
+        />
+        <Route
+          exact
+          path='/MetriqGym'
+          component={MetriqGym}
         />
         <Route component={NotFound} />
       </Switch>
