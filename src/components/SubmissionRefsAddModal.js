@@ -128,20 +128,19 @@ const SubmissionRefsAddModal = (props) => {
       return
     }
 
-    const fn = props.allNames.find(f => f.name === value)
     const itemCopy = { ...item }
+    const fn = props.allNames.find(f => f.name === value)
     if (fn) {
       itemCopy.parent = fn.id
-      handleValidation(itemCopy)
     } else {
       itemCopy.parent = 0
-      if (value) {
-        setIsValid(false)
-      } else {
-        handleValidation(itemCopy)
-      }
     }
     setItem(itemCopy)
+    if (fn || !value) {
+      handleValidation(itemCopy)
+    } else {
+      setIsValid(false)
+    }
   }
 
   const handleOnSelectRef = (nItem) => {
