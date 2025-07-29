@@ -153,7 +153,7 @@ const SubmissionRefsAddModal = (props) => {
     const itemCopy = { ...item }
     itemCopy.id = nItem.id
     setItem(itemCopy)
-    handleValidation(item)
+    handleValidation(itemCopy)
   }
 
   const handleOnChangeRef = (key, value) => {
