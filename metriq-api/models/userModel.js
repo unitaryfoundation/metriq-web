@@ -51,6 +51,11 @@ module.exports = function (sequelize, DataTypes) {
       allowNull: false,
       defaultValue: false
     },
+    isPrivileged: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     twitterHandle: {
       type: DataTypes.TEXT,
       allowNull: false,
