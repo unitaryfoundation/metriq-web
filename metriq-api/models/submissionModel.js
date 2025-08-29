@@ -36,6 +36,11 @@ module.exports = function (sequelize, DataTypes) {
     publishedAt: {
       type: DataTypes.DATE,
       defaultValue: DataTypes.NOW
+    },
+    restrictedAppend: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
     }
   }, { paranoid: true })
   Model.associate = function (db) {

@@ -4,13 +4,34 @@ const { routeWrapper } = require('../util/controllerUtil')
 
 // Service classes
 const ResultService = require('../service/resultService')
+const SubmissionService = require('../service/submissionService')
+const UserService = require('../service/userService')
 // Service instance
 const resultService = new ResultService()
+const submissionService = new SubmissionService()
+const userService = new UserService()
 
 // Validate the submission request and create the submission model.
 exports.new = async function (req, res) {
   routeWrapper(res,
-    async () => await resultService.submit(req.auth.id, req.params.id, req.body),
+    async () => {
+      const submissionRes = await submissionService.get(req.params.id)
+      if (!submissionRes.success || !submissionRes.body) {
+        return { success: false, error: 'Submission not found.' }
+      }
+      const submission = submissionRes.body
+      if (submission.restrictedAppend) {
+        const userRes = await userService.get(req.auth.id)
+        if (!userRes.success || !userRes.body) {
+          return { success: false, error: 'User not found.' }
+        }
+        const user = userRes.body
+        if (!user.isPrivileged) {
+          return { success: false, error: 'Restricted submission: append not permitted.' }
+        }
+      }
+      return await resultService.submit(req.auth.id, req.params.id, req.body)
+    },
     'New result added to submission!', req.auth ? req.auth.id : 0)
 }
 

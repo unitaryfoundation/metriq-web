@@ -39,7 +39,8 @@ class UserService extends ModelService {
       name: user.name,
       createdAt: user.createdAt,
       isSubscribedToNewSubmissions: user.isSubscribedToNewSubmissions,
-      twitterHandle: user.twitterHandle
+      twitterHandle: user.twitterHandle,
+      isPrivileged: !!user.isPrivileged
     }
   }
 
