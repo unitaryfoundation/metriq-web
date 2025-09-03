@@ -12,8 +12,8 @@ There are 3 main components to this project:
 First, clone the repositories and initialize the submodules:
 
 ```sh
- $ git clone https://github.com/unitaryfoundation/metriq-api.git
- $ cd metriq-api
+ $ git clone https://github.com/unitaryfoundation/metriq-web.git
+ $ cd metriq-web
 ```
  
 Install PostgreSQL and Node.js. (The Ubuntu system packages are fine, or you can install directly from the maintainers' sites.)
@@ -25,7 +25,7 @@ Install PostgreSQL and Node.js. (The Ubuntu system packages are fine, or you can
 Restore the QA database in `metriq-postgres` as your Metriq development environment interface. (From the `metriq-api` repository folder, `cd` into `metriq-postgres`.)
 
 ```sh
-     user$ cd metriq-postgress
+     user$ cd metriq-postgres
      user$ sudo cp data/metriq_qa.sql /var/lib/postgresql
      user$ sudo -i -u postgres
  postgres$ psql
