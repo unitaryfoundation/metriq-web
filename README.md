@@ -6,7 +6,6 @@ There are 3 main components to this project:
 2. `metriq-app`: The web app the client uses to interact with `metriq-api`
 3. `metriq-api`: A REST API that serves as the glue between database and client.
 
-**Make sure to initialize the submodules with `git submodule init` and `git submodule update`.**
 
 ## Setting up a development environment (on Ubuntu)
 
@@ -15,8 +14,6 @@ First, clone the repositories and initialize the submodules:
 ```sh
  $ git clone https://github.com/unitaryfoundation/metriq-api.git
  $ cd metriq-api
- $ git submodule init
- $ git submodule update
 ```
  
 Install PostgreSQL and Node.js. (The Ubuntu system packages are fine, or you can install directly from the maintainers' sites.)
