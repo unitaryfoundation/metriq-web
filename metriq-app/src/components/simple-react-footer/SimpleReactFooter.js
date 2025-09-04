@@ -50,7 +50,7 @@ class SimpleReactFooter extends React.Component {
             <div style={{ color: this.props.fontColor || 'black' }} className='stay-connected-title row'>
               <div className='col-sm-1' />
               <div className='col-sm-7'>
-                Quantum computing benchmarks by <a href='https://github.com/unitaryfoundation/metriq-app'>community contributors</a> made with <div id='heart' /> by <a href='https://unitary.foundation'><img width='64px' src={logo} alt='Unitary Foundation logo' /></a><br />
+                Quantum computing benchmarks by <a href='https://github.com/unitaryfoundation/metriq-web'>community contributors</a> made with <div id='heart' /> by <a href='https://unitary.foundation'><img width='64px' src={logo} alt='Unitary Foundation logo' /></a><br />
                 <span className='stay-connected-shim' /><br />
                 Stay up to date on metriq.info! Subscribe now to our newsletter:&nbsp;
                 <div className='email-subscribe'>
