@@ -46,7 +46,7 @@ config.pgPool = (process.env.METRIQ_MODE === 'TESTING')
     }
   : {
       user: 'metriq',
-      host: 'localhost',
+      host: process.env.PGHOST || 'localhost',
       database: 'metriq',
       password: process.env.PGPASSWORD,
       port: 5432
