@@ -93,7 +93,7 @@ You should now be able to access:
 - The API at [http://localhost:8080](http://localhost:8080) (default ports)
 
 
----
+> _Note: We plan to add Docker support in the future for easier setup, see [this issue](https://github.com/unitaryfoundation/metriq-web/issues/236)_.
 
 ### ⚙️ Configuration
 
@@ -104,10 +104,10 @@ You may need to adjust these files to match your local environment (e.g., databa
 
 ## 🤝 Contributing
 
-We welcome contributions!  
+We welcome contributions from the community!  
 If you have ideas or want to contribute, please [open an issue](https://github.com/unitaryfoundation/metriq-web/issues) to discuss your plans before submitting a pull request.
 
----
+
 
 ## 📫 Contact
 
