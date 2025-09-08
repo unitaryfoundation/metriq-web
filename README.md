@@ -1,67 +1,114 @@
-# Welcome to metriq!
+<div align="center">
+  <img src="./metriq-app/src/images/metriq_logo_primary_blue_inverted.png" alt="Metriq logo" width="450" />
+</div>
 
-There are 3 main components to this project:
+# metriq-web
 
-1. `metriq-postgres`: The PostgreSQL database for users/benchmarks/service state/etc.
-2. `metriq-app`: The web app the client uses to interact with `metriq-api`
-3. `metriq-api`: A REST API that serves as the glue between database and client.
+[![Unitary Foundation](https://img.shields.io/badge/Supported%20By-Unitary%20Foundation-FFFF00.svg)](https://unitary.foundation)
+
+**metriq-web** is the open-source web application and API powering the [Metriq](https://metriq.info) platform.
+
+Metriq is a community-driven platform for hosting quantum benchmarks.  
+Its main focus is to help answer:
+
+> _How does quantum computing platform X running software stack Y perform on workload Z? And how has that changed over time?_
+
+Metriq is free to sign up and submit results, whether you are a researcher publishing your own results, or a reader who wants to add data. Both are much appreciated!
+
+## 🚩 Disclaimers
+
+- This repository is tightly coupled to the infrastructure of the production [metriq.info](https://metriq.info) instance and is not currently designed for public deployment.  
+  If you are interested in deploying your own instance and need assistance, please [open an issue](https://github.com/unitaryfoundation/metriq-web/issues) or contact us at [metriq@unitary.foundation](mailto:metriq@unitary.foundation).
+- As of September 2025, the codebase is being actively refactored and improved. There may be breaking changes to the API and/or web app.  
+  If you plan to open a pull request, it is particularly important to open an issue first to discuss your plans.
 
 
-## Setting up a development environment (on Ubuntu)
+## 🗂️ Overview
 
-First, clone the repositories and initialize the submodules:
+This project consists of three main components:
+
+1. **[`/metriq-app`](./metriq-app/)**: A React JS web application providing the user interface and interactive visualizations for Metriq.
+2. **[`/metriq-api`](./metriq-api/)**: A Node.js REST API backend, handling data access and business logic.
+3. **PostgreSQL database**: Stores all benchmark data. Utilities for managing the database can be found in the [unitaryfoundation/metriq-postgres](https://github.com/unitaryfoundation/metriq-postgres) repository.
+
+Together, these components power the Metriq platform, enabling users to submit, explore, and analyze quantum computing benchmarks in a collaborative and transparent environment.
+
+
+
+## 🛠️ Developer Setup
+
+### Prerequisites
+
+- **PostgreSQL**: Stores all benchmark data.
+- **Node.js**: Required for both the backend API and frontend app.
+- **Nodemon** (recommended): Automatically restarts the server on file changes.
+
+### Database Setup
+
+1. **Install PostgreSQL** and ensure it is running.
+2. **Create a database user and database** for Metriq.  
+   From the `psql` prompt:
+
+   ```sql
+   CREATE USER metriq WITH PASSWORD 'ExamplePassword';
+   CREATE DATABASE metriq WITH OWNER metriq;
+   \q
+   ```
+
+3. **Restore the database schema and sample data**  
+   A sample backup file (with fake or obfuscated user data), `metriq_qa.sql`, is provided in the [unitaryfoundation/metriq-postgres repository](https://github.com/unitaryfoundation/metriq-postgres/blob/main/data/metriq_qa.sql).  
+   Restore it with:
+
+   ```sh
+   psql -d metriq -a -f metriq_qa.sql
+   ```
+
+### Running the Application
+
+You need to run both the backend API and the frontend app in separate terminals.
+
+#### **Backend (`./metriq-api`):**
 
 ```sh
- $ git clone https://github.com/unitaryfoundation/metriq-web.git
- $ cd metriq-web
+cd metriq-api
+npm install
+npm install -g nodemon   # if not already installed
+nodemon start index.js
 ```
- 
-Install PostgreSQL and Node.js. (The Ubuntu system packages are fine, or you can install directly from the maintainers' sites.)
+This starts the backend API server (development mode).
+
+#### **Frontend (`./metriq-app`):**
 
 ```sh
- $ sudo apt install postgresql postgresql-contrib nodejs npm
+cd metriq-app
+npm install
+npm start
 ```
+This starts the frontend React app (development mode).
 
-Restore the QA database in `metriq-postgres` as your Metriq development environment interface. (From the `metriq-api` repository folder, `cd` into `metriq-postgres`.)
 
-```sh
-     user$ cd metriq-postgres
-     user$ sudo cp data/metriq_qa.sql /var/lib/postgresql
-     user$ sudo -i -u postgres
- postgres$ psql
-```
+You should now be able to access:
 
-In `psql`, enter the following SQL commands, to create the Metriq database and user. (Pick a strong, private password, instead of 'ExamplePassword'):
-```sql
-CREATE USER metriq WITH PASSWORD 'ExamplePassword';
-CREATE DATABASE metriq WITH OWNER metriq;
-quit
-```
+- The web app at [http://localhost:3000](http://localhost:3000)
+- The API at [http://localhost:8080](http://localhost:8080) (default ports)
 
-You'll need to export this password as an environment variable, so that `metriq-api` can access the PostgreSQL database. See the configuration files in the code, but you can create a shell script `metriq_env_vars.sh` that runs `export` on configuration settings, then add it your shell startup with the line
-```sh
-. ~/metriq_env_vars.sh
-```
-in your (hidden) `.bashrc` profile file.
 
-After quiting `psql`, you can restore the backup:
-```sh
- postgres$ psql -d metriq -a -f metriq_qa.sql
-```
+> _Note: We plan to add Docker support in the future for easier setup, see [this issue](https://github.com/unitaryfoundation/metriq-web/issues/236)_.
 
-That's it! You likely also want to install an integrated development environment, like Visual Studio Code, to edit and run the software. Open the top-level `metriq-api` repository folder, and start there.
+### ⚙️ Configuration
 
-To start the local testing environment, for example, after opening the top-level `metriq-api` folder in VS Code, open two terminals. Run these commands in the `metriq-api` sub-folder:
-```sh
- $ npm i
- $ sudo npm i -g nodemon
- $ nodemon start index.js
-```
-`nodemon start` is the command that actually runs the RESTful API server.
+Configuration details for both the API and app can be found in their respective `config.js` files.  
+You may need to adjust these files to match your local environment (e.g., database credentials, API endpoints).
 
-In the other terminal, run the following commands in the `metriq-app` sub-folder:
-```sh
- $ npm i
- $ npm start
-```
-`npm start` is the command that actually runs the front-end testing server. You might need to alter `config.js`, depending on your environment, to see the proper behavior from the front-end app.
+---
+
+## 🤝 Contributing
+
+We welcome contributions from the community!  
+If you have ideas or want to contribute, please [open an issue](https://github.com/unitaryfoundation/metriq-web/issues) to discuss your plans before submitting a pull request.
+
+
+
+## 📫 Contact
+
+For questions, suggestions, or deployment inquiries, please contact us at [metriq@unitary.foundation](mailto:metriq@unitary.foundation).
