@@ -56,7 +56,7 @@ Together, these components power the Metriq platform, enabling users to submit, 
    ```
 
 3. **Restore the database schema and sample data**  
-   A sample backup file, `metriq_qa.sql`, is provided in the [unitaryfoundation/metriq-postgres repository](https://github.com/unitaryfoundation/metriq-postgres/blob/main/data/metriq_qa.sql).  
+   A sample backup file (with fake or obfuscated user data), `metriq_qa.sql`, is provided in the [unitaryfoundation/metriq-postgres repository](https://github.com/unitaryfoundation/metriq-postgres/blob/main/data/metriq_qa.sql).  
    Restore it with:
 
    ```sh
