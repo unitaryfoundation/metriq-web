@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Metriq – Quantum Benchmarks</title>
+    <meta name="description" content="A sleek page that embeds a public table view (Baserow / NocoDB / Grist)." />
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <nav class="nav">
+        <a class="brand" href="#">
+          <img src="public/metriq_logo_horizontal_transparent.png" alt="Metriq logo" style="height:48px;width:auto;" />
+        </a>
+        <div class="actions">
+          <div class="search">
+            <label class="sr-only" for="benchmark-search">Search benchmark pages</label>
+            <input type="search" id="benchmark-search" name="benchmark-search" placeholder="Search benchmark pages" list="benchmark-options" autocomplete="off" />
+            <button class="search__icon" id="search-trigger" type="button" aria-label="Search" disabled>
+              <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+            </button>
+            <datalist id="benchmark-options"></datalist>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Hero copy -->
+      <section class="hero">
+        <div class="hero__inner">
+          <div class="hero__text">
+            <h1 class="h1">Quantum computing benchmarks</h1>
+            <p class="lead">Explore the latest <strong>metriq-gym</strong> results. Switch between an interactive <strong>Graph</strong> for trends and a <strong>Table</strong> for the raw numbers.</p>
+            <ul class="bullets">
+              <li>Open & verifiable dataset</li>
+              <li>Multi-platform</li>
+            </ul>
+          </div>
+          <!-- <div class="hero__badge">Live</div> -->
+        </div>
+      </section>
+
+      <!-- Tabs -->
+      <section class="tabs">
+        <header class="tabs__nav" role="tablist" aria-label="Data view selector">
+          <button class="tab is-active" role="tab" aria-selected="true" id="tab-graph" data-target="#panel-graph">Graph</button>
+          <button class="tab" role="tab" aria-selected="false" id="tab-table" data-target="#panel-table">Table</button>
+        </header>
+
+        <div class="tabs__panels">
+          <!-- Graph panel -->
+          <section id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" class="panel is-active">
+            <div class="panel__head">
+              <h3 class="panel__title">Accuracy over time</h3>
+              <p class="meta">Use the filters on the right to focus on specific devices or benchmarks.</p>
+            </div>
+            <div class="chart-row">
+              <div class="chart-area">
+                <div class="frame-wrap">
+                  <div class="skeleton" id="skeleton-graph"><div class="shimmer"></div></div>
+                  <div id="chart"></div>
+                </div>
+                <div class="hint"><span class="dot"></span> Click any point to inspect the run; data is loaded from <code>data/benchmarks.json</code>.</div>
+              </div>
+              <aside class="chart-controls" aria-label="Chart filters">
+                <label class="chart-control">
+                  <span>Benchmark</span>
+                  <select id="filter-benchmark" autocomplete="off">
+                    <option value="all">All benchmarks</option>
+                  </select>
+                </label>
+                <label class="chart-control">
+                  <span>Metric</span>
+                  <select id="filter-metric" autocomplete="off"></select>
+                </label>
+                <label class="chart-control">
+                  <span>Provider</span>
+                  <select id="filter-provider" autocomplete="off">
+                    <option value="all">All providers</option>
+                  </select>
+                </label>
+                <label class="chart-control">
+                  <span>Device</span>
+                  <select id="filter-device" autocomplete="off">
+                    <option value="all">All devices</option>
+                  </select>
+                </label>
+                <button type="button" class="chart-reset" id="filter-reset">Reset filters</button>
+              </aside>
+            </div>
+          </section>
+
+          <!-- Table panel -->
+          <section id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="panel">
+            <div class="frame-wrap">
+              <div class="skeleton" id="skeleton"><div class="shimmer"></div></div>
+              <iframe id="embed" title="Embedded Table" loading="lazy" referrerpolicy="no-referrer"></iframe>
+            </div>
+            <div class="table-actions">
+              <button type="button" class="btn" id="btn-open-metabase">
+                <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+                <span>Open full table in Metabase</span>
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Insights -->
+      <section class="insights" aria-labelledby="insights-heading">
+        <div class="section-head">
+          <h2 id="insights-heading">How to Read These Benchmarks</h2>
+          <p class="section-lead">Metriq pairs transparent methodology with community review so every point on the chart can be traced back to an auditable experiment.</p>
+        </div>
+        <div class="insights__stack">
+          <article class="insight-card">
+            <h3>Methodology</h3>
+            <p>Submissions follow the <em>metriq-gym</em> protocol: open-source workloads, reproducible environment packages, and verification runs that cross-check reported metrics.</p>
+            <ul>
+              <li>Hardware and software disclosures are required.</li>
+              <li>Automated sanity checks flag regressions before publication.</li>
+              <li>Historical runs are versioned so trends stay comparable.</li>
+            </ul>
+          </article>
+          <article class="insight-card">
+            <h3>FAQ</h3>
+            <dl class="faq">
+              <div>
+                <dt>What if a result looks wrong?</dt>
+                <dd>Use the “flag” action inside the table view. The submitter and moderators will receive a notification with your notes.</dd>
+              </div>
+              <div>
+                <dt>Can I add benchmarks?</dt>
+                <dd>Yes&mdash;fork the workload template or contribute a pull request. New domains are reviewed weekly.</dd>
+              </div>
+            </dl>
+          </article>
+          <article class="insight-card">
+            <h3>Citation & licence</h3>
+            If you use Metriq data in a publication, please cite our article.
+            <br />
+            <div class="license-block">
+              <h4>Data license</h4>
+              <p>
+                Except where otherwise noted, benchmark data is released under the <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons Attribution 4.0 International license (CC BY 4.0)</a>. 
+                You are free to share and adapt the data, provided you give appropriate credit and indicate if changes were made.
+              </p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+    </div>
+
+    <div class="detail-modal" id="detail-modal" hidden>
+      <div class="detail-modal__backdrop" data-detail-close></div>
+      <div class="detail-modal__panel" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+        <button class="detail-modal__close" type="button" data-detail-close aria-label="Close details">
+          <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+        </button>
+        <div class="detail-modal__content">
+          <h3 id="detail-title"></h3>
+          <p class="detail-modal__subtitle" id="detail-subtitle"></p>
+          <div id="detail-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="footer-slot" aria-live="polite"></div>
+
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

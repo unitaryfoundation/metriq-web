@@ -1,0 +1,3 @@
+{
+  "iframeUrl": "https://metabase.example.com/embed/question/<signed-token>#bordered=false&titled=false"
+}

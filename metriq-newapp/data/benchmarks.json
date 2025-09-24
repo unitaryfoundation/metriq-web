@@ -1,0 +1,70 @@
+[
+  {
+    "provider": "AWS",
+    "device": "IQM Garnet",
+    "benchmark": "BSEQ",
+    "timestamp": "2024-01-05T10:15:00Z",
+    "metrics": {
+      "largest connected size": 20,
+      "connected fraction": 1
+    },
+    "errors": {
+      "largest connected size": 0,
+      "connected fraction": 0
+    }
+  },
+  {
+    "provider": "AWS",
+    "device": "IQM Garnet",
+    "benchmark": "QML Kernel",
+    "timestamp": "2024-01-05T10:15:00Z",
+    "metrics": {
+      "accuracy": 0.068
+    },
+    "errors": {
+      "accuracy": 0
+    }
+  },
+  {
+    "provider": "IBMQ",
+    "device": "Aquila-3",
+    "benchmark": "WIT-7",
+    "timestamp": "2024-02-02T09:05:00Z",
+    "metrics": {
+      "accuracy": 0.9,
+      "energy_kwh": 42.3
+    },
+    "errors": {
+      "accuracy": 0.02,
+      "energy_kwh": 1.7
+    }
+  },
+  {
+    "provider": "IBMQ",
+    "device": "Aquila-4",
+    "benchmark": "WIT-7",
+    "timestamp": "2024-03-12T18:45:00Z",
+    "metrics": {
+      "accuracy": 0.87,
+      "energy_kwh": 38.1
+    },
+    "errors": {
+      "accuracy": 0.015,
+      "energy_kwh": 1.1
+    }
+  },
+  {
+    "provider": "ProviderZ",
+    "device": "Orion-5",
+    "benchmark": "Task3",
+    "timestamp": "2024-03-28T07:30:00Z",
+    "metrics": {
+      "fidelity": 0.955,
+      "shots": 1024
+    },
+    "errors": {
+      "fidelity": 0.012,
+      "shots": 48
+    }
+  }
+]

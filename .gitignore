@@ -103,6 +103,9 @@ dist
 # vuepress build output
 .vuepress/dist
 
+# Generated Metabase embed payload
+metriq-newapp/data/metabase-embed.json
+
 # Serverless directories
 .serverless/
 
