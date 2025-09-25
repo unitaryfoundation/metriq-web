@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Build TypeScript (metriq-newapp)
+        run: npm run build:newapp
+
       - name: Generate Metabase embed token
         working-directory: metriq-newapp
         env:

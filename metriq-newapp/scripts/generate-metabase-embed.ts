@@ -11,16 +11,21 @@
  *   METABASE_TITLED (true/false)
  *   METABASE_TTL_SECONDS (defaults to 1209600 — 14 days)
  */
+// Use CommonJS-style requires so emitted JS stays Node-friendly
+// and avoids ESM loader requirements inside containers.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const fs = require('fs');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const path = require('path');
-const jwt = require('jsonwebtoken');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const jwt: any = require('jsonwebtoken');
 
 const DEFAULT_SITE_URL = 'https://metriq.info/meta';
 const DEFAULT_TTL_SECONDS = 60 * 60 * 24 * 14; // 14 days
 
-const METABASE_SECRET_KEY = process.env.METABASE_SECRET_KEY;
+const METABASE_SECRET_KEY = process.env.METABASE_SECRET_KEY as string | undefined;
 const QUESTION_ID = Number(process.env.METABASE_QUESTION_ID);
-const METABASE_SITE_URL = (process.env.METABASE_SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, '');
+const METABASE_SITE_URL = String(process.env.METABASE_SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, '');
 const METABASE_BORDERED = String(process.env.METABASE_BORDERED || 'false').toLowerCase() === 'true';
 const METABASE_TITLED = String(process.env.METABASE_TITLED || 'false').toLowerCase() === 'true';
 const METABASE_TTL_SECONDS = Number(process.env.METABASE_TTL_SECONDS);

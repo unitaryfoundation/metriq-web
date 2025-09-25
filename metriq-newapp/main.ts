@@ -47,32 +47,32 @@ const CONFIG_PATH = "./data/config.json";
 // <-- override with ?src= to bypass the generated Metabase embed URL
 const METABASE_EMBED_JSON = "./data/metabase-embed.json";
 
-// ---- Elements ----
-const iframe = document.getElementById("embed");
-const skeleton = document.getElementById("skeleton");
-const reloadBtn = document.getElementById("btn-reload");
-const openMetabaseBtn = document.getElementById("btn-open-metabase");
-const searchInput = document.getElementById("benchmark-search");
-const searchTrigger = document.getElementById("search-trigger");
-const searchDatalist = document.getElementById("benchmark-options");
-const detailModal = document.getElementById("detail-modal");
-const detailTitle = document.getElementById("detail-title");
-const detailSubtitle = document.getElementById("detail-subtitle");
-const detailBody = document.getElementById("detail-body");
-const detailCloseBtn = detailModal?.querySelector('.detail-modal__close');
+// ---- Elements ---- (typed for TS)
+const iframe = document.getElementById("embed") as HTMLIFrameElement | null;
+const skeleton = document.getElementById("skeleton") as HTMLElement | null;
+const reloadBtn = document.getElementById("btn-reload") as HTMLButtonElement | null;
+const openMetabaseBtn = document.getElementById("btn-open-metabase") as HTMLButtonElement | null;
+const searchInput = document.getElementById("benchmark-search") as HTMLInputElement | null;
+const searchTrigger = document.getElementById("search-trigger") as HTMLButtonElement | null;
+const searchDatalist = document.getElementById("benchmark-options") as HTMLDataListElement | null;
+const detailModal = document.getElementById("detail-modal") as HTMLElement | null;
+const detailTitle = document.getElementById("detail-title") as HTMLElement | null;
+const detailSubtitle = document.getElementById("detail-subtitle") as HTMLElement | null;
+const detailBody = document.getElementById("detail-body") as HTMLElement | null;
+const detailCloseBtn = (detailModal?.querySelector('.detail-modal__close') as HTMLButtonElement | null) || null;
 
 // Tabs
-const tabGraph = document.getElementById("tab-graph");
-const tabTable = document.getElementById("tab-table");
-const panelGraph = document.getElementById("panel-graph");
-const panelTable = document.getElementById("panel-table");
-const chartTitleEl = panelGraph?.querySelector('.panel__title');
+const tabGraph = document.getElementById("tab-graph") as HTMLButtonElement | null;
+const tabTable = document.getElementById("tab-table") as HTMLButtonElement | null;
+const panelGraph = document.getElementById("panel-graph") as HTMLElement | null;
+const panelTable = document.getElementById("panel-table") as HTMLElement | null;
+const chartTitleEl = (panelGraph?.querySelector('.panel__title') as HTMLElement | null) || null;
 
-const filterProvider = document.getElementById("filter-provider");
-const filterBenchmark = document.getElementById("filter-benchmark");
-const filterDevice = document.getElementById("filter-device");
-const metricSelect = document.getElementById("filter-metric");
-const resetFiltersBtn = document.getElementById("filter-reset");
+const filterProvider = document.getElementById("filter-provider") as HTMLSelectElement | null;
+const filterBenchmark = document.getElementById("filter-benchmark") as HTMLSelectElement | null;
+const filterDevice = document.getElementById("filter-device") as HTMLSelectElement | null;
+const metricSelect = document.getElementById("filter-metric") as HTMLSelectElement | null;
+const resetFiltersBtn = document.getElementById("filter-reset") as HTMLButtonElement | null;
 
 const filterElements = {
   benchmark: filterBenchmark,
@@ -101,12 +101,12 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', 
 
 function activateTab(which) {
   const graphActive = which === "graph";
-  tabGraph.classList.toggle("is-active", graphActive);
-  tabGraph.setAttribute("aria-selected", String(graphActive));
-  tabTable.classList.toggle("is-active", !graphActive);
-  tabTable.setAttribute("aria-selected", String(!graphActive));
-  panelGraph.classList.toggle("is-active", graphActive);
-  panelTable.classList.toggle("is-active", !graphActive);
+  tabGraph?.classList.toggle("is-active", graphActive);
+  tabGraph?.setAttribute("aria-selected", String(graphActive));
+  tabTable?.classList.toggle("is-active", !graphActive);
+  tabTable?.setAttribute("aria-selected", String(!graphActive));
+  panelGraph?.classList.toggle("is-active", graphActive);
+  panelTable?.classList.toggle("is-active", !graphActive);
 }
 
 tabGraph?.addEventListener("click", () => activateTab("graph"));
@@ -135,7 +135,7 @@ function applyEmbedSource(url) {
   embedBaseSrc = url;
   if (!iframe) return;
   if (skeleton) skeleton.style.display = "block";
-  iframe.src = url;
+  (iframe as HTMLIFrameElement).src = url;
 }
 
 if (iframe) {
@@ -201,13 +201,17 @@ async function loadBenchmarks() {
   return benchmarksPromise;
 }
 
-function normalizeRun(run) {
+function normalizeRun(run: any) {
   const clone = { ...run };
   clone.provider = clone.provider ?? 'Unknown';
   clone.device = clone.device ?? 'Unknown';
   clone.benchmark = clone.benchmark ?? 'Unknown';
-  const metrics = { ...clone.metrics } && typeof clone.metrics === 'object' ? { ...clone.metrics } : {};
-  const errors = { ...clone.errors } && typeof clone.errors === 'object' ? { ...clone.errors } : {};
+  const metrics: Record<string, number> = (clone && typeof clone.metrics === 'object' && clone.metrics != null)
+    ? { ...(clone.metrics as Record<string, unknown>) as Record<string, number> }
+    : {};
+  const errors: Record<string, number> = (clone && typeof clone.errors === 'object' && clone.errors != null)
+    ? { ...(clone.errors as Record<string, unknown>) as Record<string, number> }
+    : {};
   if (clone.accuracy !== undefined && metrics.accuracy === undefined) {
     const val = Number(clone.accuracy);
     if (Number.isFinite(val)) metrics.accuracy = val;
@@ -315,7 +319,7 @@ if (searchTrigger) {
 }
 
 if (searchInput) {
-  searchInput.addEventListener('keydown', event => {
+  searchInput.addEventListener('keydown', (event: KeyboardEvent) => {
     if (event.key === 'Enter') {
       event.preventDefault();
       console.info('[search] enter pressed (link handling disabled)');
@@ -325,7 +329,7 @@ if (searchInput) {
 
 if (metricSelect) {
   metricSelect.addEventListener('change', () => {
-    currentMetricId = metricSelect.value;
+    currentMetricId = (metricSelect as HTMLSelectElement).value;
     drawChart();
   });
 }
@@ -337,8 +341,9 @@ document.addEventListener('keydown', event => {
 });
 
 if (detailModal) {
-  detailModal.addEventListener('click', event => {
-    if (event.target === detailModal || event.target.hasAttribute('data-detail-close')) {
+  detailModal.addEventListener('click', (event: MouseEvent) => {
+    const t = event.target as HTMLElement | null;
+    if (t === detailModal || (t && typeof (t as any).hasAttribute === 'function' && t.hasAttribute('data-detail-close'))) {
       closeDetail();
     }
   });
@@ -348,8 +353,8 @@ if (detailCloseBtn) {
   detailCloseBtn.addEventListener('click', () => closeDetail());
 }
 
-function uniqueValues(values, key) {
-  const seen = new Set();
+function uniqueValues(values: Array<Record<string, unknown>>, key: string) {
+  const seen = new Set<string>();
   values.forEach(item => {
     const value = item?.[key];
     if (value !== undefined && value !== null && value !== "") {
@@ -501,19 +506,19 @@ function getMetricError(run, metricId) {
 function setupFilters(values) {
   populateFilterOptions(values);
   if (filtersInitialized) return;
-  Object.entries(filterElements).forEach(([key, select]) => {
+  Object.entries(filterElements as Record<string, HTMLSelectElement | null>).forEach(([key, select]) => {
     if (!select) return;
     select.addEventListener("change", () => {
-      filterState[key] = select.value;
+      filterState[key as keyof typeof filterState] = (select as HTMLSelectElement).value as any;
       drawChart();
     });
   });
   if (resetFiltersBtn) {
     resetFiltersBtn.addEventListener("click", () => {
-      Object.entries(filterElements).forEach(([key, select]) => {
+      Object.entries(filterElements as Record<string, HTMLSelectElement | null>).forEach(([key, select]) => {
         if (select) {
-          select.value = "all";
-          filterState[key] = "all";
+          (select as HTMLSelectElement).value = "all";
+          filterState[key as keyof typeof filterState] = "all" as any;
         }
       });
       if (allMetricDefs.length) {
@@ -535,7 +540,7 @@ function refreshDeviceOptions() {
   populateSelect(filterDevice, devices, 'All devices', 'device');
 }
 
-function getFilteredData(options = {}) {
+function getFilteredData(options: { includeDevice?: boolean } = {}) {
   const { includeDevice = true } = options;
   return rawBenchmarks.filter(item => {
     if (filterState.provider !== "all" && item.provider !== filterState.provider) return false;
@@ -627,7 +632,7 @@ function buildRunList(runs, metric, limit, includeBenchmark) {
   const format = metric.format || '.3f';
   return runs
     .slice()
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .sort((a, b) => Number(new Date(b.timestamp)) - Number(new Date(a.timestamp)))
     .slice(0, limit)
     .map(entry => {
       const value = formatMetricValue(getMetricValue(entry, metric.id), format, metric.unit);
@@ -660,7 +665,7 @@ async function renderChart(values, token, metric) {
 
   if (skeletonGraph) skeletonGraph.style.display = "block";
 
-  const embed = globalThis.vegaEmbed;
+  const embed: any = (globalThis as any).vegaEmbed;
   if (typeof embed !== "function") {
     console.error('[chart] vegaEmbed is undefined — are the Vega scripts loaded?');
     if (skeletonGraph) skeletonGraph.style.display = "none";
@@ -902,9 +907,9 @@ async function injectFooter() {
     if (!resp.ok) throw new Error(`HTTP ${resp.status} loading footer.html`);
     const markup = await resp.text();
     slot.innerHTML = markup;
-    const yearEl = slot.querySelector('#footer-year');
+    const yearEl = slot.querySelector('#footer-year') as HTMLElement | null;
     if (yearEl) {
-      yearEl.textContent = new Date().getFullYear();
+      yearEl.textContent = String(new Date().getFullYear());
     }
   } catch (err) {
     console.warn('[footer] load failed:', err);

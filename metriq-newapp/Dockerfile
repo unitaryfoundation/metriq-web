@@ -11,8 +11,10 @@ WORKDIR /usr/share/nginx/html
 # Copy application files
 COPY ./ /usr/share/nginx/html/
 
-# Install runtime dependency needed by the generator script
-RUN npm install --no-save jsonwebtoken && npm cache clean --force
+# Install runtime dependency and TypeScript, then compile TS → JS
+RUN npm install --no-save jsonwebtoken typescript @types/node \
+ && npx tsc -p . \
+ && npm cache clean --force
 
 # Ensure entrypoint helper runs before nginx starts
 COPY docker-entrypoint.d/ /docker-entrypoint.d/
