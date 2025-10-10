@@ -61,7 +61,17 @@ const detailSubtitle = document.getElementById("detail-subtitle") as HTMLElement
 const detailBody = document.getElementById("detail-body") as HTMLElement | null;
 const detailCloseBtn = (detailModal?.querySelector('.detail-modal__close') as HTMLButtonElement | null) || null;
 
-// Tabs
+// Top-level views
+const viewResultsBtn = document.getElementById('view-results-btn') as HTMLButtonElement | null;
+const viewPlatformsBtn = document.getElementById('view-platforms-btn') as HTMLButtonElement | null;
+const viewBenchmarksBtn = document.getElementById('view-benchmarks-btn') as HTMLButtonElement | null;
+const viewResults = document.getElementById('view-results') as HTMLElement | null;
+const viewPlatforms = document.getElementById('view-platforms') as HTMLElement | null;
+const viewBenchmarks = document.getElementById('view-benchmarks') as HTMLElement | null;
+
+// No extra filters for Platforms/Benchmarks
+
+// Results sub-tabs
 const tabGraph = document.getElementById("tab-graph") as HTMLButtonElement | null;
 const tabTable = document.getElementById("tab-table") as HTMLButtonElement | null;
 const panelGraph = document.getElementById("panel-graph") as HTMLElement | null;
@@ -93,6 +103,12 @@ let appConfigPromise;
 let appConfigCache = null;
 let benchmarksPromise;
 let rawBenchmarks = [];
+let platformsPromise;
+let platformsLoaded = false;
+let platformsIndexCache: any[] | null = null;
+let deviceSeriesCache: Map<string, number[]> | null = null;
+let benchmarkSeriesCache: Map<string, number[]> | null = null;
+let suppressHashHandler = false;
 let chartView = null;
 let resizeHandler = null;
 let filtersInitialized = false;
@@ -100,17 +116,43 @@ let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 
 function activateTab(which) {
-  const graphActive = which === "graph";
-  tabGraph?.classList.toggle("is-active", graphActive);
-  tabGraph?.setAttribute("aria-selected", String(graphActive));
-  tabTable?.classList.toggle("is-active", !graphActive);
-  tabTable?.setAttribute("aria-selected", String(!graphActive));
-  panelGraph?.classList.toggle("is-active", graphActive);
-  panelTable?.classList.toggle("is-active", !graphActive);
+  const isGraph = which === "graph";
+  const isTable = which === "table";
+  tabGraph?.classList.toggle("is-active", isGraph);
+  tabGraph?.setAttribute("aria-selected", String(isGraph));
+  tabTable?.classList.toggle("is-active", isTable);
+  tabTable?.setAttribute("aria-selected", String(isTable));
+  panelGraph?.classList.toggle("is-active", isGraph);
+  panelTable?.classList.toggle("is-active", isTable);
+  if (isTable) {
+    drawTable();
+  }
 }
 
 tabGraph?.addEventListener("click", () => activateTab("graph"));
 tabTable?.addEventListener("click", () => activateTab("table"));
+
+function activateView(which) {
+  const isResults = which === 'results';
+  const isPlatforms = which === 'platforms';
+  const isBenchmarks = which === 'benchmarks';
+  viewResultsBtn?.classList.toggle('is-active', isResults);
+  viewResultsBtn?.setAttribute('aria-selected', String(isResults));
+  viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
+  viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
+  viewBenchmarksBtn?.classList.toggle('is-active', isBenchmarks);
+  viewBenchmarksBtn?.setAttribute('aria-selected', String(isBenchmarks));
+  if (viewResults) viewResults.hidden = !isResults;
+  if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
+  if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
+  if (isPlatforms) initPlatformsView();
+  if (isBenchmarks) initBenchmarksListView();
+  updateHash({ view: which });
+}
+
+viewResultsBtn?.addEventListener('click', () => activateView('results'));
+viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
+viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
 
 // ---- Iframe wiring ----
 const params = new URLSearchParams(location.search);
@@ -135,7 +177,7 @@ function applyEmbedSource(url) {
   embedBaseSrc = url;
   if (!iframe) return;
   if (skeleton) skeleton.style.display = "block";
-  (iframe as HTMLIFrameElement).src = url;
+  if (iframe) (iframe as HTMLIFrameElement).src = url;
 }
 
 if (iframe) {
@@ -168,6 +210,15 @@ if (openMetabaseBtn) {
 (async () => {
   const config = await loadAppConfig();
   setupBenchmarkSearch(config);
+  // Wire data download links (all anchors)
+  try {
+    const bUrl = (config && (config as any).benchmarksUrl) || './data/benchmarks.json';
+    document.querySelectorAll<HTMLAnchorElement>('.link-benchmarks-json').forEach(a => a.href = bUrl);
+  } catch {}
+  try {
+    const pUrl = (config && (config as any).platformsIndexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
+    document.querySelectorAll<HTMLAnchorElement>('.link-platforms-json').forEach(a => a.href = pUrl);
+  } catch {}
   let initial = srcParam;
   if (!initial) {
     const generated = await resolveMetabaseEmbedUrl();
@@ -175,6 +226,50 @@ if (openMetabaseBtn) {
   }
   applyEmbedSource(initial);
 })();
+
+// Default to the Results view on load
+activateView('results');
+
+// ---- Hash routing for deep links ----
+function parseHash(): Record<string, string> {
+  const raw = location.hash.replace(/^#/, '').trim();
+  const p = new URLSearchParams(raw);
+  const o: Record<string, string> = {};
+  p.forEach((v, k) => { o[k] = v; });
+  return o;
+}
+
+function updateHash(next: Record<string, string>) {
+  try {
+    suppressHashHandler = true;
+    const cur = parseHash();
+    const merged = { ...cur, ...next };
+    const p = new URLSearchParams();
+    Object.entries(merged).forEach(([k, v]) => { if (v != null && v !== '') p.set(k, v); });
+    const nh = '#' + p.toString();
+    if (location.hash !== nh) history.replaceState(null, '', nh);
+  } finally {
+    setTimeout(() => { suppressHashHandler = false; }, 0);
+  }
+}
+
+async function applyHashRouting() {
+  if (suppressHashHandler) return;
+  const h = parseHash();
+  const view = (h.view || 'results') as 'results'|'platforms'|'benchmarks';
+  activateView(view);
+  if (view === 'platforms' && h.provider && h.device) {
+    await initPlatformsView();
+    openPlatformDetail(h.provider, h.device);
+  }
+  if (view === 'benchmarks' && h.benchmark) {
+    await initBenchmarksListView();
+    openBenchmarkDetail(h.benchmark);
+  }
+}
+
+window.addEventListener('hashchange', () => { applyHashRouting(); });
+applyHashRouting();
 
 async function loadBenchmarks() {
   if (!benchmarksPromise) {
@@ -189,7 +284,12 @@ async function loadBenchmarks() {
         }
         const json = await resp.json();
         if (Array.isArray(json)) {
-          return json.map(normalizeRun);
+          // Detect metriq-data ETL shape and adapt
+          const looksLikeEtl = json.length > 0 && typeof json[0] === 'object' && json[0] !== null && (
+            'results' in json[0] || 'params' in json[0] || 'job_type' in json[0]
+          );
+          const rows = looksLikeEtl ? json.map(adaptMetriqEtlRow) : json;
+          return rows.map(normalizeRun);
         }
         console.warn('[chart] data/benchmarks.json did not return an array, using fallback.');
       } catch (fetchErr) {
@@ -199,6 +299,386 @@ async function loadBenchmarks() {
     })();
   }
   return benchmarksPromise;
+}
+
+async function loadPlatformsIndex() {
+  if (!platformsPromise) {
+    platformsPromise = (async () => {
+      const config = await loadAppConfig();
+      const defaultUrl = 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
+      const url = (config && (config as any).platformsIndexUrl) || defaultUrl;
+      try {
+        const resp = await fetch(appendCacheBust(url), { cache: 'no-store' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
+        const json = await resp.json();
+        if (json && Array.isArray(json.platforms)) {
+          return json;
+        }
+        return { generated_at: null, platforms: [] };
+      } catch (err) {
+        console.warn('[platforms] failed to load index:', err);
+        return { generated_at: null, platforms: [] };
+      }
+    })();
+  }
+  return platformsPromise;
+}
+
+function getPlatformsBaseUrl(indexUrl: string) {
+  try {
+    if (!indexUrl) return null;
+    if (indexUrl.endsWith('/index.json')) {
+      return indexUrl.slice(0, -('/index.json'.length));
+    }
+    return indexUrl.replace(/index\.json$/i, '');
+  } catch { return null; }
+}
+
+async function openPlatformDetail(provider: string, device: string) {
+  try {
+    const config = await loadAppConfig();
+    const indexUrl = (config && (config as any).platformsIndexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
+    const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
+    const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
+    const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    renderPlatformDetail(json);
+  } catch (err) {
+    console.error('[platforms] detail load failed:', err);
+    renderPlatformDetail({ provider, device, error: String(err) });
+  }
+}
+
+function renderPlatformDetail(detail: any) {
+  if (!detailModal || !detailTitle || !detailBody || !detailSubtitle) return;
+  const provider = detail?.provider || 'Unknown';
+  const device = detail?.device || 'Unknown';
+  const runs = detail?.runs ?? 0;
+  const lastSeen = detail?.last_seen || '';
+  const firstSeen = detail?.first_seen || '';
+  const currentMeta = detail?.current?.device_metadata || null;
+  const history = Array.isArray(detail?.history) ? detail.history : [];
+  detailTitle.textContent = `${provider} · ${device}`;
+  detailSubtitle.textContent = `${runs} runs · ${firstSeen} → ${lastSeen}`;
+  const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<em>No current metadata</em>';
+  const historyHtml = history.length ? history.map((h: any) => {
+    const f = h?.first_seen || '';
+    const l = h?.last_seen || '';
+    const r = h?.runs ?? 0;
+    return `<li><code>${f}</code> → <code>${l}</code> · <strong>${r}</strong> run${r===1?'':'s'}</li>`;
+  }).join('') : '<li>No metadata history</li>';
+  detailBody.innerHTML = `
+    <section class="detail-section">
+      <h5>Current metadata</h5>
+      ${metaHtml}
+    </section>
+    <section class="detail-section">
+      <h5>Metadata history</h5>
+      <ul>${historyHtml}</ul>
+    </section>
+  `;
+  detailModal.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+
+function escapeHtml(s: string) {
+  return String(s).replace(/[&<>"]|'/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'} as any)[c] || c);
+}
+
+async function initPlatformsView() {
+  if (platformsLoaded) return;
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  container.innerHTML = '<div class="meta">Loading platforms…</div>';
+  try {
+    const data = await loadPlatformsIndex();
+    const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
+    platformsIndexCache = platforms.slice();
+    try {
+      const runs = await loadBenchmarks();
+      deviceSeriesCache = computeDeviceSeries(Array.isArray(runs) ? runs : []);
+    } catch {}
+    renderPlatformsTable();
+    platformsLoaded = true;
+    return;
+    if (!platforms.length) {
+      container.innerHTML = '<div class="meta">No platforms found.</div>';
+      platformsLoaded = true;
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    const table = document.createElement('table');
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Provider</th>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Device</th>
+          <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Runs</th>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Last seen</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
+    platforms.sort((a: any, b: any) => {
+      const p = String(a.provider||'').localeCompare(String(b.provider||''));
+      if (p !== 0) return p;
+      return String(a.device||'').localeCompare(String(b.device||''));
+    }).forEach((p: any) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(p.provider||'')}</td>
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><button type=\"button\" class=\"btn\" data-provider=\"${escapeAttr(p.provider)}\" data-device=\"${escapeAttr(p.device)}\">${escapeHtml(p.device||'')}</button></td>
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${Number(p.runs)||0}</td>
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><code>${escapeHtml(p.last_seen||'')}</code></td>`;
+      tbody.appendChild(tr);
+    });
+    fragment.appendChild(table);
+    container.innerHTML = '';
+    container.appendChild(fragment);
+    container.addEventListener('click', (ev) => {
+      const target = ev.target as HTMLElement;
+      const btn = (target && target.closest('button[data-provider][data-device]')) as HTMLButtonElement | null;
+      if (btn) {
+        const provider = btn.getAttribute('data-provider') || '';
+        const device = btn.getAttribute('data-device') || '';
+        openPlatformDetail(provider, device);
+      }
+    });
+  } catch (err) {
+    console.error('[platforms] init failed:', err);
+    container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load platforms.</div>';
+  } finally {
+    platformsLoaded = true;
+  }
+}
+
+function escapeAttr(s: any) {
+  return String(s).replace(/\"/g, '&quot;');
+}
+
+function getDeviceKey(provider: string, device: string) { return `${provider}::${device}`; }
+
+function computeDeviceSeries(runs: any[]): Map<string, number[]> {
+  const weeks = 12;
+  const now = Date.now();
+  const weekMs = 7*24*3600*1000;
+  const edges: number[] = Array.from({length: weeks+1}, (_, i) => now - (weeks-i)*weekMs);
+  const series = new Map<string, number[]>();
+  runs.forEach((r: any) => {
+    const provider = String(r.provider||'');
+    const device = String(r.device||'');
+    const ts = Number(new Date(r.timestamp||0));
+    if (!Number.isFinite(ts)) return;
+    let idx = -1;
+    for (let i=0;i<weeks;i++){ if (ts>=edges[i] && ts<edges[i+1]) { idx = i; break; } }
+    if (idx === -1) return;
+    const key = getDeviceKey(provider, device);
+    let arr = series.get(key);
+    if (!arr) { arr = Array.from({length: weeks}, () => 0); series.set(key, arr); }
+    arr[idx] += 1;
+  });
+  return series;
+}
+
+function computeBenchmarkSeries(runs: any[]): Map<string, number[]> {
+  const weeks = 12;
+  const now = Date.now();
+  const weekMs = 7*24*3600*1000;
+  const edges: number[] = Array.from({length: weeks+1}, (_, i) => now - (weeks-i)*weekMs);
+  const series = new Map<string, number[]>();
+  runs.forEach((r: any) => {
+    const b = String(r.benchmark||'');
+    const ts = Number(new Date(r.timestamp||0));
+    if (!Number.isFinite(ts)) return;
+    let idx = -1;
+    for (let i=0;i<weeks;i++){ if (ts>=edges[i] && ts<edges[i+1]) { idx = i; break; } }
+    if (idx === -1) return;
+    let arr = series.get(b);
+    if (!arr) { arr = Array.from({length: weeks}, () => 0); series.set(b, arr); }
+    arr[idx] += 1;
+  });
+  return series;
+}
+
+function renderSparkline(values: number[], width=100, height=24, stroke='#2563eb') {
+  if (!Array.isArray(values) || !values.length) return '';
+  const max = Math.max(...values, 1);
+  const step = width / (values.length - 1 || 1);
+  const pts: string[] = [];
+  values.forEach((v, i) => {
+    const x = i*step;
+    const y = height - (v/max)*height;
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  });
+  const polyline = `<polyline fill="none" stroke="${stroke}" stroke-width="1.5" points="${pts.join(' ')}"/>`;
+  const base = `<line x1="0" y1="${height}" x2="${width}" y2="${height}" stroke="rgba(0,0,0,.12)" stroke-width="1"/>`;
+  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${base}${polyline}</svg>`;
+}
+
+function renderPlatformsTable() {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  const filtered = Array.isArray(platformsIndexCache) ? platformsIndexCache.slice() : [];
+  const frag = document.createDocumentFragment();
+  const table = document.createElement('table');
+  table.style.width = '100%';
+  table.style.borderCollapse = 'collapse';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Provider</th>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Device</th>
+        <th style="text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Runs</th>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Last seen</th>
+        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Activity</th>
+      </tr>
+    </thead>
+    <tbody></tbody>`;
+  const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
+  filtered.sort((a: any, b: any) => {
+    const p = String(a.provider||'').localeCompare(String(b.provider||''));
+    if (p !== 0) return p;
+    return String(a.device||'').localeCompare(String(b.device||''));
+  }).forEach((p: any) => {
+    const tr = document.createElement('tr');
+    const key = getDeviceKey(String(p.provider||''), String(p.device||''));
+    const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
+    const spark = series.length ? renderSparkline(series) : '';
+    tr.innerHTML = `
+      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)">${escapeHtml(p.provider||'')}</td>
+      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)"><button type="button" class="btn" data-provider="${escapeAttr(p.provider)}" data-device="${escapeAttr(p.device)}">${escapeHtml(p.device||'')}</button></td>
+      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right">${Number(p.runs)||0}</td>
+      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)"><code>${escapeHtml(p.last_seen||'')}</code></td>
+      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)">${spark}</td>`;
+    tbody.appendChild(tr);
+  });
+  frag.appendChild(table);
+  container.innerHTML = '';
+  container.appendChild(frag);
+  container.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement;
+    const btn = (target && target.closest('button[data-provider][data-device]')) as HTMLButtonElement | null;
+    if (btn) {
+      const provider = btn.getAttribute('data-provider') || '';
+      const device = btn.getAttribute('data-device') || '';
+      updateHash({ view: 'platforms', provider, device });
+      openPlatformDetail(provider, device);
+    }
+  });
+}
+
+async function initBenchmarksListView() {
+  const container = document.getElementById('benchmarks-container');
+  if (!container) return;
+  container.innerHTML = '<div class="meta">Loading benchmarks…</div>';
+  try {
+    const data = await loadBenchmarks();
+    const runs = Array.isArray(data) ? data : [];
+    if (!runs.length) {
+      container.innerHTML = '<div class="meta">No benchmarks found.</div>';
+      return;
+    }
+    const map = new Map<string, { runs: number; providers: Set<string>; devices: Set<string>; last_seen: string }>();
+    runs.forEach((run: any) => {
+      const b = String(run.benchmark || 'Unknown');
+      const ts = String(run.timestamp || '');
+      const prev = map.get(b) || { runs: 0, providers: new Set(), devices: new Set(), last_seen: '' };
+      prev.runs += 1;
+      if (run.provider) prev.providers.add(String(run.provider));
+      if (run.device) prev.devices.add(String(run.device));
+      if (!prev.last_seen || (ts && ts > prev.last_seen)) prev.last_seen = ts;
+      map.set(b, prev);
+    });
+    const rows = Array.from(map.entries()).map(([benchmark, v]) => ({
+      benchmark,
+      runs: v.runs,
+      providers: Array.from(v.providers).sort(),
+      devices: Array.from(v.devices).sort(),
+      last_seen: v.last_seen,
+    })).sort((a, b) => a.benchmark.localeCompare(b.benchmark));
+
+    const table = document.createElement('table');
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Name</th>
+          <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Runs</th>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Providers</th>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Devices</th>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Last seen</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    // Add Activity header and precompute series
+    try {
+      const headRow = table.querySelector('thead tr') as HTMLTableRowElement | null;
+      if (headRow) {
+        const th = document.createElement('th');
+        th.style.textAlign='left'; th.style.padding='8px'; th.style.borderBottom='1px solid rgba(0,0,0,.08)';
+        th.textContent='Activity'; headRow.appendChild(th);
+      }
+      benchmarkSeriesCache = computeBenchmarkSeries(runs);
+    } catch {}
+    const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
+    rows.forEach((row) => {
+      const tr = document.createElement('tr');
+      const href = `#view=benchmarks&benchmark=${encodeURIComponent(row.benchmark)}`;
+      tr.innerHTML = `
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><a href=\"${href}\">${escapeHtml(row.benchmark)}</a></td>
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${row.runs}</td>
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(row.providers.join(', '))}</td>
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(row.devices.join(', '))}</td>
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><code>${escapeHtml(row.last_seen||'')}</code></td>`;
+      // Append sparkline activity cell
+      try {
+        const td = document.createElement('td');
+        td.style.padding='8px'; td.style.borderBottom='1px solid rgba(0,0,0,.05)';
+        const series = (benchmarkSeriesCache && benchmarkSeriesCache.get(row.benchmark)) || [];
+        td.innerHTML = series.length ? renderSparkline(series) : '';
+        tr.appendChild(td);
+      } catch {}
+      tbody.appendChild(tr);
+    });
+    container.innerHTML = '';
+    container.appendChild(table);
+    // No JS listeners needed when using anchor links (hash routing handles open)
+  } catch (err) {
+    console.error('[benchmarks] init failed:', err);
+    container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load benchmarks.</div>';
+  }
+}
+
+function openBenchmarkDetail(benchmark: string) {
+  const runs = rawBenchmarks.filter((r: any) => String(r.benchmark||'') === benchmark);
+  if (!runs.length) return;
+  const metric = getActiveMetric();
+  const list = buildRunList(runs, metric, 12, false) || '<li>No runs</li>';
+  if (!detailModal || !detailTitle || !detailBody || !detailSubtitle) return;
+  detailTitle.textContent = `${benchmark}`;
+  detailSubtitle.textContent = `${runs.length} run${runs.length===1?'':'s'}`;
+  detailBody.innerHTML = `<section class=\"detail-section\"><ul>${list}</ul></section>`;
+  detailModal.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+
+function adaptMetriqEtlRow(row: any) {
+  const provider = row?.provider ?? 'Unknown';
+  const device = row?.device ?? 'Unknown';
+  const timestamp = row?.timestamp ?? null;
+  const params = (row && typeof row.params === 'object') ? row.params : {};
+  const jobType = row?.job_type ?? null;
+  const benchmark = params?.benchmark_name ?? jobType ?? 'Unknown';
+  // Treat ETL 'results' as our 'metrics'. If missing, use empty object.
+  const metrics = (row && typeof row.results === 'object' && row.results != null) ? row.results : {};
+  const errors = (row && typeof row.errors === 'object' && row.errors != null) ? row.errors : {};
+  return { provider, device, benchmark, timestamp, metrics, errors };
 }
 
 function normalizeRun(run: any) {
@@ -331,6 +811,8 @@ if (metricSelect) {
   metricSelect.addEventListener('change', () => {
     currentMetricId = (metricSelect as HTMLSelectElement).value;
     drawChart();
+    // Refresh static table metric column as well
+    drawTable();
   });
 }
 
@@ -839,6 +1321,227 @@ async function renderChart(values, token, metric) {
   }
 }
 
+// ---- Static Smart Table (sorting + filters independent of chart) ----
+type TableState = {
+  sortKey: 'timestamp' | 'provider' | 'device' | 'benchmark' | 'metric';
+  sortDir: 'asc' | 'desc';
+  filterText: string;
+  filterProvider: string; // 'all' or provider
+  filterDevice: string;   // 'all' or device
+  filterBenchmark: string; // 'all' or benchmark
+};
+
+let tableState: TableState = {
+  sortKey: 'timestamp',
+  sortDir: 'desc',
+  filterText: '',
+  filterProvider: 'all',
+  filterDevice: 'all',
+  filterBenchmark: 'all',
+};
+
+function ensureTableUI() {
+  const container = document.getElementById('table-static');
+  if (!container) return null as HTMLDivElement | null;
+  if (container.getAttribute('data-smart') === '1') return container as HTMLDivElement;
+  container.setAttribute('data-smart', '1');
+  const controls = document.createElement('div');
+  controls.className = 'smart-controls';
+  controls.innerHTML = `
+    <label class="smart-field">
+      <span>Search</span>
+      <input id="smart-q" type="search" placeholder="Search all columns" autocomplete="off" />
+    </label>
+    <label class="smart-field">
+      <span>Provider</span>
+      <select id="smart-provider"><option value="all">All</option></select>
+    </label>
+    <label class="smart-field">
+      <span>Device</span>
+      <select id="smart-device"><option value="all">All</option></select>
+    </label>
+    <label class="smart-field">
+      <span>Benchmark</span>
+      <select id="smart-benchmark"><option value="all">All</option></select>
+    </label>
+    <button type="button" class="btn" id="smart-reset">Reset</button>
+  `;
+  const tableWrap = document.createElement('div');
+  tableWrap.id = 'smart-table-wrap';
+  container.innerHTML = '';
+  container.appendChild(controls);
+  container.appendChild(tableWrap);
+  return container as HTMLDivElement;
+}
+
+function getMetricSortValue(run: any, metricId: string) {
+  const v = getMetricValue(run, metricId);
+  return Number.isFinite(v) ? v : Number.NEGATIVE_INFINITY;
+}
+
+function populateSmartFilters(values: any[]) {
+  const provSel = document.getElementById('smart-provider') as HTMLSelectElement | null;
+  const devSel = document.getElementById('smart-device') as HTMLSelectElement | null;
+  const benchSel = document.getElementById('smart-benchmark') as HTMLSelectElement | null;
+  const unique = (arr: string[]) => Array.from(new Set(arr.filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  if (provSel) {
+    const opts = unique(values.map(v => String(v.provider||'')));
+    provSel.innerHTML = '<option value="all">All</option>' + opts.map(o=>`<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join('');
+    provSel.value = tableState.filterProvider || 'all';
+  }
+  if (devSel) {
+    const opts = unique(values.map(v => String(v.device||'')));
+    devSel.innerHTML = '<option value="all">All</option>' + opts.map(o=>`<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join('');
+    devSel.value = tableState.filterDevice || 'all';
+  }
+  if (benchSel) {
+    const opts = unique(values.map(v => String(v.benchmark||'')));
+    benchSel.innerHTML = '<option value="all">All</option>' + opts.map(o=>`<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join('');
+    benchSel.value = tableState.filterBenchmark || 'all';
+  }
+}
+
+function applyTableFilters(values: any[]) {
+  const q = (tableState.filterText || '').toLowerCase();
+  return values.filter(v => {
+    if (tableState.filterProvider !== 'all' && String(v.provider||'') !== tableState.filterProvider) return false;
+    if (tableState.filterDevice !== 'all' && String(v.device||'') !== tableState.filterDevice) return false;
+    if (tableState.filterBenchmark !== 'all' && String(v.benchmark||'') !== tableState.filterBenchmark) return false;
+    if (q) {
+      const blob = `${v.timestamp||''} ${v.provider||''} ${v.device||''} ${v.benchmark||''}`.toLowerCase();
+      if (!blob.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function sortTableRows(values: any[], metricId: string) {
+  const { sortKey, sortDir } = tableState;
+  const mul = sortDir === 'asc' ? 1 : -1;
+  const cmp = (a: any, b: any) => {
+    let av:any, bv:any;
+    switch (sortKey) {
+      case 'timestamp': av = Number(new Date(a.timestamp)); bv = Number(new Date(b.timestamp)); break;
+      case 'provider': av = String(a.provider||''); bv = String(b.provider||''); break;
+      case 'device': av = String(a.device||''); bv = String(b.device||''); break;
+      case 'benchmark': av = String(a.benchmark||''); bv = String(b.benchmark||''); break;
+      case 'metric': av = getMetricSortValue(a, metricId); bv = getMetricSortValue(b, metricId); break;
+      default: av = 0; bv = 0;
+    }
+    if (av < bv) return -1*mul;
+    if (av > bv) return 1*mul;
+    return 0;
+  };
+  values.sort(cmp);
+}
+
+function renderStaticTable(values: any[]) {
+  const container = ensureTableUI();
+  const wrap = document.getElementById('smart-table-wrap');
+  const skeletonTable = document.getElementById('skeleton');
+  if (!container || !wrap) return;
+  if (skeletonTable) skeletonTable.style.display = 'block';
+  const metric = getActiveMetric();
+
+  // Init filters if first time
+  populateSmartFilters(values);
+
+  // Apply filters and sorting
+  const working = applyTableFilters(values.slice());
+  sortTableRows(working, metric.id);
+
+  const table = document.createElement('table');
+  table.className = 'smart-table';
+  const sortIcon = (key: TableState['sortKey']) => tableState.sortKey===key ? (tableState.sortDir==='asc'?' ▲':' ▼') : '';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th data-sort="timestamp" class="sortable">Timestamp${sortIcon('timestamp')}</th>
+        <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
+        <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
+        <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
+        <th data-sort="metric" class="sortable num">${buildMetricLabel(metric)}${sortIcon('metric')}</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
+  working.forEach(run => {
+    const metricValue = getMetricValue(run, metric.id);
+    const err = getMetricError(run, metric.id);
+    const formatted = formatMetricValue(metricValue, metric.format || '.3f', metric.unit);
+    const display = err !== null
+      ? `${formatted} ± ${formatMetricValue(err, metric.format || '.3f', metric.unit)}`
+      : formatted;
+    const tr = document.createElement('tr');
+    const deviceHref = `#view=platforms&provider=${encodeURIComponent(String(run.provider||''))}&device=${encodeURIComponent(String(run.device||''))}`;
+    const benchHref = `#view=benchmarks&benchmark=${encodeURIComponent(String(run.benchmark||''))}`;
+    tr.innerHTML = `
+      <td><code>${escapeHtml(run.timestamp || '')}</code></td>
+      <td>${escapeHtml(run.provider || '')}</td>
+      <td><a href="${deviceHref}">${escapeHtml(run.device || '')}</a></td>
+      <td><a href="${benchHref}">${escapeHtml(run.benchmark || '')}</a></td>
+      <td class="num">${display}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Attach sort handlers
+  table.querySelectorAll('th[data-sort]')
+    .forEach((th: any) => {
+      th.addEventListener('click', () => {
+        const key = String(th.getAttribute('data-sort')) as TableState['sortKey'];
+        if (tableState.sortKey === key) {
+          tableState.sortDir = tableState.sortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          tableState.sortKey = key;
+          tableState.sortDir = key === 'timestamp' ? 'desc' : 'asc';
+        }
+        renderStaticTable(values);
+      });
+    });
+
+  // Wire filter controls (debounced text)
+  const qInput = document.getElementById('smart-q') as HTMLInputElement | null;
+  const provSel = document.getElementById('smart-provider') as HTMLSelectElement | null;
+  const devSel = document.getElementById('smart-device') as HTMLSelectElement | null;
+  const benchSel = document.getElementById('smart-benchmark') as HTMLSelectElement | null;
+  const resetBtn = document.getElementById('smart-reset') as HTMLButtonElement | null;
+  let qTimer:any;
+  if (qInput) {
+    qInput.value = tableState.filterText || '';
+    qInput.oninput = () => {
+      clearTimeout(qTimer);
+      qTimer = setTimeout(()=>{ tableState.filterText = qInput.value || ''; renderStaticTable(values); }, 150);
+    };
+  }
+  provSel && (provSel.onchange = () => { tableState.filterProvider = provSel.value; renderStaticTable(values); });
+  devSel && (devSel.onchange = () => { tableState.filterDevice = devSel.value; renderStaticTable(values); });
+  benchSel && (benchSel.onchange = () => { tableState.filterBenchmark = benchSel.value; renderStaticTable(values); });
+  resetBtn && (resetBtn.onclick = () => {
+    tableState = { sortKey: 'timestamp', sortDir: 'desc', filterText: '', filterProvider: 'all', filterDevice: 'all', filterBenchmark: 'all' };
+    renderStaticTable(values);
+  });
+
+  wrap.innerHTML = '';
+  wrap.appendChild(table);
+  if (skeletonTable) skeletonTable.style.display = 'none';
+}
+
+async function drawTable() {
+  try {
+    await loadBenchmarks();
+    // Always include all runs, independent from chart filters
+    renderStaticTable(Array.isArray(rawBenchmarks) ? rawBenchmarks : []);
+  } catch (err) {
+    const container = document.getElementById('table-static');
+    if (container) {
+      container.innerHTML = '<div style="padding:12px;color:#f88">Failed to render table.</div>';
+    }
+    const skeletonTable = document.getElementById('skeleton');
+    if (skeletonTable) skeletonTable.style.display = 'none';
+  }
+}
+
 async function drawChart() {
   const token = ++renderSequence;
   refreshDeviceOptions();
@@ -888,6 +1591,7 @@ async function initBenchmarksView() {
     setupFilters(rawBenchmarks);
     refreshMetricOptions(rawBenchmarks);
     await drawChart();
+    await drawTable();
   } catch (err) {
     console.error('[chart] initialization failed:', err);
     if (el) {

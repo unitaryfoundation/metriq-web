@@ -32,6 +32,15 @@
         </div>
       </nav>
 
+      <!-- Views selector (moved above hero) -->
+      <section class="tabs tabs--views" aria-label="View selector">
+        <header class="tabs__nav" role="tablist">
+          <button class="tab is-active" role="tab" aria-selected="true" id="view-results-btn" data-target="#view-results">Results</button>
+          <button class="tab" role="tab" aria-selected="false" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
+          <button class="tab" role="tab" aria-selected="false" id="view-benchmarks-btn" data-target="#view-benchmarks">Benchmarks</button>
+        </header>
+      </section>
+
       <!-- Hero copy -->
       <section class="hero">
         <div class="hero__inner">
@@ -48,32 +57,35 @@
         </div>
       </section>
 
-      <!-- Tabs -->
-      <section class="tabs">
-        <header class="tabs__nav" role="tablist" aria-label="Data view selector">
+      
+
+      <!-- Results view -->
+      <section id="view-results">
+        <!-- Tabs -->
+        <section class="tabs">
+          <header class="tabs__nav" role="tablist" aria-label="Data view selector">
           <button class="tab is-active" role="tab" aria-selected="true" id="tab-graph" data-target="#panel-graph">Graph</button>
           <button class="tab" role="tab" aria-selected="false" id="tab-table" data-target="#panel-table">Table</button>
-        </header>
+          </header>
 
-        <div class="tabs__panels">
-          <!-- Graph panel -->
-          <section id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" class="panel is-active">
+          <div class="tabs__panels">
+            <!-- Graph panel -->
+            <section id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" class="panel is-active">
             <div class="panel__head">
               <h3 class="panel__title">Accuracy over time</h3>
               <p class="meta">Use the filters on the right to focus on specific devices or benchmarks.</p>
             </div>
-            <div class="chart-row">
-              <div class="chart-area">
-                <div class="frame-wrap">
-                  <div class="skeleton" id="skeleton-graph"><div class="shimmer"></div></div>
-                  <div id="chart"></div>
-                </div>
-                <div class="hint"><span class="dot"></span> Click any point to inspect the run; data is loaded from <code>data/benchmarks.json</code>.</div>
+          <div class="chart-row">
+            <div class="chart-area">
+              <div class="frame-wrap">
+                <div class="skeleton" id="skeleton-graph"><div class="shimmer"></div></div>
+                <div id="chart"></div>
               </div>
-              <aside class="chart-controls" aria-label="Chart filters">
-                <label class="chart-control">
-                  <span>Benchmark</span>
-                  <select id="filter-benchmark" autocomplete="off">
+            </div>
+            <aside class="chart-controls" aria-label="Chart filters">
+              <label class="chart-control">
+                <span>Benchmark</span>
+                <select id="filter-benchmark" autocomplete="off">
                     <option value="all">All benchmarks</option>
                   </select>
                 </label>
@@ -102,16 +114,35 @@
           <section id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="panel">
             <div class="frame-wrap">
               <div class="skeleton" id="skeleton"><div class="shimmer"></div></div>
-              <iframe id="embed" title="Embedded Table" loading="lazy" referrerpolicy="no-referrer"></iframe>
+              <div id="table-static"></div>
             </div>
             <div class="table-actions">
-              <button type="button" class="btn" id="btn-open-metabase">
-                <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
-                <span>Open full table in Metabase</span>
-              </button>
+              <a class="btn link-benchmarks-json" href="#" target="_blank" rel="noopener">Download Benchmarks JSON</a>
+              <a class="btn link-platforms-json" href="#" target="_blank" rel="noopener">Platforms Index JSON</a>
             </div>
           </section>
         </div>
+        </section>
+      </section>
+
+      <!-- Platforms view -->
+      <section id="view-platforms" hidden>
+        <div class="panel__head">
+          <h3 class="panel__title">Platforms</h3>
+          <p class="meta">Summary of devices aggregated by metriq-data.</p>
+        </div>
+        
+        <div id="platforms-container"></div>
+      </section>
+
+      <!-- Benchmarks view -->
+      <section id="view-benchmarks" hidden>
+        <div class="panel__head">
+          <h3 class="panel__title">Benchmarks</h3>
+          <p class="meta">Browse benchmarks aggregated from results.</p>
+        </div>
+        
+        <div id="benchmarks-container"></div>
       </section>
 
       <!-- Insights -->
