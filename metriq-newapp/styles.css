@@ -71,9 +71,35 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #smart-table-wrap tbody tr:nth-child(even){background:#fafcff}
 #smart-table-wrap tbody tr:hover{background:#f6faff}
 #smart-table-wrap td.num,#smart-table-wrap th.num{text-align:right}
+#smart-table-wrap{overflow-x:auto}
+#smart-table-wrap thead th,#smart-table-wrap tbody td{white-space:nowrap}
 #smart-table-wrap a{color:var(--accent);text-decoration:none}
 #smart-table-wrap a:hover{text-decoration:underline}
 #smart-table-wrap code{background:#f8fafc;border:1px solid #eef2ff;border-radius:6px;padding:2px 6px}
+
+/* Platforms table styled like smart table */
+#platforms-table-wrap{overflow-x:auto}
+#platforms-table-wrap table.smart-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #dbeafe;border-radius:8px;overflow:hidden;background:#fff}
+#platforms-table-wrap thead th{background:#f0f7ff;color:#1f2b3c;font-weight:600;padding:10px 12px;border-bottom:1px solid #dbeafe}
+#platforms-table-wrap tbody td{padding:10px 12px;border-top:1px solid #eef2ff}
+#platforms-table-wrap tbody tr:nth-child(even){background:#fafcff}
+#platforms-table-wrap tbody tr:hover{background:#f6faff}
+#platforms-table-wrap td.num,#platforms-table-wrap th.num{text-align:right}
+#platforms-table-wrap a{color:var(--accent);text-decoration:none}
+#platforms-table-wrap a:hover{text-decoration:underline}
+#platforms-table-wrap code{background:#f8fafc;border:1px solid #eef2ff;border-radius:6px;padding:2px 6px}
+
+/* Benchmarks table styled like smart table */
+#benchmarks-table-wrap{overflow-x:auto}
+#benchmarks-table-wrap table.smart-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #dbeafe;border-radius:8px;overflow:hidden;background:#fff}
+#benchmarks-table-wrap thead th{background:#f0f7ff;color:#1f2b3c;font-weight:600;padding:10px 12px;border-bottom:1px solid #dbeafe}
+#benchmarks-table-wrap tbody td{padding:10px 12px;border-top:1px solid #eef2ff}
+#benchmarks-table-wrap tbody tr:nth-child(even){background:#fafcff}
+#benchmarks-table-wrap tbody tr:hover{background:#f6faff}
+#benchmarks-table-wrap td.num,#benchmarks-table-wrap th.num{text-align:right}
+#benchmarks-table-wrap a{color:var(--accent);text-decoration:none}
+#benchmarks-table-wrap a:hover{text-decoration:underline}
+#benchmarks-table-wrap code{background:#f8fafc;border:1px solid #eef2ff;border-radius:6px;padding:2px 6px}
 
 /* Smart table filters header */
 .smart-controls{

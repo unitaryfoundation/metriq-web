@@ -524,17 +524,18 @@ function renderPlatformsTable() {
   if (!container) return;
   const filtered = Array.isArray(platformsIndexCache) ? platformsIndexCache.slice() : [];
   const frag = document.createDocumentFragment();
+  const wrap = document.createElement('div');
+  wrap.id = 'platforms-table-wrap';
   const table = document.createElement('table');
-  table.style.width = '100%';
-  table.style.borderCollapse = 'collapse';
+  table.className = 'smart-table';
   table.innerHTML = `
     <thead>
       <tr>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Provider</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Device</th>
-        <th style="text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Runs</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Last seen</th>
-        <th style="text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)">Activity</th>
+        <th>Provider</th>
+        <th>Device</th>
+        <th class="num">Runs</th>
+        <th>Last seen</th>
+        <th>Activity</th>
       </tr>
     </thead>
     <tbody></tbody>`;
@@ -548,27 +549,19 @@ function renderPlatformsTable() {
     const key = getDeviceKey(String(p.provider||''), String(p.device||''));
     const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
     const spark = series.length ? renderSparkline(series) : '';
+    const href = `#view=platforms&provider=${encodeURIComponent(String(p.provider||''))}&device=${encodeURIComponent(String(p.device||''))}`;
     tr.innerHTML = `
-      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)">${escapeHtml(p.provider||'')}</td>
-      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)"><button type="button" class="btn" data-provider="${escapeAttr(p.provider)}" data-device="${escapeAttr(p.device)}">${escapeHtml(p.device||'')}</button></td>
-      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right">${Number(p.runs)||0}</td>
-      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)"><code>${escapeHtml(p.last_seen||'')}</code></td>
-      <td style="padding:8px;border-bottom:1px solid rgba(0,0,0,.05)">${spark}</td>`;
+      <td>${escapeHtml(p.provider||'')}</td>
+      <td><a href="${href}">${escapeHtml(p.device||'')}</a></td>
+      <td class="num">${Number(p.runs)||0}</td>
+      <td><code>${escapeHtml(p.last_seen||'')}</code></td>
+      <td>${spark}</td>`;
     tbody.appendChild(tr);
   });
-  frag.appendChild(table);
+  wrap.appendChild(table);
+  frag.appendChild(wrap);
   container.innerHTML = '';
   container.appendChild(frag);
-  container.addEventListener('click', (ev) => {
-    const target = ev.target as HTMLElement;
-    const btn = (target && target.closest('button[data-provider][data-device]')) as HTMLButtonElement | null;
-    if (btn) {
-      const provider = btn.getAttribute('data-provider') || '';
-      const device = btn.getAttribute('data-device') || '';
-      updateHash({ view: 'platforms', provider, device });
-      openPlatformDetail(provider, device);
-    }
-  });
 }
 
 async function initBenchmarksListView() {
@@ -601,53 +594,43 @@ async function initBenchmarksListView() {
       last_seen: v.last_seen,
     })).sort((a, b) => a.benchmark.localeCompare(b.benchmark));
 
+    // Build modern-styled table like Platforms
+    const wrap = document.createElement('div');
+    wrap.id = 'benchmarks-table-wrap';
     const table = document.createElement('table');
-    table.style.width = '100%';
-    table.style.borderCollapse = 'collapse';
+    table.className = 'smart-table';
     table.innerHTML = `
       <thead>
         <tr>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Name</th>
-          <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Runs</th>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Providers</th>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Devices</th>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Last seen</th>
+          <th>Name</th>
+          <th class=\"num\">Runs</th>
+          <th>Providers</th>
+          <th>Devices</th>
+          <th>Last seen</th>
+          <th>Activity</th>
         </tr>
       </thead>
       <tbody></tbody>
     `;
-    // Add Activity header and precompute series
-    try {
-      const headRow = table.querySelector('thead tr') as HTMLTableRowElement | null;
-      if (headRow) {
-        const th = document.createElement('th');
-        th.style.textAlign='left'; th.style.padding='8px'; th.style.borderBottom='1px solid rgba(0,0,0,.08)';
-        th.textContent='Activity'; headRow.appendChild(th);
-      }
-      benchmarkSeriesCache = computeBenchmarkSeries(runs);
-    } catch {}
+    try { benchmarkSeriesCache = computeBenchmarkSeries(runs); } catch {}
     const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
     rows.forEach((row) => {
       const tr = document.createElement('tr');
       const href = `#view=benchmarks&benchmark=${encodeURIComponent(row.benchmark)}`;
+      const series = (benchmarkSeriesCache && benchmarkSeriesCache.get(row.benchmark)) || [];
+      const spark = series.length ? renderSparkline(series) : '';
       tr.innerHTML = `
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><a href=\"${href}\">${escapeHtml(row.benchmark)}</a></td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${row.runs}</td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(row.providers.join(', '))}</td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(row.devices.join(', '))}</td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><code>${escapeHtml(row.last_seen||'')}</code></td>`;
-      // Append sparkline activity cell
-      try {
-        const td = document.createElement('td');
-        td.style.padding='8px'; td.style.borderBottom='1px solid rgba(0,0,0,.05)';
-        const series = (benchmarkSeriesCache && benchmarkSeriesCache.get(row.benchmark)) || [];
-        td.innerHTML = series.length ? renderSparkline(series) : '';
-        tr.appendChild(td);
-      } catch {}
+        <td><a href=\"${href}\">${escapeHtml(row.benchmark)}</a></td>
+        <td class=\"num\">${row.runs}</td>
+        <td>${escapeHtml(row.providers.join(', '))}</td>
+        <td>${escapeHtml(row.devices.join(', '))}</td>
+        <td><code>${escapeHtml(row.last_seen||'')}</code></td>
+        <td>${spark}</td>`;
       tbody.appendChild(tr);
     });
+    wrap.appendChild(table);
     container.innerHTML = '';
-    container.appendChild(table);
+    container.appendChild(wrap);
     // No JS listeners needed when using anchor links (hash routing handles open)
   } catch (err) {
     console.error('[benchmarks] init failed:', err);
@@ -1322,8 +1305,9 @@ async function renderChart(values, token, metric) {
 }
 
 // ---- Static Smart Table (sorting + filters independent of chart) ----
+type SortKey = 'timestamp' | 'provider' | 'device' | 'benchmark' | `metric:${string}`;
 type TableState = {
-  sortKey: 'timestamp' | 'provider' | 'device' | 'benchmark' | 'metric';
+  sortKey: SortKey;
   sortDir: 'asc' | 'desc';
   filterText: string;
   filterProvider: string; // 'all' or provider
@@ -1415,19 +1399,20 @@ function applyTableFilters(values: any[]) {
   });
 }
 
-function sortTableRows(values: any[], metricId: string) {
+function sortTableRows(values: any[]) {
   const { sortKey, sortDir } = tableState;
   const mul = sortDir === 'asc' ? 1 : -1;
   const cmp = (a: any, b: any) => {
     let av:any, bv:any;
-    switch (sortKey) {
-      case 'timestamp': av = Number(new Date(a.timestamp)); bv = Number(new Date(b.timestamp)); break;
-      case 'provider': av = String(a.provider||''); bv = String(b.provider||''); break;
-      case 'device': av = String(a.device||''); bv = String(b.device||''); break;
-      case 'benchmark': av = String(a.benchmark||''); bv = String(b.benchmark||''); break;
-      case 'metric': av = getMetricSortValue(a, metricId); bv = getMetricSortValue(b, metricId); break;
-      default: av = 0; bv = 0;
-    }
+    if (sortKey === 'timestamp') { av = Number(new Date(a.timestamp)); bv = Number(new Date(b.timestamp)); }
+    else if (sortKey === 'provider') { av = String(a.provider||''); bv = String(b.provider||''); }
+    else if (sortKey === 'device') { av = String(a.device||''); bv = String(b.device||''); }
+    else if (sortKey === 'benchmark') { av = String(a.benchmark||''); bv = String(b.benchmark||''); }
+    else if (typeof sortKey === 'string' && sortKey.startsWith('metric:')) {
+      const id = sortKey.slice('metric:'.length);
+      av = getMetricSortValue(a, id);
+      bv = getMetricSortValue(b, id);
+    } else { av = 0; bv = 0; }
     if (av < bv) return -1*mul;
     if (av > bv) return 1*mul;
     return 0;
@@ -1448,11 +1433,18 @@ function renderStaticTable(values: any[]) {
 
   // Apply filters and sorting
   const working = applyTableFilters(values.slice());
-  sortTableRows(working, metric.id);
+  sortTableRows(working);
 
   const table = document.createElement('table');
   table.className = 'smart-table';
-  const sortIcon = (key: TableState['sortKey']) => tableState.sortKey===key ? (tableState.sortDir==='asc'?' ▲':' ▼') : '';
+  const sortIcon = (key: SortKey) => tableState.sortKey===key ? (tableState.sortDir==='asc'?' ▲':' ▼') : '';
+  // Build metric columns dynamically
+  let metricDefs = Array.isArray(allMetricDefs) && allMetricDefs.length ? allMetricDefs : [];
+  if (!metricDefs.length) {
+    const ids = Array.from(collectMetricIdsWithValues(working) as any) as string[];
+    metricDefs = ids.map(id => ({ id, label: id, unit: '', scale: 'linear', format: null } as any));
+  }
+  const metricHeaders = metricDefs.map((def: any) => `<th data-sort="metric:${escapeAttr(def.id)}" class="sortable num">${escapeHtml(buildMetricLabel(def))}${sortIcon(`metric:${def.id}` as SortKey)}</th>`).join('');
   table.innerHTML = `
     <thead>
       <tr>
@@ -1460,7 +1452,7 @@ function renderStaticTable(values: any[]) {
         <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
         <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
         <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
-        <th data-sort="metric" class="sortable num">${buildMetricLabel(metric)}${sortIcon('metric')}</th>
+        ${metricHeaders}
       </tr>
     </thead>
     <tbody></tbody>
@@ -1476,12 +1468,20 @@ function renderStaticTable(values: any[]) {
     const tr = document.createElement('tr');
     const deviceHref = `#view=platforms&provider=${encodeURIComponent(String(run.provider||''))}&device=${encodeURIComponent(String(run.device||''))}`;
     const benchHref = `#view=benchmarks&benchmark=${encodeURIComponent(String(run.benchmark||''))}`;
+    const metricCells = metricDefs.map((def: any) => {
+      const mv = getMetricValue(run, def.id);
+      const me = getMetricError(run, def.id);
+      const disp = me !== null && me !== undefined && Number.isFinite(Number(me))
+        ? `${formatMetricValue(mv, def.format || '.3f', def.unit)} ± ${formatMetricValue(me, def.format || '.3f', def.unit)}`
+        : formatMetricValue(mv, def.format || '.3f', def.unit);
+      return `<td class="num">${disp}</td>`;
+    }).join('');
     tr.innerHTML = `
       <td><code>${escapeHtml(run.timestamp || '')}</code></td>
       <td>${escapeHtml(run.provider || '')}</td>
       <td><a href="${deviceHref}">${escapeHtml(run.device || '')}</a></td>
       <td><a href="${benchHref}">${escapeHtml(run.benchmark || '')}</a></td>
-      <td class="num">${display}</td>`;
+      ${metricCells}`;
     tbody.appendChild(tr);
   });
 
@@ -1489,12 +1489,13 @@ function renderStaticTable(values: any[]) {
   table.querySelectorAll('th[data-sort]')
     .forEach((th: any) => {
       th.addEventListener('click', () => {
-        const key = String(th.getAttribute('data-sort')) as TableState['sortKey'];
+        const key = String(th.getAttribute('data-sort')) as SortKey;
         if (tableState.sortKey === key) {
           tableState.sortDir = tableState.sortDir === 'asc' ? 'desc' : 'asc';
         } else {
           tableState.sortKey = key;
-          tableState.sortDir = key === 'timestamp' ? 'desc' : 'asc';
+          const isNumeric = key === 'timestamp' || (typeof key === 'string' && key.startsWith('metric:'));
+          tableState.sortDir = isNumeric ? 'desc' : 'asc';
         }
         renderStaticTable(values);
       });
