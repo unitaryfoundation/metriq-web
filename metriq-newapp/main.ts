@@ -114,6 +114,7 @@ let resizeHandler = null;
 let filtersInitialized = false;
 let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 
 function activateTab(which) {
   const isGraph = which === "graph";
@@ -210,14 +211,69 @@ if (openMetabaseBtn) {
 (async () => {
   const config = await loadAppConfig();
   setupBenchmarkSearch(config);
-  // Wire data download links (all anchors)
+  // Wire data download links (force download via Blob when possible)
+  const wireDownload = (selector: string, url: string, fallbackName: string, preferFallbackName: boolean = false) => {
+    document.querySelectorAll<HTMLAnchorElement>(selector).forEach(a => {
+      // Set href + download attribute as a fallback
+      a.href = url;
+      let name = fallbackName;
+      if (!preferFallbackName) {
+        try {
+          const u = new URL(url, window.location.href);
+          const base = (u.pathname.split('/').pop() || fallbackName).split('?')[0];
+          if (base) name = base;
+        } catch {}
+      }
+      a.setAttribute('download', name);
+      a.removeAttribute('target');
+      a.removeAttribute('rel');
+
+      const handler = async (ev: Event) => {
+        ev.preventDefault();
+        try {
+          const isCross = (() => {
+            try {
+              const u = new URL(url, window.location.href);
+              return u.origin !== window.location.origin;
+            } catch { return false; }
+          })();
+          // Try CORS fetch first; for same-origin this always works.
+          const res = await fetch(url, { mode: isCross ? 'cors' : 'same-origin', credentials: 'omit' });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // If opaque due to CORS, this will throw when reading the body
+          const blob = await res.blob();
+          const objectUrl = URL.createObjectURL(blob);
+          const tmp = document.createElement('a');
+          tmp.href = objectUrl;
+          tmp.download = name;
+          document.body.appendChild(tmp);
+          tmp.click();
+          setTimeout(() => {
+            URL.revokeObjectURL(objectUrl);
+            tmp.remove();
+          }, 0);
+        } catch (err) {
+          // Fallback: rely on native download attribute (may be ignored cross-origin)
+          try {
+            a.click();
+          } catch {
+            // Last resort: open in a new tab so the user can save manually
+            window.open(url, '_blank', 'noopener');
+          }
+        }
+      };
+      // Avoid duplicate listeners if re-wired
+      a.addEventListener('click', handler);
+    });
+  };
+
   try {
     const bUrl = (config && (config as any).benchmarksUrl) || './data/benchmarks.json';
-    document.querySelectorAll<HTMLAnchorElement>('.link-benchmarks-json').forEach(a => a.href = bUrl);
+    wireDownload('.link-benchmarks-json', bUrl, 'benchmarks.json');
   } catch {}
   try {
     const pUrl = (config && (config as any).platformsIndexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
-    document.querySelectorAll<HTMLAnchorElement>('.link-platforms-json').forEach(a => a.href = pUrl);
+    wireDownload('.link-platforms-json', pUrl, 'platform-index.json', true);
   } catch {}
   let initial = srcParam;
   if (!initial) {
@@ -1120,6 +1176,25 @@ function formatTimestamp(value) {
   }
 }
 
+function formatDateOnly(value) {
+  if (!value) return '—';
+  try {
+    return dateOnlyFormatter.format(new Date(value));
+  } catch {
+    // Fallback to YYYY-MM-DD if value is a string timestamp
+    try {
+      const d = new Date(value);
+      if (!isNaN(Number(d))) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth()+1).padStart(2,'0');
+        const day = String(d.getDate()).padStart(2,'0');
+        return `${y}-${m}-${day}`;
+      }
+    } catch {}
+    return String(value);
+  }
+}
+
 async function renderChart(values, token, metric) {
   const el = document.getElementById("chart");
   const skeletonGraph = document.getElementById("skeleton-graph");
@@ -1448,11 +1523,11 @@ function renderStaticTable(values: any[]) {
   table.innerHTML = `
     <thead>
       <tr>
-        <th data-sort="timestamp" class="sortable">Timestamp${sortIcon('timestamp')}</th>
         <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
         <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
         <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
         ${metricHeaders}
+        <th data-sort="timestamp" class="sortable">Date${sortIcon('timestamp')}</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -1477,11 +1552,11 @@ function renderStaticTable(values: any[]) {
       return `<td class="num">${disp}</td>`;
     }).join('');
     tr.innerHTML = `
-      <td><code>${escapeHtml(run.timestamp || '')}</code></td>
       <td>${escapeHtml(run.provider || '')}</td>
       <td><a href="${deviceHref}">${escapeHtml(run.device || '')}</a></td>
       <td><a href="${benchHref}">${escapeHtml(run.benchmark || '')}</a></td>
-      ${metricCells}`;
+      ${metricCells}
+      <td><code>${escapeHtml(formatDateOnly(run.timestamp))}</code></td>`;
     tbody.appendChild(tr);
   });
 
