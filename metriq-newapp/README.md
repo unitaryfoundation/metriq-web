@@ -58,5 +58,19 @@ Add these secrets in your GitHub repository settings so the workflow can talk to
 Once the secrets are set, push to the `static-app` branch (or trigger `workflow_dispatch`) and GitHub Pages will publish the latest build. The workflow stores no secrets in the repository—`data/metabase-embed.json` is generated at runtime and excluded from git history.
 
 ## Metrics support
-- `config.json` can declare `metrics` definitions (id, label, unit, scale, format).
-- Each run in `benchmarks.json` should provide a `metrics` object; the chart lets users switch between available metrics, adjusting axes and tooltips dynamically.
+- By default the app visualizes a single `score` (scalar) per run when present in the dataset (normalized from the ETL `metriq_score`). This is the only metric shown in the chart and table.
+- Raw benchmark results (per-metric values, errors, directions) are still available in the run detail modal under "Raw results".
+- `config.json` can declare `metrics` definitions (id, label, unit, scale, format). Any `metriq_score` id in config is normalized to `score`; otherwise the app falls back to whatever metrics exist in `metrics` for legacy datasets.
+
+## Baseline highlighting
+- To highlight a specific device across both the chart and the table, add `baselineDevice` to `data/config.json`:
+
+```json
+{
+  "benchmarksUrl": "https://unitaryfoundation.github.io/metriq-data/benchmark.latest.json",
+  "platformsIndexUrl": "https://unitaryfoundation.github.io/metriq-data/platforms/index.json",
+  "baselineDevice": "Device A",
+  "benchmarkPages": []
+}
+```
+- The baseline device will render with a bold badge in the table and an emphasized overlay in the chart.

@@ -79,15 +79,15 @@
         <!-- Tabs -->
         <section class="tabs">
           <header class="tabs__nav" role="tablist" aria-label="Data view selector">
-          <button class="tab is-active" role="tab" aria-selected="true" id="tab-graph" data-target="#panel-graph">Graph</button>
-          <button class="tab" role="tab" aria-selected="false" id="tab-table" data-target="#panel-table">Table</button>
+          <button class="tab" role="tab" aria-selected="false" id="tab-graph" data-target="#panel-graph">Graph</button>
+          <button class="tab is-active" role="tab" aria-selected="true" id="tab-table" data-target="#panel-table">Table</button>
           </header>
 
           <div class="tabs__panels">
             <!-- Graph panel -->
-            <section id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" class="panel is-active">
+            <section id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" class="panel">
             <div class="panel__head">
-              <h3 class="panel__title">Accuracy over time</h3>
+              <h3 class="panel__title">Score over time</h3>
               <p class="meta">Use the filters on the right to focus on specific devices or benchmarks.</p>
             </div>
           <div class="chart-row">
@@ -103,10 +103,6 @@
                 <select id="filter-benchmark" autocomplete="off">
                     <option value="all">All benchmarks</option>
                   </select>
-                </label>
-                <label class="chart-control">
-                  <span>Metric</span>
-                  <select id="filter-metric" autocomplete="off"></select>
                 </label>
                 <label class="chart-control">
                   <span>Provider</span>
@@ -126,7 +122,7 @@
           </section>
 
           <!-- Table panel -->
-          <section id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="panel">
+          <section id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="panel is-active">
             <div class="frame-wrap">
               <div class="skeleton" id="skeleton"><div class="shimmer"></div></div>
               <div id="table-static"></div>

@@ -115,6 +115,8 @@ let filtersInitialized = false;
 let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+// Optional: baseline device name from config (highlighted in chart/table)
+let baselineDevice: string | null = null;
 
 function activateTab(which) {
   const isGraph = which === "graph";
@@ -127,6 +129,10 @@ function activateTab(which) {
   panelTable?.classList.toggle("is-active", isTable);
   if (isTable) {
     drawTable();
+  }
+  if (isGraph) {
+    // Force a fresh draw to ensure visibility after being hidden
+    drawChart();
   }
 }
 
@@ -606,9 +612,11 @@ function renderPlatformsTable() {
     const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
     const spark = series.length ? renderSparkline(series) : '';
     const href = `#view=platforms&provider=${encodeURIComponent(String(p.provider||''))}&device=${encodeURIComponent(String(p.device||''))}`;
+    const isBaseline = baselineDevice && String(p.device||'') === baselineDevice;
+    const deviceLabel = `${escapeHtml(p.device||'')}${isBaseline ? ' <span class=\"baseline-badge\">Baseline</span>' : ''}`;
     tr.innerHTML = `
       <td>${escapeHtml(p.provider||'')}</td>
-      <td><a href="${href}">${escapeHtml(p.device||'')}</a></td>
+      <td><a href="${href}">${deviceLabel}</a></td>
       <td class="num">${Number(p.runs)||0}</td>
       <td><code>${escapeHtml(p.last_seen||'')}</code></td>
       <td>${spark}</td>`;
@@ -714,10 +722,22 @@ function adaptMetriqEtlRow(row: any) {
   const params = (row && typeof row.params === 'object') ? row.params : {};
   const jobType = row?.job_type ?? null;
   const benchmark = params?.benchmark_name ?? jobType ?? 'Unknown';
-  // Treat ETL 'results' as our 'metrics'. If missing, use empty object.
-  const metrics = (row && typeof row.results === 'object' && row.results != null) ? row.results : {};
-  const errors = (row && typeof row.errors === 'object' && row.errors != null) ? row.errors : {};
-  return { provider, device, benchmark, timestamp, metrics, errors };
+  // Prefer ETL 'metriq_score' but expose it as 'score' (single-benchmark score).
+  // Keep raw results/errors for detail view, but do not surface them as chart/table metrics.
+  const rawResults = (row && typeof row.results === 'object' && row.results != null) ? row.results : {};
+  const rawErrors = (row && typeof row.errors === 'object' && row.errors != null) ? row.errors : {};
+  const rawDirections = (row && typeof row.directions === 'object' && row.directions != null) ? row.directions : {};
+  const score = Number(row?.metriq_score);
+  let metrics: Record<string, number> = {};
+  if (Number.isFinite(score)) {
+    // Normalize the exposed metric id from 'metriq_score' → 'score'
+    metrics = { score: score };
+  } else {
+    // Fallback: no metriq_score — keep metrics empty so the main view centers on metriq-score only.
+    metrics = {};
+  }
+  const errors: Record<string, number> = {};
+  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections };
 }
 
 function normalizeRun(run: any) {
@@ -927,10 +947,12 @@ function buildMetricDefs(values, config) {
   const fromConfig = Array.isArray(config?.metrics) ? config.metrics : [];
   fromConfig.forEach(def => {
     if (!def || !def.id) return;
-    const id = String(def.id);
+    // Normalize config id 'metriq_score' → 'score'
+    const rawId = String(def.id);
+    const id = rawId === 'metriq_score' ? 'score' : rawId;
     defs.set(id, {
       id,
-      label: def.label || id,
+      label: def.label || (id === 'score' ? 'Score' : id),
       unit: def.unit ? String(def.unit) : '',
       scale: def.scale === 'log' ? 'log' : 'linear',
       format: def.format || null,
@@ -941,7 +963,8 @@ function buildMetricDefs(values, config) {
     const metrics = run.metrics || {};
     Object.keys(metrics).forEach(key => {
       if (!defs.has(key)) {
-        defs.set(key, { id: key, label: key, unit: '', scale: 'linear', format: null, description: '' });
+        const label = key === 'score' ? 'Score' : key;
+        defs.set(key, { id: key, label, unit: '', scale: 'linear', format: null, description: '' });
       }
     });
   });
@@ -1110,6 +1133,12 @@ function openRunDetail(run) {
       </div>
       <ul>${deviceList || '<li>No additional runs</li>'}</ul>
     </section>
+    <section class="detail-section">
+      <h5>Raw results</h5>
+      <div class="detail-raw">
+        ${renderRawResults(run)}
+      </div>
+    </section>
   `;
   detailModal.hidden = false;
   document.body.style.overflow = 'hidden';
@@ -1147,6 +1176,39 @@ function formatMetricValue(value, format, unit) {
     formatted = Number(value).toLocaleString();
   }
   return unit ? `${formatted} ${unit}`.trim() : formatted;
+}
+
+function renderRawResults(run: any) {
+  try {
+    const res = (run && typeof run.rawResults === 'object' && run.rawResults != null) ? run.rawResults : {};
+    const errs = (run && typeof run.rawErrors === 'object' && run.rawErrors != null) ? run.rawErrors : {};
+    const dirs = (run && typeof run.rawDirections === 'object' && run.rawDirections != null) ? run.rawDirections : {};
+    const keys = Object.keys(res);
+    if (!keys.length) return '<div class="meta">No raw results available.</div>';
+    keys.sort((a,b)=>a.localeCompare(b));
+    const rows = keys.map(k => {
+      const vRaw = res[k];
+      const v = Number(vRaw);
+      const vFmt = Number.isFinite(v) ? v.toLocaleString() : escapeHtml(String(vRaw));
+      const e = Number(errs[k]);
+      const eFmt = Number.isFinite(e) ? e.toLocaleString() : '';
+      const d = (dirs && typeof dirs[k] === 'string') ? String(dirs[k]) : '';
+      const disp = eFmt ? `${vFmt} ± ${eFmt}` : vFmt;
+      const dirDisp = d ? escapeHtml(d) : '—';
+      return `<tr><td>${escapeHtml(k)}</td><td class="num">${disp}</td><td>${dirDisp}</td></tr>`;
+    }).join('');
+    return `
+      <div id="benchmarks-table-wrap">
+        <table class="smart-table">
+          <thead>
+            <tr><th>Metric</th><th class="num">Value</th><th>Direction</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch {
+    return '<div class="meta">Raw results unavailable.</div>';
+  }
 }
 
 function buildRunList(runs, metric, limit, includeBenchmark) {
@@ -1254,61 +1316,36 @@ async function renderChart(values, token, metric) {
     value: 0.18
   };
 
-  const spec = {
+  const spec: any = {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
     description: `${metricLabel} over time`,
     width: 'container',
     height: 420,
     autosize: { type: 'fit', contains: 'padding' },
+    // Use default axis/grid styling
+    // (grid lines allowed; baseline reference is handled via a rule layer below)
     data: { values },
     transform,
     encoding: {
-      x: { field: 'timestamp', type: 'temporal', title: 'Run timestamp' },
+      x: { field: 'timestamp', type: 'temporal', title: 'Run timestamp', axis: { grid: false } },
       color: { field: 'provider', type: 'nominal', legend: { title: 'Provider' } },
       detail: { field: 'benchmark' }
     },
     layer: [
+      // Horizontal baseline at Score = 100 (across full width)
       {
-        mark: { type: 'rule', strokeWidth: 1.5, strokeOpacity: 0.5 },
+        transform: [{
+          aggregate: [
+            { op: 'min', field: 'timestamp', as: 'x_min' },
+            { op: 'max', field: 'timestamp', as: 'x_max' }
+          ]
+        }],
+        mark: { type: 'rule', strokeDash: [6,4], opacity: 0.85 },
         encoding: {
-          y: {
-            field: 'metricLower',
-            type: 'quantitative',
-            title: metricLabel,
-            scale: yScale
-          },
-          y2: { field: 'metricUpper' }
-        }
-      },
-      {
-        mark: { type: 'tick', orient: 'horizontal', size: 12, thickness: 1.5, opacity: 0.6 },
-        encoding: {
-          y: {
-            field: 'metricLower',
-            type: 'quantitative',
-            scale: yScale
-          }
-        }
-      },
-      {
-        mark: { type: 'tick', orient: 'horizontal', size: 12, thickness: 1.5, opacity: 0.6 },
-        encoding: {
-          y: {
-            field: 'metricUpper',
-            type: 'quantitative',
-            scale: yScale
-          }
-        }
-      },
-      {
-        mark: { type: 'line', interpolate: 'monotone', point: false, opacity: 0.35 },
-        encoding: {
-          y: {
-            field: 'metricValue',
-            type: 'quantitative',
-            title: metricLabel,
-            scale: yScale
-          }
+          color: { value: '#9ca3af' },
+          x: { field: 'x_min', type: 'temporal' },
+          x2: { field: 'x_max', type: 'temporal' },
+          y: { datum: 100 }
         }
       },
       {
@@ -1347,6 +1384,8 @@ async function renderChart(values, token, metric) {
       }
     ]
   };
+      
+  // Baseline device no longer emphasized in the graph; use reference line instead.
 
   try {
     const { view } = await embed(el, spec, { actions: false, renderer: 'canvas' });
@@ -1543,21 +1582,30 @@ function renderStaticTable(values: any[]) {
     const tr = document.createElement('tr');
     const deviceHref = `#view=platforms&provider=${encodeURIComponent(String(run.provider||''))}&device=${encodeURIComponent(String(run.device||''))}`;
     const benchHref = `#view=benchmarks&benchmark=${encodeURIComponent(String(run.benchmark||''))}`;
+    const isBaseline = baselineDevice && String(run.device||'') === baselineDevice;
+    const deviceLabel = `${escapeHtml(run.device || '')}${isBaseline ? ' <span class=\"baseline-badge\">Baseline</span>' : ''}`;
     const metricCells = metricDefs.map((def: any) => {
       const mv = getMetricValue(run, def.id);
       const me = getMetricError(run, def.id);
       const disp = me !== null && me !== undefined && Number.isFinite(Number(me))
         ? `${formatMetricValue(mv, def.format || '.3f', def.unit)} ± ${formatMetricValue(me, def.format || '.3f', def.unit)}`
         : formatMetricValue(mv, def.format || '.3f', def.unit);
-      return `<td class="num">${disp}</td>`;
+      const isScore = def.id === 'score';
+      const content = isScore ? `<a href="#" class="metric-link" data-role="score">${disp}</a>` : disp;
+      return `<td class="num">${content}</td>`;
     }).join('');
     tr.innerHTML = `
       <td>${escapeHtml(run.provider || '')}</td>
-      <td><a href="${deviceHref}">${escapeHtml(run.device || '')}</a></td>
+      <td><a href="${deviceHref}">${deviceLabel}</a></td>
       <td><a href="${benchHref}">${escapeHtml(run.benchmark || '')}</a></td>
       ${metricCells}
       <td><code>${escapeHtml(formatDateOnly(run.timestamp))}</code></td>`;
     tbody.appendChild(tr);
+    // Make score cell clickable to open details
+    const scoreLink = tr.querySelector('a.metric-link[data-role="score"]') as HTMLAnchorElement | null;
+    if (scoreLink) {
+      scoreLink.addEventListener('click', (ev) => { ev.preventDefault(); openRunDetail(run); });
+    }
   });
 
   // Attach sort handlers
@@ -1663,6 +1711,11 @@ async function initBenchmarksView() {
       if (skeletonGraph) skeletonGraph.style.display = 'none';
       return;
     }
+    // Read baseline device from config if available
+    try {
+      const bd = (config && typeof (config as any).baselineDevice === 'string') ? String((config as any).baselineDevice).trim() : '';
+      baselineDevice = bd || null;
+    } catch { baselineDevice = null; }
     setupMetrics(rawBenchmarks, config);
     setupFilters(rawBenchmarks);
     refreshMetricOptions(rawBenchmarks);
