@@ -78,22 +78,15 @@ const panelGraph = document.getElementById("panel-graph") as HTMLElement | null;
 const panelTable = document.getElementById("panel-table") as HTMLElement | null;
 const chartTitleEl = (panelGraph?.querySelector('.panel__title') as HTMLElement | null) || null;
 
-const filterProvider = document.getElementById("filter-provider") as HTMLSelectElement | null;
-const filterBenchmark = document.getElementById("filter-benchmark") as HTMLSelectElement | null;
-const filterDevice = document.getElementById("filter-device") as HTMLSelectElement | null;
+// No native <select> filters — custom multi-lists are used instead
 const metricSelect = document.getElementById("filter-metric") as HTMLSelectElement | null;
-const resetFiltersBtn = document.getElementById("filter-reset") as HTMLButtonElement | null;
+const resetFiltersBtn = null as any;
 
-const filterElements = {
-  benchmark: filterBenchmark,
-  provider: filterProvider,
-  device: filterDevice,
-};
+// No filterElements map needed
 
-const filterState = {
-  provider: "all",
-  benchmark: "all",
-  device: "all",
+const filterState: { provider: string[]; benchmark: string[] } = {
+  provider: [],
+  benchmark: [],
 };
 
 let allMetricDefs = [];
@@ -117,6 +110,123 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', 
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 // Optional: baseline device name from config (highlighted in chart/table)
 let baselineDevice: string | null = null;
+
+// ---- Symbol scales shared between chart and UI ----
+const PROVIDER_COLORS = [
+  '#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc949',
+  '#af7aa1','#ff9da7','#9c755f','#bab0ab',
+  '#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2','#7f7f7f','#bcbd22','#17becf'
+];
+const BENCHMARK_SHAPES: string[] = [
+  'circle','square','triangle-up','diamond','cross','triangle-down','triangle-left','triangle-right','star'
+];
+let providerColorMap: Map<string,string> = new Map();
+let benchmarkShapeMap: Map<string,string> = new Map();
+const NONE_SENTINEL = '__NONE__';
+
+function buildColorMap(items: string[]): Map<string,string> {
+  const m = new Map<string,string>();
+  items.forEach((name, i) => { m.set(name, PROVIDER_COLORS[i % PROVIDER_COLORS.length]); });
+  return m;
+}
+function buildShapeMap(items: string[]): Map<string,string> {
+  const m = new Map<string,string>();
+  items.forEach((name, i) => { m.set(name, BENCHMARK_SHAPES[i % BENCHMARK_SHAPES.length]); });
+  return m;
+}
+
+function shapeSvg(shape: string, color = 'currentColor'): string {
+  // Simple 14x14 glyphs approximating Vega symbols
+  const s = 14, c = 7; // size, center
+  switch (shape) {
+    case 'circle': return `<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="${color}"/></svg>`;
+    case 'square': return `<svg viewBox="0 0 14 14" aria-hidden="true"><rect x="3" y="3" width="8" height="8" fill="${color}"/></svg>`;
+    case 'diamond': return `<svg viewBox="0 0 14 14" aria-hidden="true"><polygon points="7,2 12,7 7,12 2,7" fill="${color}"/></svg>`;
+    case 'cross': return `<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M6 3h2v4h4v2H8v4H6V9H2V7h4z" fill="${color}"/></svg>`;
+    case 'triangle-up': return `<svg viewBox="0 0 14 14" aria-hidden="true"><polygon points="7,2 12,12 2,12" fill="${color}"/></svg>`;
+    case 'triangle-down': return `<svg viewBox="0 0 14 14" aria-hidden="true"><polygon points="2,2 12,2 7,12" fill="${color}"/></svg>`;
+    case 'triangle-left': return `<svg viewBox="0 0 14 14" aria-hidden="true"><polygon points="12,2 12,12 2,7" fill="${color}"/></svg>`;
+    case 'triangle-right': return `<svg viewBox="0 0 14 14" aria-hidden="true"><polygon points="2,2 12,7 2,12" fill="${color}"/></svg>`;
+    case 'star': return `<svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2l1.6 3.3 3.6.5-2.6 2.5.6 3.5L7 10.5 3.8 11.8l.6-3.5L1.8 5.8l3.6-.5z" fill="${color}"/></svg>`;
+    default: return `<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="${color}"/></svg>`;
+  }
+}
+
+function renderMultiList(listId: string, options: string[], selected: string[], kind: 'provider'|'benchmark') {
+  const el = document.getElementById(listId);
+  if (!el) return;
+  el.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  const isNone = Array.isArray(selected) && selected.includes(NONE_SENTINEL);
+  const isAllSelected = !selected || selected.length === 0;
+  options.forEach(opt => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'multi-item' + ((!isNone && (isAllSelected || selected.includes(opt))) ? ' is-selected' : '');
+    let symbolHtml = '';
+    if (kind === 'provider') {
+      const col = providerColorMap.get(opt) || '#888';
+      symbolHtml = `<span class="symbol-dot" style="background:${col}"></span>`;
+    } else {
+      const shape = benchmarkShapeMap.get(opt) || 'circle';
+      symbolHtml = `<span class="symbol-shape">${shapeSvg(shape)}</span>`;
+    }
+    item.innerHTML = `${symbolHtml}<span>${escapeHtml(opt)}</span>`;
+    item.addEventListener('click', () => {
+      if (kind === 'provider') {
+        toggleMultiSelection('provider', options, opt);
+      } else {
+        toggleMultiSelection('benchmark', options, opt);
+      }
+      renderMultiLists();
+      drawChart();
+    });
+    frag.appendChild(item);
+  });
+  el.appendChild(frag);
+}
+
+function toggleMultiSelection(key: 'provider'|'benchmark', options: string[], value: string) {
+  let sel = (filterState as any)[key] as string[];
+  // If NONE sentinel present, start from empty
+  if (sel && sel.includes(NONE_SENTINEL)) sel = [];
+  const isAll = !sel || sel.length === 0;
+  let next: string[];
+  if (isAll) {
+    // All -> select all except the clicked value
+    next = options.filter(v => v !== value);
+  } else if (sel.includes(value)) {
+    // Deselect this value
+    next = sel.filter(v => v !== value);
+  } else {
+    // Add this value
+    next = sel.concat([value]);
+  }
+  // If selection equals all options, collapse to ALL (empty)
+  if (next.length === options.length) {
+    next = [];
+  }
+  (filterState as any)[key] = next;
+}
+
+function renderMultiLists() {
+  const allRuns = Array.isArray(rawBenchmarks) ? rawBenchmarks : [];
+  const providers = uniqueValues(allRuns as any, 'provider');
+  const benchmarks = uniqueValues(allRuns as any, 'benchmark');
+  providerColorMap = buildColorMap(providers);
+  benchmarkShapeMap = buildShapeMap(benchmarks);
+  renderMultiList('provider-list', providers, filterState.provider, 'provider');
+  renderMultiList('benchmark-list', benchmarks, filterState.benchmark, 'benchmark');
+  // Wire actions
+  const pClear = document.getElementById('provider-clear') as HTMLButtonElement | null;
+  const pAll = document.getElementById('provider-all') as HTMLButtonElement | null;
+  const bClear = document.getElementById('benchmark-clear') as HTMLButtonElement | null;
+  const bAll = document.getElementById('benchmark-all') as HTMLButtonElement | null;
+  if (pClear) pClear.onclick = () => { filterState.provider = [NONE_SENTINEL]; renderMultiLists(); drawChart(); };
+  if (pAll) pAll.onclick = () => { filterState.provider = []; renderMultiLists(); drawChart(); };
+  if (bClear) bClear.onclick = () => { filterState.benchmark = [NONE_SENTINEL]; renderMultiLists(); drawChart(); };
+  if (bAll) bAll.onclick = () => { filterState.benchmark = []; renderMultiLists(); drawChart(); };
+}
 
 function activateTab(which) {
   const isGraph = which === "graph";
@@ -727,6 +837,7 @@ function adaptMetriqEtlRow(row: any) {
   const rawResults = (row && typeof row.results === 'object' && row.results != null) ? row.results : {};
   const rawErrors = (row && typeof row.errors === 'object' && row.errors != null) ? row.errors : {};
   const rawDirections = (row && typeof row.directions === 'object' && row.directions != null) ? row.directions : {};
+  const rawParams = params;
   const score = Number(row?.metriq_score);
   let metrics: Record<string, number> = {};
   if (Number.isFinite(score)) {
@@ -737,7 +848,7 @@ function adaptMetriqEtlRow(row: any) {
     metrics = {};
   }
   const errors: Record<string, number> = {};
-  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections };
+  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams };
 }
 
 function normalizeRun(run: any) {
@@ -905,31 +1016,11 @@ function uniqueValues(values: Array<Record<string, unknown>>, key: string) {
   return Array.from(seen).sort((a, b) => a.localeCompare(b));
 }
 
-function populateSelect(select, options, label, key) {
-  if (!select) return;
-  const current = filterState[key] ?? "all";
-  const fragment = document.createDocumentFragment();
-  const allOption = document.createElement("option");
-  allOption.value = "all";
-  allOption.textContent = label;
-  fragment.appendChild(allOption);
-  options.forEach(value => {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
-    fragment.appendChild(option);
-  });
-  select.innerHTML = "";
-  select.appendChild(fragment);
-  const nextValue = options.includes(current) ? current : "all";
-  select.value = nextValue;
-  filterState[key] = nextValue;
-}
+// Removed native <select> multi-select population; using custom lists instead
 
 function populateFilterOptions(values) {
-  populateSelect(filterBenchmark, uniqueValues(values, "benchmark"), "All benchmarks", "benchmark");
-  populateSelect(filterProvider, uniqueValues(values, "provider"), "All providers", "provider");
-  populateSelect(filterDevice, uniqueValues(values, "device"), "All devices", "device");
+  // Render custom lists with symbols based on current data
+  renderMultiLists();
 }
 
 function setupMetrics(values, config) {
@@ -986,7 +1077,7 @@ function collectMetricIdsWithValues(runs) {
 
 function refreshMetricOptions(runs) {
   let visibleDefs = allMetricDefs;
-  const restrictToBenchmark = filterState.benchmark !== 'all' && runs.length;
+  const restrictToBenchmark = Array.isArray(filterState.benchmark) && filterState.benchmark.length > 0 && runs.length;
   if (restrictToBenchmark) {
     const availableIds = collectMetricIdsWithValues(runs);
     visibleDefs = allMetricDefs.filter(def => availableIds.has(def.id));
@@ -1050,46 +1141,21 @@ function getMetricError(run, metricId) {
 function setupFilters(values) {
   populateFilterOptions(values);
   if (filtersInitialized) return;
-  Object.entries(filterElements as Record<string, HTMLSelectElement | null>).forEach(([key, select]) => {
-    if (!select) return;
-    select.addEventListener("change", () => {
-      filterState[key as keyof typeof filterState] = (select as HTMLSelectElement).value as any;
-      drawChart();
-    });
-  });
-  if (resetFiltersBtn) {
-    resetFiltersBtn.addEventListener("click", () => {
-      Object.entries(filterElements as Record<string, HTMLSelectElement | null>).forEach(([key, select]) => {
-        if (select) {
-          (select as HTMLSelectElement).value = "all";
-          filterState[key as keyof typeof filterState] = "all" as any;
-        }
-      });
-      if (allMetricDefs.length) {
-        currentMetricId = allMetricDefs[0].id;
-        if (metricSelect) {
-          metricSelect.value = currentMetricId;
-        }
-      }
-      drawChart();
-    });
-  }
+  // Custom multi-lists handle their own click events (renderMultiList)
   filtersInitialized = true;
 }
 
-function refreshDeviceOptions() {
-  if (!filterDevice) return;
-  const runs = getFilteredData({ includeDevice: false });
-  const devices = uniqueValues(runs, 'device');
-  populateSelect(filterDevice, devices, 'All devices', 'device');
-}
+// Device filter was removed; no-op retained previously has been deleted.
 
-function getFilteredData(options: { includeDevice?: boolean } = {}) {
-  const { includeDevice = true } = options;
+function getFilteredData() {
+  const selProv = Array.isArray(filterState.provider) ? filterState.provider : [];
+  const selBench = Array.isArray(filterState.benchmark) ? filterState.benchmark : [];
+  if (selProv.includes(NONE_SENTINEL) || selBench.includes(NONE_SENTINEL)) {
+    return [];
+  }
   return rawBenchmarks.filter(item => {
-    if (filterState.provider !== "all" && item.provider !== filterState.provider) return false;
-    if (filterState.benchmark !== "all" && item.benchmark !== filterState.benchmark) return false;
-    if (includeDevice && filterState.device !== "all" && item.device !== filterState.device) return false;
+    if (selProv.length && !selProv.includes(String(item.provider||''))) return false;
+    if (selBench.length && !selBench.includes(String(item.benchmark||''))) return false;
     return true;
   });
 }
@@ -1132,6 +1198,10 @@ function openRunDetail(run) {
         <span class="detail-pill">Max ${formatMetricValue(deviceStats?.max, metricFormat, metric.unit)}</span>
       </div>
       <ul>${deviceList || '<li>No additional runs</li>'}</ul>
+    </section>
+    <section class="detail-section">
+      <h5>Job parameters</h5>
+      ${renderJobParams(run)}
     </section>
     <section class="detail-section">
       <h5>Raw results</h5>
@@ -1208,6 +1278,31 @@ function renderRawResults(run: any) {
       </div>`;
   } catch {
     return '<div class="meta">Raw results unavailable.</div>';
+  }
+}
+
+function renderJobParams(run: any) {
+  try {
+    const params = (run && typeof run.rawParams === 'object' && run.rawParams != null) ? run.rawParams : {};
+    const keys = Object.keys(params);
+    if (!keys.length) return '<div class="meta">No job parameters available.</div>';
+    keys.sort((a,b)=>a.localeCompare(b));
+    const rows = keys.map(k => {
+      const v = params[k];
+      const disp = (v == null) ? '—' : escapeHtml(String(v));
+      return `<tr><td>${escapeHtml(k)}</td><td>${disp}</td></tr>`;
+    }).join('');
+    return `
+      <div id="job-params-wrap">
+        <table class="smart-table">
+          <thead>
+            <tr><th>Parameter</th><th>Value</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  } catch {
+    return '<div class="meta">Parameters unavailable.</div>';
   }
 }
 
@@ -1310,11 +1405,17 @@ async function renderChart(values, token, metric) {
   const transform = metric?.scale === 'log'
     ? [{ filter: 'datum.metricValue > 0' }]
     : [];
-  const selectionName = `providerFilter_${token}`;
-  const providerOpacity = {
-    condition: { selection: selectionName, value: 1 },
-    value: 0.18
-  };
+
+  // Prepare fixed scales so UI colors/shapes match chart
+  const allRuns = Array.isArray(rawBenchmarks) ? rawBenchmarks : [];
+  const providers = uniqueValues(allRuns as any, 'provider');
+  const benchmarks = uniqueValues(allRuns as any, 'benchmark');
+  providerColorMap = buildColorMap(providers);
+  benchmarkShapeMap = buildShapeMap(benchmarks);
+  const colorDomain = providers;
+  const colorRange = providers.map(p => providerColorMap.get(p) as string);
+  const shapeDomain = benchmarks;
+  const shapeRange = benchmarks.map(b => benchmarkShapeMap.get(b) as string);
 
   const spec: any = {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
@@ -1322,64 +1423,68 @@ async function renderChart(values, token, metric) {
     width: 'container',
     height: 420,
     autosize: { type: 'fit', contains: 'padding' },
+    // Standard padding (no legends; using dropdown filters instead)
+    padding: { left: 8, top: 8, right: 8, bottom: 8 },
     // Use default axis/grid styling
     // (grid lines allowed; baseline reference is handled via a rule layer below)
     data: { values },
     transform,
+    // No legend-driven selections; dropdowns control filtering
     encoding: {
-      x: { field: 'timestamp', type: 'temporal', title: 'Run timestamp', axis: { grid: false } },
-      color: { field: 'provider', type: 'nominal', legend: { title: 'Provider' } },
-      detail: { field: 'benchmark' }
+      x: { field: 'timestamp', type: 'temporal', title: 'Run date', axis: { format: '%Y-%m-%d' } }
     },
     layer: [
-      // Horizontal baseline at Score = 100 (across full width)
+      // Invisible rule to pad x-domain by ±1 day so points aren't on edges
       {
         transform: [{
           aggregate: [
             { op: 'min', field: 'timestamp', as: 'x_min' },
             { op: 'max', field: 'timestamp', as: 'x_max' }
           ]
-        }],
-        mark: { type: 'rule', strokeDash: [6,4], opacity: 0.85 },
+        },
+        { calculate: "timeOffset('day', datum.x_min, -1)", as: 'x_pad_min' },
+        { calculate: "timeOffset('day', datum.x_max, 1)", as: 'x_pad_max' }],
+        mark: { type: 'rule', opacity: 0 },
         encoding: {
-          color: { value: '#9ca3af' },
-          x: { field: 'x_min', type: 'temporal' },
-          x2: { field: 'x_max', type: 'temporal' },
+          x: { field: 'x_pad_min', type: 'temporal' },
+          x2: { field: 'x_pad_max', type: 'temporal' },
           y: { datum: 100 }
         }
       },
+      // Horizontal baseline at Score = 100 (across full width incl. padding)
       {
-        mark: { type: 'point', filled: true, size: 70, opacity: 0.9 },
-        selection: {
-          [selectionName]: { type: 'multi', fields: ['provider'], bind: 'legend' }
+        transform: [{
+          aggregate: [
+            { op: 'min', field: 'timestamp', as: 'x_min' },
+            { op: 'max', field: 'timestamp', as: 'x_max' }
+          ]
         },
+        { calculate: "timeOffset('day', datum.x_min, -1)", as: 'x_pad_min' },
+        { calculate: "timeOffset('day', datum.x_max, 1)", as: 'x_pad_max' }
+        ],
+        mark: { type: 'rule', strokeDash: [6,4], opacity: 0.85 },
         encoding: {
-          y: {
-            field: 'metricValue',
-            type: 'quantitative',
-            title: metricLabel,
-            scale: yScale
-          },
-          shape: { field: 'benchmark', type: 'nominal', legend: { title: 'Benchmark' } },
+          color: { value: '#9ca3af' },
+          x: { field: 'x_pad_min', type: 'temporal' },
+          x2: { field: 'x_pad_max', type: 'temporal' },
+          y: { datum: 100 }
+        }
+      },
+      // Points layer (filtered by dropdown state; no legends)
+      {
+        mark: { type: 'point', filled: true, size: 70, opacity: 0.95 },
+        encoding: {
+          y: { field: 'metricValue', type: 'quantitative', title: metricLabel, scale: yScale },
+          color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } },
+          shape: { field: 'benchmark', type: 'nominal', legend: null, scale: { domain: shapeDomain, range: shapeRange } },
           tooltip: [
             { field: 'device', title: 'Device' },
             { field: 'provider', title: 'Provider' },
             { field: 'benchmark', title: 'Benchmark' },
-            {
-              field: 'metricValue',
-              title: metricLabel,
-              type: 'quantitative',
-              format: tooltipFormat
-            },
-            {
-              field: 'metricError',
-              title: 'Error',
-              type: 'quantitative',
-              format: tooltipFormat
-            },
+            { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
+            { field: 'metricError', title: 'Error', type: 'quantitative', format: tooltipFormat },
             { field: 'timestamp', title: 'Timestamp', type: 'temporal', format: '%Y-%m-%d %H:%M' }
-          ],
-          opacity: providerOpacity
+          ]
         }
       }
     ]
@@ -1388,7 +1493,7 @@ async function renderChart(values, token, metric) {
   // Baseline device no longer emphasized in the graph; use reference line instead.
 
   try {
-    const { view } = await embed(el, spec, { actions: false, renderer: 'canvas' });
+    const { view } = await embed(el, spec, { actions: false, renderer: 'svg' });
     if (token !== renderSequence) {
       view.finalize();
       return;
@@ -1402,10 +1507,13 @@ async function renderChart(values, token, metric) {
     };
     resizeHandler();
     window.addEventListener('resize', resizeHandler, { passive: true });
-    view.addEventListener('click', (event, item) => {
-      if (item && item.datum) {
-        openRunDetail(item.datum);
-      }
+    // Only open modal when a point (symbol) in the plot area is clicked
+    view.addEventListener('click', (event: any, item: any) => {
+      try {
+        if (item && item.mark && item.mark.marktype === 'symbol' && item.datum && typeof item.datum.metricValue !== 'undefined') {
+          openRunDetail(item.datum);
+        }
+      } catch {}
     });
   } catch (err) {
     if (token !== renderSequence) return;
@@ -1419,7 +1527,8 @@ async function renderChart(values, token, metric) {
 }
 
 // ---- Static Smart Table (sorting + filters independent of chart) ----
-type SortKey = 'timestamp' | 'provider' | 'device' | 'benchmark' | `metric:${string}`;
+// Broaden SortKey to plain string for wider TS compatibility (older TS lacks template literal types)
+type SortKey = 'timestamp' | 'provider' | 'device' | 'benchmark' | string;
 type TableState = {
   sortKey: SortKey;
   sortDir: 'asc' | 'desc';
@@ -1580,8 +1689,8 @@ function renderStaticTable(values: any[]) {
       ? `${formatted} ± ${formatMetricValue(err, metric.format || '.3f', metric.unit)}`
       : formatted;
     const tr = document.createElement('tr');
-    const deviceHref = `#view=platforms&provider=${encodeURIComponent(String(run.provider||''))}&device=${encodeURIComponent(String(run.device||''))}`;
-    const benchHref = `#view=benchmarks&benchmark=${encodeURIComponent(String(run.benchmark||''))}`;
+    const deviceHref = `#`;
+    const benchHref = `#`;
     const isBaseline = baselineDevice && String(run.device||'') === baselineDevice;
     const deviceLabel = `${escapeHtml(run.device || '')}${isBaseline ? ' <span class=\"baseline-badge\">Baseline</span>' : ''}`;
     const metricCells = metricDefs.map((def: any) => {
@@ -1596,15 +1705,31 @@ function renderStaticTable(values: any[]) {
     }).join('');
     tr.innerHTML = `
       <td>${escapeHtml(run.provider || '')}</td>
-      <td><a href="${deviceHref}">${deviceLabel}</a></td>
-      <td><a href="${benchHref}">${escapeHtml(run.benchmark || '')}</a></td>
+      <td><a href="${deviceHref}" class="metric-link" data-role="device">${deviceLabel}</a></td>
+      <td><a href="${benchHref}" class="metric-link" data-role="benchmark">${escapeHtml(run.benchmark || '')}</a></td>
       ${metricCells}
       <td><code>${escapeHtml(formatDateOnly(run.timestamp))}</code></td>`;
     tbody.appendChild(tr);
+    // Make entire row clickable to open details
+    tr.style.cursor = 'pointer';
+    tr.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      openRunDetail(run);
+    });
     // Make score cell clickable to open details
     const scoreLink = tr.querySelector('a.metric-link[data-role="score"]') as HTMLAnchorElement | null;
     if (scoreLink) {
       scoreLink.addEventListener('click', (ev) => { ev.preventDefault(); openRunDetail(run); });
+    }
+    // Make device cell open detail (instead of jumping to platforms)
+    const deviceLink = tr.querySelector('a.metric-link[data-role="device"]') as HTMLAnchorElement | null;
+    if (deviceLink) {
+      deviceLink.addEventListener('click', (ev) => { ev.preventDefault(); openRunDetail(run); });
+    }
+    // Make benchmark cell open detail (to view parameters)
+    const benchLink = tr.querySelector('a.metric-link[data-role="benchmark"]') as HTMLAnchorElement | null;
+    if (benchLink) {
+      benchLink.addEventListener('click', (ev) => { ev.preventDefault(); openRunDetail(run); });
     }
   });
 
@@ -1668,7 +1793,6 @@ async function drawTable() {
 
 async function drawChart() {
   const token = ++renderSequence;
-  refreshDeviceOptions();
   const filtered = getFilteredData();
   const availableMetricDefs = refreshMetricOptions(filtered);
   if (!availableMetricDefs.length) {

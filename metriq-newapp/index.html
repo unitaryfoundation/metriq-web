@@ -62,11 +62,7 @@
           <div class="hero__text">
             <h1 class="h1">Quantum computing benchmarks</h1>
             <p class="lead">Explore the latest <strong>metriq-gym</strong> results. Switch between an interactive <strong>Graph</strong> for trends and a <strong>Table</strong> for the raw numbers.</p>
-            <ul class="bullets">
-              <li>Open & verifiable dataset</li>
-              <li>Multi-platform</li>
-              <li>Community-reviewed</li>
-            </ul>
+            
           </div>
           <!-- <div class="hero__badge">Live</div> -->
         </div>
@@ -100,24 +96,21 @@
             <aside class="chart-controls" aria-label="Chart filters">
               <label class="chart-control">
                 <span>Benchmark</span>
-                <select id="filter-benchmark" autocomplete="off">
-                    <option value="all">All benchmarks</option>
-                  </select>
-                </label>
-                <label class="chart-control">
-                  <span>Provider</span>
-                  <select id="filter-provider" autocomplete="off">
-                    <option value="all">All providers</option>
-                  </select>
-                </label>
-                <label class="chart-control">
-                  <span>Device</span>
-                  <select id="filter-device" autocomplete="off">
-                    <option value="all">All devices</option>
-                  </select>
-                </label>
-                <button type="button" class="chart-reset" id="filter-reset">Reset filters</button>
-              </aside>
+                <div id="benchmark-list" class="multi-list" aria-label="Benchmark multi-select"></div>
+                <div class="multi-actions">
+                  <button type="button" class="btn-mini" id="benchmark-clear">None</button>
+                  <button type="button" class="btn-mini" id="benchmark-all">All</button>
+                </div>
+              </label>
+              <label class="chart-control">
+                <span>Provider</span>
+                <div id="provider-list" class="multi-list" aria-label="Provider multi-select"></div>
+                <div class="multi-actions">
+                  <button type="button" class="btn-mini" id="provider-clear">None</button>
+                  <button type="button" class="btn-mini" id="provider-all">All</button>
+                </div>
+              </label>
+            </aside>
             </div>
           </section>
 
