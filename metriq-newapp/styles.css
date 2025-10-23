@@ -44,6 +44,8 @@ h1,h2,h3,h4,.h1{font-family:var(--font-sans);font-weight:600}
 .search__icon:not(:disabled):hover{color:color-mix(in srgb, var(--accent) 85%, white);transform:scale(1.05)}
 .search__icon:not(:disabled):focus-visible{outline:none;box-shadow:0 0 0 2px rgba(37,99,235,.2);border-radius:999px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+/* Hide inactive top-right search until implemented */
+.nav .search{display:none !important}
 
 .card{background:transparent;border:none;border-radius:0;box-shadow:none;overflow:visible}
 .card__head{padding:20px 0 12px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
