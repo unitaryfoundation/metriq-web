@@ -122,7 +122,7 @@ const BENCHMARK_SHAPES: string[] = [
 ];
 let providerColorMap: Map<string,string> = new Map();
 let benchmarkShapeMap: Map<string,string> = new Map();
-const NONE_SENTINEL = '__NONE__';
+let multiBootstrapped = false;
 
 function buildColorMap(items: string[]): Map<string,string> {
   const m = new Map<string,string>();
@@ -157,12 +157,11 @@ function renderMultiList(listId: string, options: string[], selected: string[], 
   if (!el) return;
   el.innerHTML = '';
   const frag = document.createDocumentFragment();
-  const isNone = Array.isArray(selected) && selected.includes(NONE_SENTINEL);
-  const isAllSelected = !selected || selected.length === 0;
+  const selSet = new Set(selected || []);
   options.forEach(opt => {
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'multi-item' + ((!isNone && (isAllSelected || selected.includes(opt))) ? ' is-selected' : '');
+    item.className = 'multi-item' + (selSet.has(opt) ? ' is-selected' : '');
     let symbolHtml = '';
     if (kind === 'provider') {
       const col = providerColorMap.get(opt) || '#888';
@@ -187,26 +186,10 @@ function renderMultiList(listId: string, options: string[], selected: string[], 
 }
 
 function toggleMultiSelection(key: 'provider'|'benchmark', options: string[], value: string) {
-  let sel = (filterState as any)[key] as string[];
-  // If NONE sentinel present, start from empty
-  if (sel && sel.includes(NONE_SENTINEL)) sel = [];
-  const isAll = !sel || sel.length === 0;
-  let next: string[];
-  if (isAll) {
-    // All -> select all except the clicked value
-    next = options.filter(v => v !== value);
-  } else if (sel.includes(value)) {
-    // Deselect this value
-    next = sel.filter(v => v !== value);
-  } else {
-    // Add this value
-    next = sel.concat([value]);
-  }
-  // If selection equals all options, collapse to ALL (empty)
-  if (next.length === options.length) {
-    next = [];
-  }
-  (filterState as any)[key] = next;
+  const sel = (filterState as any)[key] as string[];
+  const set = new Set(sel || []);
+  if (set.has(value)) set.delete(value); else set.add(value);
+  (filterState as any)[key] = Array.from(set);
 }
 
 function renderMultiLists() {
@@ -215,6 +198,12 @@ function renderMultiLists() {
   const benchmarks = uniqueValues(allRuns as any, 'benchmark');
   providerColorMap = buildColorMap(providers);
   benchmarkShapeMap = buildShapeMap(benchmarks);
+  // On first render, bootstrap to ALL selected; preserve user choices afterwards
+  if (!multiBootstrapped) {
+    if (!filterState.provider || filterState.provider.length === 0) filterState.provider = providers.slice();
+    if (!filterState.benchmark || filterState.benchmark.length === 0) filterState.benchmark = benchmarks.slice();
+    multiBootstrapped = true;
+  }
   renderMultiList('provider-list', providers, filterState.provider, 'provider');
   renderMultiList('benchmark-list', benchmarks, filterState.benchmark, 'benchmark');
   // Wire actions
@@ -222,10 +211,10 @@ function renderMultiLists() {
   const pAll = document.getElementById('provider-all') as HTMLButtonElement | null;
   const bClear = document.getElementById('benchmark-clear') as HTMLButtonElement | null;
   const bAll = document.getElementById('benchmark-all') as HTMLButtonElement | null;
-  if (pClear) pClear.onclick = () => { filterState.provider = [NONE_SENTINEL]; renderMultiLists(); drawChart(); };
-  if (pAll) pAll.onclick = () => { filterState.provider = []; renderMultiLists(); drawChart(); };
-  if (bClear) bClear.onclick = () => { filterState.benchmark = [NONE_SENTINEL]; renderMultiLists(); drawChart(); };
-  if (bAll) bAll.onclick = () => { filterState.benchmark = []; renderMultiLists(); drawChart(); };
+  if (pClear) pClear.onclick = () => { filterState.provider = []; renderMultiLists(); drawChart(); };
+  if (pAll) pAll.onclick = () => { filterState.provider = providers.slice(); renderMultiLists(); drawChart(); };
+  if (bClear) bClear.onclick = () => { filterState.benchmark = []; renderMultiLists(); drawChart(); };
+  if (bAll) bAll.onclick = () => { filterState.benchmark = benchmarks.slice(); renderMultiLists(); drawChart(); };
 }
 
 function activateTab(which) {
@@ -1150,14 +1139,8 @@ function setupFilters(values) {
 function getFilteredData() {
   const selProv = Array.isArray(filterState.provider) ? filterState.provider : [];
   const selBench = Array.isArray(filterState.benchmark) ? filterState.benchmark : [];
-  if (selProv.includes(NONE_SENTINEL) || selBench.includes(NONE_SENTINEL)) {
-    return [];
-  }
-  return rawBenchmarks.filter(item => {
-    if (selProv.length && !selProv.includes(String(item.provider||''))) return false;
-    if (selBench.length && !selBench.includes(String(item.benchmark||''))) return false;
-    return true;
-  });
+  if (selProv.length === 0 || selBench.length === 0) return [];
+  return rawBenchmarks.filter(item => selProv.includes(String(item.provider||'')) && selBench.includes(String(item.benchmark||'')));
 }
 function openRunDetail(run) {
   if (!detailModal || !detailTitle || !detailBody || !detailSubtitle) return;
