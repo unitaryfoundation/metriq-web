@@ -21,6 +21,31 @@ docker run -d \
   $METRIQ_TAG
 ```
 
+### Local metriq-data integration
+
+When developing locally with the metriq-data repo checked out alongside metriq-web, you can have the UI read the local `dist/` outputs directly instead of GitHub-hosted JSON. The entrypoint will prefer a mounted `/usr/share/nginx/html/metriq-data` and set the URLs automatically. Example:
+
+```bash
+# Assume directory layout
+#   /path/to/metriq-data/dist
+#   /path/to/metriq-web/metriq-newapp
+
+# From the repo root or any directory, build the image as above, then run:
+docker run -d \
+  -p 8080:80 \
+  -v /path/to/metriq-data/dist:/usr/share/nginx/html/metriq-data:ro \
+  --name metriq-newapp-local \
+  metriq-newapp:latest
+```
+
+In this setup:
+- Nginx serves the metriq-data dist files under `/metriq-data/...` inside the container.
+- The entrypoint script detects the mounted dist and sets:
+  - `benchmarksUrl` → `/metriq-data/benchmark.latest.json` (unless BENCHMARKS_URL is set)
+  - `platformsIndexUrl` → `/metriq-data/platforms/index.json` (unless PLATFORMS_INDEX_URL is set)
+
+Running `python scripts/aggregate.py` in the metriq-data repo before starting the container ensures the `dist/` directory is up to date.
+
 The container reads `data/metabase-embed.json` and `data/config.json`. If Metabase variables aren’t supplied it reuses the baked embed URL. If `BENCHMARKS_URL` is omitted it serves the bundled `data/benchmarks.json`. Add benchmark landing pages to `config.json` under `benchmarkPages` so the search box populates dropdown suggestions. Clicking a point in the accuracy-vs-time chart opens an in-app detail modal for that run.
 
 ## Updating the embed URL outside Docker

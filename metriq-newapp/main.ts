@@ -99,6 +99,11 @@ let rawBenchmarks = [];
 let platformsPromise;
 let platformsLoaded = false;
 let platformsIndexCache: any[] | null = null;
+let platformScoresCache: Map<string, number> | null = null;
+let platformSortKey: 'score' | 'provider' | 'device' | 'last_seen' | 'runs' = 'score';
+let platformSortDir: 'asc' | 'desc' = 'desc';
+let platformFilterText = '';
+let platformFilterProvider = 'all';
 let deviceSeriesCache: Map<string, number[]> | null = null;
 let benchmarkSeriesCache: Map<string, number[]> | null = null;
 let suppressHashHandler = false;
@@ -238,7 +243,7 @@ function activateTab(which) {
 tabGraph?.addEventListener("click", () => activateTab("graph"));
 tabTable?.addEventListener("click", () => activateTab("table"));
 
-function activateView(which) {
+function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate = false) {
   const isResults = which === 'results';
   const isPlatforms = which === 'platforms';
   const isBenchmarks = which === 'benchmarks';
@@ -251,9 +256,9 @@ function activateView(which) {
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
   if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
-  if (isPlatforms) initPlatformsView();
+  if (isPlatforms) initPlatformsView(true);
   if (isBenchmarks) initBenchmarksListView();
-  updateHash({ view: which });
+  if (!skipHashUpdate) updateHash({ view: which });
 }
 
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
@@ -405,6 +410,15 @@ function updateHash(next: Record<string, string>) {
     suppressHashHandler = true;
     const cur = parseHash();
     const merged = { ...cur, ...next };
+    if ('view' in next) {
+      if (next.view !== 'platforms') {
+        delete merged.provider;
+        delete merged.device;
+      } else if (!('provider' in next) && !('device' in next)) {
+        delete merged.provider;
+        delete merged.device;
+      }
+    }
     const p = new URLSearchParams();
     Object.entries(merged).forEach(([k, v]) => { if (v != null && v !== '') p.set(k, v); });
     const nh = '#' + p.toString();
@@ -414,16 +428,36 @@ function updateHash(next: Record<string, string>) {
   }
 }
 
+function navigateToPlatform(provider: string, device: string) {
+  // Let the hashchange event drive routing to avoid “first click” no-op.
+  suppressHashHandler = false;
+  const params = new URLSearchParams({ view: 'platforms', provider, device });
+  const newHash = '#' + params.toString();
+  if (location.hash !== newHash) {
+    location.hash = newHash;
+  } else {
+    // If hash is unchanged, route immediately.
+    applyHashRouting();
+  }
+  // Fallback: ensure routing runs even if the hashchange event is suppressed by the browser.
+  setTimeout(() => {
+    if (suppressHashHandler) suppressHashHandler = false;
+    applyHashRouting();
+  }, 0);
+}
+
 async function applyHashRouting() {
   if (suppressHashHandler) return;
   const h = parseHash();
   const view = (h.view || 'results') as 'results'|'platforms'|'benchmarks';
-  activateView(view);
-  if (view === 'platforms' && h.provider && h.device) {
-    await initPlatformsView();
-    openPlatformDetail(h.provider, h.device);
-  }
-  if (view === 'benchmarks' && h.benchmark) {
+  activateView(view, true);
+  if (view === 'platforms') {
+    if (h.provider && h.device) {
+      await showPlatformDetailPage(h.provider, h.device);
+      return;
+    }
+    await initPlatformsView(true);
+  } else if (view === 'benchmarks' && h.benchmark) {
     await initBenchmarksListView();
     openBenchmarkDetail(h.benchmark);
   }
@@ -485,6 +519,40 @@ async function loadPlatformsIndex() {
   return platformsPromise;
 }
 
+async function loadPlatformScores() {
+  if (platformScoresCache) return platformScoresCache;
+  platformScoresCache = new Map();
+
+  const data = await loadPlatformsIndex();
+  const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
+
+  const config = await loadAppConfig();
+  const defaultUrl = 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
+  const indexUrl = (config && (config as any).platformsIndexUrl) || defaultUrl;
+  const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
+
+  await Promise.all(platforms.map(async (p: any) => {
+    const provider = String(p.provider || '');
+    const device = String(p.device || '');
+    if (!provider || !device) return;
+    const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
+    try {
+      const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
+      if (!resp.ok) return;
+      const json = await resp.json();
+      const ms = json && json.metriq_score;
+      const val = ms && typeof ms.value === 'number' ? Number(ms.value) : null;
+      if (val !== null && Number.isFinite(val)) {
+        platformScoresCache!.set(getDeviceKey(provider, device), val);
+      }
+    } catch {
+      // ignore errors
+    }
+  }));
+
+  return platformScoresCache;
+}
+
 function getPlatformsBaseUrl(indexUrl: string) {
   try {
     if (!indexUrl) return null;
@@ -495,7 +563,10 @@ function getPlatformsBaseUrl(indexUrl: string) {
   } catch { return null; }
 }
 
-async function openPlatformDetail(provider: string, device: string) {
+async function showPlatformDetailPage(provider: string, device: string) {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  container.innerHTML = '<div class="meta">Loading platform…</div>';
   try {
     const config = await loadAppConfig();
     const indexUrl = (config && (config as any).platformsIndexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
@@ -504,15 +575,16 @@ async function openPlatformDetail(provider: string, device: string) {
     const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
-    renderPlatformDetail(json);
+    renderPlatformDetailPage(json);
   } catch (err) {
     console.error('[platforms] detail load failed:', err);
-    renderPlatformDetail({ provider, device, error: String(err) });
+    renderPlatformDetailPage({ provider, device, error: String(err) });
   }
 }
 
-function renderPlatformDetail(detail: any) {
-  if (!detailModal || !detailTitle || !detailBody || !detailSubtitle) return;
+function renderPlatformDetailPage(detail: any) {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
   const provider = detail?.provider || 'Unknown';
   const device = detail?.device || 'Unknown';
   const runs = detail?.runs ?? 0;
@@ -520,42 +592,116 @@ function renderPlatformDetail(detail: any) {
   const firstSeen = detail?.first_seen || '';
   const currentMeta = detail?.current?.device_metadata || null;
   const history = Array.isArray(detail?.history) ? detail.history : [];
-  detailTitle.textContent = `${provider} · ${device}`;
-  detailSubtitle.textContent = `${runs} runs · ${firstSeen} → ${lastSeen}`;
-  const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<em>No current metadata</em>';
+  const metriqScore = detail?.metriq_score || null;
+  const error = detail?.error ? `<div class="meta" style="color:#f43f5e;">${escapeHtml(String(detail.error))}</div>` : '';
+
+  const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<div class="meta">No current device metadata.</div>';
   const historyHtml = history.length ? history.map((h: any) => {
     const f = h?.first_seen || '';
     const l = h?.last_seen || '';
     const r = h?.runs ?? 0;
-    return `<li><code>${f}</code> → <code>${l}</code> · <strong>${r}</strong> run${r===1?'':'s'}</li>`;
+    return `<li>${escapeHtml(f)} → ${escapeHtml(l)} · <strong>${r}</strong> run${r===1?'':'s'}</li>`;
   }).join('') : '<li>No metadata history</li>';
-  detailBody.innerHTML = `
-    <section class="detail-section">
-      <h5>Current metadata</h5>
-      ${metaHtml}
-    </section>
-    <section class="detail-section">
-      <h5>Metadata history</h5>
-      <ul>${historyHtml}</ul>
-    </section>
+
+  let scoreHtml = '<div class="meta">No Metriq score available.</div>';
+  if (metriqScore && typeof metriqScore === 'object') {
+    const val = Number((metriqScore as any).value);
+    const series = (metriqScore as any).series || '';
+    const components = (metriqScore as any).components && typeof (metriqScore as any).components === 'object'
+      ? Object.entries((metriqScore as any).components as Record<string, any>)
+      : [];
+    components.sort((a, b) => {
+      const wa = Number(a[1]?.weight) || 0;
+      const wb = Number(b[1]?.weight) || 0;
+      return wb - wa;
+    });
+    const rows = components.map(([name, c]) => {
+      const w = Number(c?.weight);
+      const n = Number(c?.normalized);
+      const ts = c?.timestamp ? dateOnlyFormatter.format(new Date(c.timestamp)) : '';
+      return `<tr>
+        <td>${escapeHtml(name)}</td>
+        <td class="num">${Number.isFinite(w) ? w.toFixed(2) : '–'}</td>
+        <td class="num">${Number.isFinite(n) ? n.toFixed(3) : '–'}</td>
+        <td class="num">${escapeHtml(ts)}</td>
+      </tr>`;
+    }).join('');
+    scoreHtml = `
+      <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+      </div>
+      ${components.length ? `
+        <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
+          <table class="smart-table" style="width:100%;min-width:520px;">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th class="num">Weight</th>
+                <th class="num">Normalized</th>
+                <th class="num">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      ` : '<div class="meta">No components</div>'}
+    `.trim();
+  }
+
+  container.innerHTML = `
+    <div class="detail-page" style="display:flex;flex-direction:column;gap:20px;padding-top:4px;">
+      <div class="detail-header" style="display:flex;flex-direction:column;gap:6px;">
+        <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
+        <h3 style="margin:0;">${escapeHtml(provider)} · ${escapeHtml(device)}</h3>
+        <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
+      </div>
+      ${error}
+      <div class="detail-grid" style="display:flex;flex-direction:column;gap:24px;">
+        <section class="detail-section" style="padding:8px 0;">
+          <h5 style="margin:0 0 12px;">Metriq score</h5>
+          ${scoreHtml}
+        </section>
+        <section class="detail-section" style="padding:8px 0;">
+          <h5 style="margin:0 0 12px;">Current device metadata</h5>
+          ${metaHtml}
+        </section>
+        <section class="detail-section" style="padding:8px 0;">
+          <h5 style="margin:0 0 12px;">Metadata history</h5>
+          <ul style="margin-top:4px;">${historyHtml}</ul>
+        </section>
+      </div>
+    </div>
   `;
-  detailModal.hidden = false;
-  document.body.style.overflow = 'hidden';
+  const backLink = document.getElementById('platform-back');
+  if (backLink) {
+    backLink.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      location.hash = '#view=platforms';
+      // Route immediately so the list is shown even if hashchange is coalesced.
+      applyHashRouting();
+    });
+  }
 }
 
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"]|'/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'} as any)[c] || c);
 }
 
-async function initPlatformsView() {
-  if (platformsLoaded) return;
+async function initPlatformsView(forceRender = false) {
+  if (platformsLoaded && !forceRender) return;
   const container = document.getElementById('platforms-container');
   if (!container) return;
-  container.innerHTML = '<div class="meta">Loading platforms…</div>';
+  if (!platformsLoaded || !container.querySelector('#platforms-table-wrap')) {
+    container.innerHTML = '<div class="meta">Loading platforms…</div>';
+  }
   try {
     const data = await loadPlatformsIndex();
     const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
     platformsIndexCache = platforms.slice();
+    try {
+      await loadPlatformScores();
+    } catch {}
     try {
       const runs = await loadBenchmarks();
       deviceSeriesCache = computeDeviceSeries(Array.isArray(runs) ? runs : []);
@@ -578,7 +724,7 @@ async function initPlatformsView() {
           <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Provider</th>
           <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Device</th>
           <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Runs</th>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Last seen</th>
+          <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Last seen</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -594,7 +740,7 @@ async function initPlatformsView() {
         <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(p.provider||'')}</td>
         <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><button type=\"button\" class=\"btn\" data-provider=\"${escapeAttr(p.provider)}\" data-device=\"${escapeAttr(p.device)}\">${escapeHtml(p.device||'')}</button></td>
         <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${Number(p.runs)||0}</td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><code>${escapeHtml(p.last_seen||'')}</code></td>`;
+        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${escapeHtml(p.last_seen||'')}</td>`;
       tbody.appendChild(tr);
     });
     fragment.appendChild(table);
@@ -606,7 +752,7 @@ async function initPlatformsView() {
       if (btn) {
         const provider = btn.getAttribute('data-provider') || '';
         const device = btn.getAttribute('data-device') || '';
-        openPlatformDetail(provider, device);
+        navigateToPlatform(provider, device);
       }
     });
   } catch (err) {
@@ -683,48 +829,198 @@ function renderSparkline(values: number[], width=100, height=24, stroke='#2563eb
 function renderPlatformsTable() {
   const container = document.getElementById('platforms-container');
   if (!container) return;
-  const filtered = Array.isArray(platformsIndexCache) ? platformsIndexCache.slice() : [];
-  const frag = document.createDocumentFragment();
-  const wrap = document.createElement('div');
-  wrap.id = 'platforms-table-wrap';
-  const table = document.createElement('table');
-  table.className = 'smart-table';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Provider</th>
-        <th>Device</th>
-        <th class="num">Runs</th>
-        <th>Last seen</th>
-        <th>Activity</th>
-      </tr>
-    </thead>
-    <tbody></tbody>`;
-  const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
+  const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache.slice() : [];
+  const providers = Array.from(new Set(platforms.map((p: any) => String(p.provider || '')))).sort();
+
+  let controls = document.getElementById('platform-controls') as HTMLDivElement | null;
+  let wrap = document.getElementById('platforms-table-wrap') as HTMLDivElement | null;
+  let table = wrap ? (wrap.querySelector('table') as HTMLTableElement | null) : null;
+  let tbody = table ? (table.querySelector('tbody') as HTMLTableSectionElement | null) : null;
+
+  if (!controls || !wrap || !table || !tbody) {
+    container.innerHTML = '';
+    controls = document.createElement('div');
+    controls.id = 'platform-controls';
+    controls.className = 'smart-controls';
+    controls.innerHTML = `
+      <label class="smart-field">
+        <span>Search</span>
+        <input id="platform-q" type="search" placeholder="Search provider or device" autocomplete="off" />
+      </label>
+      <label class="smart-field">
+        <span>Provider</span>
+        <select id="platform-provider"><option value="all">All</option></select>
+      </label>
+      <button type="button" class="btn" id="platform-reset">Reset</button>
+    `;
+
+    wrap = document.createElement('div');
+    wrap.id = 'platforms-table-wrap';
+    table = document.createElement('table');
+    table.className = 'smart-table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th data-col="provider" data-label="Provider" class="sortable">Provider</th>
+          <th data-col="device" data-label="Device" class="sortable">Device</th>
+          <th data-col="score" data-label="Metriq Score" class="sortable num">Metriq Score</th>
+          <th data-col="runs" data-label="Runs" class="sortable num">Runs</th>
+          <th data-col="last_seen" data-label="Last updated" class="sortable num">Last updated</th>
+          <th data-label="Activity">Activity</th>
+        </tr>
+      </thead>
+      <tbody></tbody>`;
+    tbody = table.querySelector('tbody') as HTMLTableSectionElement;
+    wrap.appendChild(table);
+    container.appendChild(controls);
+    container.appendChild(wrap);
+
+    const qInput = controls.querySelector('#platform-q') as HTMLInputElement | null;
+    const provSel = controls.querySelector('#platform-provider') as HTMLSelectElement | null;
+    const resetBtn = controls.querySelector('#platform-reset') as HTMLButtonElement | null;
+    let qTimer: any;
+    if (qInput) {
+      qInput.addEventListener('input', () => {
+        clearTimeout(qTimer);
+        qTimer = setTimeout(() => {
+          platformFilterText = qInput.value || '';
+          renderPlatformsTable();
+        }, 150);
+      });
+    }
+    if (provSel) {
+      provSel.addEventListener('change', () => {
+        platformFilterProvider = provSel.value || 'all';
+        renderPlatformsTable();
+      });
+    }
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        platformFilterText = '';
+        platformFilterProvider = 'all';
+        platformSortKey = 'score';
+        platformSortDir = 'desc';
+        renderPlatformsTable();
+      });
+    }
+
+    const headCellsInit = table.querySelectorAll<HTMLTableCellElement>('thead th[data-col]');
+    headCellsInit.forEach((th) => {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', () => {
+        const clickCol = String(th.getAttribute('data-col')) as typeof platformSortKey;
+        if (platformSortKey === clickCol) {
+          platformSortDir = platformSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+          platformSortKey = clickCol;
+          platformSortDir = (clickCol === 'provider' || clickCol === 'device') ? 'asc' : 'desc';
+        }
+        renderPlatformsTable();
+      });
+    });
+  }
+
+  const qInput = controls!.querySelector('#platform-q') as HTMLInputElement | null;
+  const provSel = controls!.querySelector('#platform-provider') as HTMLSelectElement | null;
+  if (qInput) qInput.value = platformFilterText;
+  if (provSel) {
+    provSel.innerHTML = `<option value="all">All</option>` + providers.map(p => `<option value="${escapeAttr(p)}"${platformFilterProvider===p?' selected':''}>${escapeHtml(p)}</option>`).join('');
+    if (platformFilterProvider === 'all') provSel.value = 'all';
+    else if (providers.includes(platformFilterProvider)) provSel.value = platformFilterProvider;
+  }
+
+  const term = (platformFilterText || '').toLowerCase();
+  const filtered = platforms.filter((p: any) => {
+    if (platformFilterProvider !== 'all' && String(p.provider || '') !== platformFilterProvider) return false;
+    if (term) {
+      const prov = String(p.provider || '').toLowerCase();
+      const dev = String(p.device || '').toLowerCase();
+      if (!prov.includes(term) && !dev.includes(term)) return false;
+    }
+    return true;
+  });
+
   filtered.sort((a: any, b: any) => {
+    const keyA = getDeviceKey(String(a.provider||''), String(a.device||''));
+    const keyB = getDeviceKey(String(b.provider||''), String(b.device||''));
+    const sa = platformScoresCache && platformScoresCache.get(keyA);
+    const sb = platformScoresCache && platformScoresCache.get(keyB);
+    const dir = platformSortDir === 'asc' ? 1 : -1;
+
+    if (platformSortKey === 'score') {
+      const va = sa ?? Number.NEGATIVE_INFINITY;
+      const vb = sb ?? Number.NEGATIVE_INFINITY;
+      if (va !== vb) return (va < vb ? -1 : 1) * dir;
+    } else if (platformSortKey === 'runs') {
+      const ra = Number(a.runs) || 0;
+      const rb = Number(b.runs) || 0;
+      if (ra !== rb) return (ra < rb ? -1 : 1) * dir;
+    } else if (platformSortKey === 'last_seen') {
+      const ta = Number(new Date(a.last_seen || 0));
+      const tb = Number(new Date(b.last_seen || 0));
+      if (ta !== tb) return (ta < tb ? -1 : 1) * dir;
+    } else if (platformSortKey === 'provider') {
+      const pa = String(a.provider||'');
+      const pb = String(b.provider||'');
+      if (pa !== pb) return pa.localeCompare(pb) * dir;
+    } else if (platformSortKey === 'device') {
+      const da = String(a.device||'');
+      const db = String(b.device||'');
+      if (da !== db) return da.localeCompare(db) * dir;
+    }
+
     const p = String(a.provider||'').localeCompare(String(b.provider||''));
     if (p !== 0) return p;
     return String(a.device||'').localeCompare(String(b.device||''));
-  }).forEach((p: any) => {
-    const tr = document.createElement('tr');
+  });
+
+  if (!tbody) return;
+  const rows: string[] = [];
+  filtered.forEach((p: any) => {
     const key = getDeviceKey(String(p.provider||''), String(p.device||''));
     const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
     const spark = series.length ? renderSparkline(series) : '';
     const href = `#view=platforms&provider=${encodeURIComponent(String(p.provider||''))}&device=${encodeURIComponent(String(p.device||''))}`;
     const isBaseline = baselineDevice && String(p.device||'') === baselineDevice;
-    const deviceLabel = `${escapeHtml(p.device||'')}${isBaseline ? ' <span class=\"baseline-badge\">Baseline</span>' : ''}`;
-    tr.innerHTML = `
-      <td>${escapeHtml(p.provider||'')}</td>
-      <td><a href="${href}">${deviceLabel}</a></td>
-      <td class="num">${Number(p.runs)||0}</td>
-      <td><code>${escapeHtml(p.last_seen||'')}</code></td>
-      <td>${spark}</td>`;
-    tbody.appendChild(tr);
+    const deviceLabel = `${escapeHtml(p.device||'')}${isBaseline ? ' <span class="baseline-badge">Baseline</span>' : ''}`;
+    const scoreVal = platformScoresCache && platformScoresCache.get(key);
+    const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
+    const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
+    rows.push(`
+      <tr>
+        <td>${escapeHtml(p.provider||'')}</td>
+        <td><a href="${href}">${deviceLabel}</a></td>
+        <td class="num metriq-score" data-provider="${escapeAttr(p.provider||'')}" data-device="${escapeAttr(p.device||'')}" title="View Metriq score breakdown">${scoreText}</td>
+        <td class="num">${Number(p.runs)||0}</td>
+        <td class="num">${escapeHtml(lastTs||'')}</td>
+        <td>${spark}</td>
+      </tr>`);
   });
-  wrap.appendChild(table);
-  frag.appendChild(wrap);
-  container.innerHTML = '';
-  container.appendChild(frag);
+  tbody.innerHTML = rows.join('');
+  if (table && (table as any).dataset) {
+    const dataTable = table as any;
+    if (!dataTable.dataset.scoreClickBound) {
+      table.addEventListener('click', (event: MouseEvent) => {
+        const target = event.target as HTMLElement | null;
+        const cell = target && target.closest ? target.closest('td.metriq-score') as HTMLElement | null : null;
+        if (cell) {
+          const prov = cell.getAttribute('data-provider') || '';
+          const dev = cell.getAttribute('data-device') || '';
+          navigateToPlatform(prov, dev);
+        }
+      });
+      dataTable.dataset.scoreClickBound = '1';
+    }
+  }
+
+  const headCells = table!.querySelectorAll<HTMLTableCellElement>('thead th[data-col]');
+  headCells.forEach((th) => {
+    const col = String(th.getAttribute('data-col')) as typeof platformSortKey;
+    const baseLabel = th.getAttribute('data-label') || th.textContent || '';
+    const isActive = platformSortKey === col;
+    const icon = isActive ? (platformSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    th.innerHTML = `${escapeHtml(baseLabel)}${icon}`;
+  });
 }
 
 async function initBenchmarksListView() {
@@ -787,7 +1083,7 @@ async function initBenchmarksListView() {
         <td class=\"num\">${row.runs}</td>
         <td>${escapeHtml(row.providers.join(', '))}</td>
         <td>${escapeHtml(row.devices.join(', '))}</td>
-        <td><code>${escapeHtml(row.last_seen||'')}</code></td>
+        <td class="num">${escapeHtml(row.last_seen||'')}</td>
         <td>${spark}</td>`;
       tbody.appendChild(tr);
     });
@@ -1691,7 +1987,7 @@ function renderStaticTable(values: any[]) {
       <td><a href="${deviceHref}" class="metric-link" data-role="device">${deviceLabel}</a></td>
       <td><a href="${benchHref}" class="metric-link" data-role="benchmark">${escapeHtml(run.benchmark || '')}</a></td>
       ${metricCells}
-      <td><code>${escapeHtml(formatDateOnly(run.timestamp))}</code></td>`;
+      <td class="num">${escapeHtml(formatDateOnly(run.timestamp))}</td>`;
     tbody.appendChild(tr);
     // Make entire row clickable to open details
     tr.style.cursor = 'pointer';

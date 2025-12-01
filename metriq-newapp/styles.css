@@ -110,6 +110,15 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #benchmarks-table-wrap a:hover,#job-params-wrap a:hover{text-decoration:underline}
 #benchmarks-table-wrap code,#job-params-wrap code{background:#f8fafc;border:1px solid #eef2ff;border-radius:6px;padding:2px 6px}
 
+#platform-detail-table{overflow-x:auto}
+#platform-detail-table table.smart-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid #dbeafe;border-radius:8px;overflow:hidden;background:#fff}
+#platform-detail-table thead th{background:#f0f7ff;color:#1f2b3c;font-weight:600;padding:10px 12px;border-bottom:1px solid #dbeafe}
+#platform-detail-table tbody td{padding:10px 12px;border-top:1px solid #eef2ff}
+#platform-detail-table tbody tr:nth-child(even){background:#fafcff}
+#platform-detail-table tbody tr:hover{background:#f6faff}
+#platform-detail-table td.num,#platform-detail-table th.num{text-align:right}
+#platform-detail-table code{background:#f8fafc;border:1px solid #eef2ff;border-radius:6px;padding:2px 6px}
+
 /* Smart table filters header */
 .smart-controls{
   display:flex;
