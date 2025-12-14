@@ -1117,6 +1117,8 @@ function adaptMetriqEtlRow(row: any) {
   const params = (row && typeof row.params === 'object') ? row.params : {};
   const jobType = row?.job_type ?? null;
   const benchmark = params?.benchmark_name ?? jobType ?? 'Unknown';
+  const numQubitsRaw = params?.num_qubits ?? params?.width;
+  const num_qubits = parseNumQubits(numQubitsRaw);
   // Prefer ETL 'metriq_score' but expose it as 'score' (single-benchmark score).
   // Keep raw results/errors for detail view, but do not surface them as chart/table metrics.
   const rawResults = (row && typeof row.results === 'object' && row.results != null) ? row.results : {};
@@ -1133,7 +1135,7 @@ function adaptMetriqEtlRow(row: any) {
     metrics = {};
   }
   const errors: Record<string, number> = {};
-  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams };
+  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams, num_qubits };
 }
 
 function normalizeRun(run: any) {
@@ -1169,7 +1171,27 @@ function normalizeRun(run: any) {
     }
   });
   clone.errors = errors;
+  const nq = parseNumQubits((clone as any).num_qubits);
+  const widthFallback = parseNumQubits((clone as any).width);
+  if (nq !== null) {
+    (clone as any).num_qubits = nq;
+  } else if (widthFallback !== null) {
+    (clone as any).num_qubits = widthFallback;
+  } else {
+    delete (clone as any).num_qubits;
+  }
   return clone;
+}
+
+function parseNumQubits(value: any): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const num = Number(trimmed);
+    if (Number.isFinite(num)) return num;
+  }
+  return null;
 }
 
 function loadAppConfig() {
@@ -1894,7 +1916,7 @@ function applyTableFilters(values: any[]) {
     if (tableState.filterDevice !== 'all' && String(v.device||'') !== tableState.filterDevice) return false;
     if (tableState.filterBenchmark !== 'all' && String(v.benchmark||'') !== tableState.filterBenchmark) return false;
     if (q) {
-      const blob = `${v.timestamp||''} ${v.provider||''} ${v.device||''} ${v.benchmark||''}`.toLowerCase();
+      const blob = `${v.timestamp||''} ${v.provider||''} ${v.device||''} ${v.benchmark||''} ${v.num_qubits ?? ''}`.toLowerCase();
       if (!blob.includes(q)) return false;
     }
     return true;
@@ -1907,6 +1929,7 @@ function sortTableRows(values: any[]) {
   const cmp = (a: any, b: any) => {
     let av:any, bv:any;
     if (sortKey === 'timestamp') { av = Number(new Date(a.timestamp)); bv = Number(new Date(b.timestamp)); }
+    else if (sortKey === 'num_qubits') { av = Number(a.num_qubits ?? Number.NEGATIVE_INFINITY); bv = Number(b.num_qubits ?? Number.NEGATIVE_INFINITY); }
     else if (sortKey === 'provider') { av = String(a.provider||''); bv = String(b.provider||''); }
     else if (sortKey === 'device') { av = String(a.device||''); bv = String(b.device||''); }
     else if (sortKey === 'benchmark') { av = String(a.benchmark||''); bv = String(b.benchmark||''); }
@@ -1953,6 +1976,7 @@ function renderStaticTable(values: any[]) {
         <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
         <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
         <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
+        <th data-sort="num_qubits" class="sortable num"># Qubits${sortIcon('num_qubits')}</th>
         ${metricHeaders}
         <th data-sort="timestamp" class="sortable">Date${sortIcon('timestamp')}</th>
       </tr>
@@ -1986,6 +2010,7 @@ function renderStaticTable(values: any[]) {
       <td>${escapeHtml(run.provider || '')}</td>
       <td><a href="${deviceHref}" class="metric-link" data-role="device">${deviceLabel}</a></td>
       <td><a href="${benchHref}" class="metric-link" data-role="benchmark">${escapeHtml(run.benchmark || '')}</a></td>
+      <td class="num">${run.num_qubits !== undefined && run.num_qubits !== null ? escapeHtml(String(run.num_qubits)) : '—'}</td>
       ${metricCells}
       <td class="num">${escapeHtml(formatDateOnly(run.timestamp))}</td>`;
     tbody.appendChild(tr);
@@ -2021,7 +2046,7 @@ function renderStaticTable(values: any[]) {
           tableState.sortDir = tableState.sortDir === 'asc' ? 'desc' : 'asc';
         } else {
           tableState.sortKey = key;
-          const isNumeric = key === 'timestamp' || (typeof key === 'string' && key.startsWith('metric:'));
+          const isNumeric = key === 'timestamp' || key === 'num_qubits' || (typeof key === 'string' && key.startsWith('metric:'));
           tableState.sortDir = isNumeric ? 'desc' : 'asc';
         }
         renderStaticTable(values);
