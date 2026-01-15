@@ -33,7 +33,7 @@
     <div class="container">
       <nav class="nav">
         <a class="brand" href="#">
-          <img src="public/metriq_logo_horizontal_transparent.png" alt="Metriq logo" style="height:48px;width:auto;" />
+          <img class="brand__logo" src="public/metriq_logo_horizontal_transparent.png" alt="Metriq logo" />
         </a>
         <div class="actions">
           <div class="search" hidden>
@@ -125,7 +125,6 @@
             </div>
             <div class="table-actions">
               <a class="btn link-benchmarks-json" href="#" download="benchmarks.json">Download Benchmarks JSON</a>
-              <a class="btn link-platforms-json" href="#" download="platform-index.json">Platforms Index JSON</a>
             </div>
           </section>
         </div>
@@ -136,10 +135,13 @@
       <section id="view-platforms" hidden>
         <div class="panel__head">
           <h3 class="panel__title">Platforms</h3>
-          <p class="meta">Summary of devices aggregated by metriq-data.</p>
         </div>
         
         <div id="platforms-container"></div>
+
+        <div class="table-actions">
+          <a class="btn link-platforms-json" href="#" download="platform-index.json">Download Platforms Index JSON</a>
+        </div>
       </section>
 
       <!-- Insights -->
@@ -160,7 +162,7 @@
           </article>
           <article class="insight-card">
             <h3>Citation & licence</h3>
-            If you use Metriq data in a publication, please cite our article. TODO: add arXiv link once it's available.
+            If you use Metriq data in a publication, please cite our article (link coming soon).
             <br />
             <div class="license-block">
               <h4>Data license</h4>
