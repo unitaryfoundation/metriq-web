@@ -56,7 +56,6 @@
         <header class="tabs__nav" role="tablist">
           <button class="tab is-active" role="tab" aria-selected="true" id="view-results-btn" data-target="#view-results">Results</button>
           <button class="tab" role="tab" aria-selected="false" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
-          <button class="tab" role="tab" aria-selected="false" id="view-benchmarks-btn" data-target="#view-benchmarks">Benchmarks</button>
         </header>
       </section>
 
@@ -143,48 +142,25 @@
         <div id="platforms-container"></div>
       </section>
 
-      <!-- Benchmarks view -->
-      <section id="view-benchmarks" hidden>
-        <div class="panel__head">
-          <h3 class="panel__title">Benchmarks</h3>
-          <p class="meta">Browse benchmarks aggregated from results.</p>
-        </div>
-        
-        <div id="benchmarks-container"></div>
-      </section>
-
       <!-- Insights -->
       <section class="insights" aria-labelledby="insights-heading">
-        <div class="section-head">
-          <h2 id="insights-heading">How to Read These Benchmarks</h2>
-          <p class="section-lead">Metriq pairs transparent methodology with community review so every point on the chart can be traced back to an auditable experiment.</p>
-        </div>
         <div class="insights__stack">
-          <article class="insight-card">
-            <h3>Methodology</h3>
-            <p>Submissions follow the <em>metriq-gym</em> protocol: open-source workloads, reproducible environment packages, and verification runs that cross-check reported metrics.</p>
-            <ul>
-              <li>Hardware and software disclosures are required.</li>
-              <li>Automated sanity checks flag regressions before publication.</li>
-              <li>Historical runs are versioned so trends stay comparable.</li>
-            </ul>
-          </article>
           <article class="insight-card">
             <h3>FAQ</h3>
             <dl class="faq">
               <div>
                 <dt>What if a result looks wrong?</dt>
-                <dd>Use the “flag” action inside the table view. The submitter and moderators will receive a notification with your notes.</dd>
+                <dd>Please create an issue in the <a href="https://github.com/unitaryfoundation/metriq-data/issues" target="_blank" rel="noopener">metriq-data</a>  GitHub repository.</dd>
               </div>
               <div>
-                <dt>Can I add benchmarks?</dt>
-                <dd>Yes&mdash;fork the workload template or contribute a pull request. New domains are reviewed weekly.</dd>
+                <dt>Can I add benchmarks results?</dt>
+                <dd>Yes, in fact everyone is encouraged to. Please use the <code>upload</code> command from the <a href="https://github.com/unitaryfoundation/metriq-gym" target="_blank" rel="noopener">metriq-gym</a> CLI.</dd>
               </div>
             </dl>
           </article>
           <article class="insight-card">
             <h3>Citation & licence</h3>
-            If you use Metriq data in a publication, please cite our article.
+            If you use Metriq data in a publication, please cite our article. TODO: add arXiv link once it's available.
             <br />
             <div class="license-block">
               <h4>Data license</h4>

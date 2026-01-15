@@ -64,12 +64,10 @@ const detailCloseBtn = (detailModal?.querySelector('.detail-modal__close') as HT
 // Top-level views
 const viewResultsBtn = document.getElementById('view-results-btn') as HTMLButtonElement | null;
 const viewPlatformsBtn = document.getElementById('view-platforms-btn') as HTMLButtonElement | null;
-const viewBenchmarksBtn = document.getElementById('view-benchmarks-btn') as HTMLButtonElement | null;
 const viewResults = document.getElementById('view-results') as HTMLElement | null;
 const viewPlatforms = document.getElementById('view-platforms') as HTMLElement | null;
-const viewBenchmarks = document.getElementById('view-benchmarks') as HTMLElement | null;
 
-// No extra filters for Platforms/Benchmarks
+// No extra filters for Platforms
 
 // Results sub-tabs
 const tabGraph = document.getElementById("tab-graph") as HTMLButtonElement | null;
@@ -105,7 +103,6 @@ let platformSortDir: 'asc' | 'desc' = 'desc';
 let platformFilterText = '';
 let platformFilterProvider = 'all';
 let deviceSeriesCache: Map<string, number[]> | null = null;
-let benchmarkSeriesCache: Map<string, number[]> | null = null;
 let suppressHashHandler = false;
 let chartView = null;
 let resizeHandler = null;
@@ -243,27 +240,21 @@ function activateTab(which) {
 tabGraph?.addEventListener("click", () => activateTab("graph"));
 tabTable?.addEventListener("click", () => activateTab("table"));
 
-function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate = false) {
+function activateView(which: 'results'|'platforms', skipHashUpdate = false) {
   const isResults = which === 'results';
   const isPlatforms = which === 'platforms';
-  const isBenchmarks = which === 'benchmarks';
   viewResultsBtn?.classList.toggle('is-active', isResults);
   viewResultsBtn?.setAttribute('aria-selected', String(isResults));
   viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
   viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
-  viewBenchmarksBtn?.classList.toggle('is-active', isBenchmarks);
-  viewBenchmarksBtn?.setAttribute('aria-selected', String(isBenchmarks));
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
-  if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
   if (isPlatforms) initPlatformsView(true);
-  if (isBenchmarks) initBenchmarksListView();
   if (!skipHashUpdate) updateHash({ view: which });
 }
 
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
 viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
-viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
 
 // ---- Iframe wiring ----
 const params = new URLSearchParams(location.search);
@@ -449,7 +440,8 @@ function navigateToPlatform(provider: string, device: string) {
 async function applyHashRouting() {
   if (suppressHashHandler) return;
   const h = parseHash();
-  const view = (h.view || 'results') as 'results'|'platforms'|'benchmarks';
+  const viewParam = String(h.view || 'results');
+  const view = (viewParam === 'platforms') ? 'platforms' : 'results';
   activateView(view, true);
   if (view === 'platforms') {
     if (h.provider && h.device) {
@@ -457,9 +449,6 @@ async function applyHashRouting() {
       return;
     }
     await initPlatformsView(true);
-  } else if (view === 'benchmarks' && h.benchmark) {
-    await initBenchmarksListView();
-    openBenchmarkDetail(h.benchmark);
   }
 }
 
@@ -791,26 +780,6 @@ function computeDeviceSeries(runs: any[]): Map<string, number[]> {
   return series;
 }
 
-function computeBenchmarkSeries(runs: any[]): Map<string, number[]> {
-  const weeks = 12;
-  const now = Date.now();
-  const weekMs = 7*24*3600*1000;
-  const edges: number[] = Array.from({length: weeks+1}, (_, i) => now - (weeks-i)*weekMs);
-  const series = new Map<string, number[]>();
-  runs.forEach((r: any) => {
-    const b = String(r.benchmark||'');
-    const ts = Number(new Date(r.timestamp||0));
-    if (!Number.isFinite(ts)) return;
-    let idx = -1;
-    for (let i=0;i<weeks;i++){ if (ts>=edges[i] && ts<edges[i+1]) { idx = i; break; } }
-    if (idx === -1) return;
-    let arr = series.get(b);
-    if (!arr) { arr = Array.from({length: weeks}, () => 0); series.set(b, arr); }
-    arr[idx] += 1;
-  });
-  return series;
-}
-
 function renderSparkline(values: number[], width=100, height=24, stroke='#2563eb') {
   if (!Array.isArray(values) || !values.length) return '';
   const max = Math.max(...values, 1);
@@ -1021,93 +990,6 @@ function renderPlatformsTable() {
     const icon = isActive ? (platformSortDir === 'asc' ? ' ▲' : ' ▼') : '';
     th.innerHTML = `${escapeHtml(baseLabel)}${icon}`;
   });
-}
-
-async function initBenchmarksListView() {
-  const container = document.getElementById('benchmarks-container');
-  if (!container) return;
-  container.innerHTML = '<div class="meta">Loading benchmarks…</div>';
-  try {
-    const data = await loadBenchmarks();
-    const runs = Array.isArray(data) ? data : [];
-    if (!runs.length) {
-      container.innerHTML = '<div class="meta">No benchmarks found.</div>';
-      return;
-    }
-    const map = new Map<string, { runs: number; providers: Set<string>; devices: Set<string>; last_seen: string }>();
-    runs.forEach((run: any) => {
-      const b = String(run.benchmark || 'Unknown');
-      const ts = String(run.timestamp || '');
-      const prev = map.get(b) || { runs: 0, providers: new Set(), devices: new Set(), last_seen: '' };
-      prev.runs += 1;
-      if (run.provider) prev.providers.add(String(run.provider));
-      if (run.device) prev.devices.add(String(run.device));
-      if (!prev.last_seen || (ts && ts > prev.last_seen)) prev.last_seen = ts;
-      map.set(b, prev);
-    });
-    const rows = Array.from(map.entries()).map(([benchmark, v]) => ({
-      benchmark,
-      runs: v.runs,
-      providers: Array.from(v.providers).sort(),
-      devices: Array.from(v.devices).sort(),
-      last_seen: v.last_seen,
-    })).sort((a, b) => a.benchmark.localeCompare(b.benchmark));
-
-    // Build modern-styled table like Platforms
-    const wrap = document.createElement('div');
-    wrap.id = 'benchmarks-table-wrap';
-    const table = document.createElement('table');
-    table.className = 'smart-table';
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th class=\"num\">Runs</th>
-          <th>Providers</th>
-          <th>Devices</th>
-          <th>Last seen</th>
-          <th>Activity</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
-    try { benchmarkSeriesCache = computeBenchmarkSeries(runs); } catch {}
-    const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
-    rows.forEach((row) => {
-      const tr = document.createElement('tr');
-      const href = `#view=benchmarks&benchmark=${encodeURIComponent(row.benchmark)}`;
-      const series = (benchmarkSeriesCache && benchmarkSeriesCache.get(row.benchmark)) || [];
-      const spark = series.length ? renderSparkline(series) : '';
-      tr.innerHTML = `
-        <td><a href=\"${href}\">${escapeHtml(row.benchmark)}</a></td>
-        <td class=\"num\">${row.runs}</td>
-        <td>${escapeHtml(row.providers.join(', '))}</td>
-        <td>${escapeHtml(row.devices.join(', '))}</td>
-        <td class="num">${escapeHtml(row.last_seen||'')}</td>
-        <td>${spark}</td>`;
-      tbody.appendChild(tr);
-    });
-    wrap.appendChild(table);
-    container.innerHTML = '';
-    container.appendChild(wrap);
-    // No JS listeners needed when using anchor links (hash routing handles open)
-  } catch (err) {
-    console.error('[benchmarks] init failed:', err);
-    container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load benchmarks.</div>';
-  }
-}
-
-function openBenchmarkDetail(benchmark: string) {
-  const runs = rawBenchmarks.filter((r: any) => String(r.benchmark||'') === benchmark);
-  if (!runs.length) return;
-  const metric = getActiveMetric();
-  const list = buildRunList(runs, metric, 12, false) || '<li>No runs</li>';
-  if (!detailModal || !detailTitle || !detailBody || !detailSubtitle) return;
-  detailTitle.textContent = `${benchmark}`;
-  detailSubtitle.textContent = `${runs.length} run${runs.length===1?'':'s'}`;
-  detailBody.innerHTML = `<section class=\"detail-section\"><ul>${list}</ul></section>`;
-  detailModal.hidden = false;
-  document.body.style.overflow = 'hidden';
 }
 
 function adaptMetriqEtlRow(row: any) {
