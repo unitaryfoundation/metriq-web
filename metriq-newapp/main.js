@@ -1021,7 +1021,7 @@ function adaptMetriqEtlRow(row) {
     const params = (row && typeof row.params === 'object') ? row.params : {};
     const jobType = row?.job_type ?? null;
     const benchmark = params?.benchmark_name ?? jobType ?? 'Unknown';
-    const numQubitsRaw = params?.num_qubits ?? params?.width;
+    const numQubitsRaw = params?.num_qubits ?? params?.max_qubits ?? params?.width;
     const num_qubits = parseNumQubits(numQubitsRaw);
     // Prefer ETL 'metriq_score' but expose it as 'score' (single-benchmark score).
     // Keep raw results/errors for detail view, but do not surface them as chart/table metrics.
@@ -1079,9 +1079,17 @@ function normalizeRun(run) {
     });
     clone.errors = errors;
     const nq = parseNumQubits(clone.num_qubits);
+    const maxQubitsFallback = parseNumQubits(clone.max_qubits);
+    const qubitsFallback = parseNumQubits(clone.qubits);
     const widthFallback = parseNumQubits(clone.width);
     if (nq !== null) {
         clone.num_qubits = nq;
+    }
+    else if (maxQubitsFallback !== null) {
+        clone.num_qubits = maxQubitsFallback;
+    }
+    else if (qubitsFallback !== null) {
+        clone.num_qubits = qubitsFallback;
     }
     else if (widthFallback !== null) {
         clone.num_qubits = widthFallback;
