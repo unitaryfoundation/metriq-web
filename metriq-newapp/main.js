@@ -64,6 +64,8 @@ const viewResultsBtn = document.getElementById('view-results-btn');
 const viewPlatformsBtn = document.getElementById('view-platforms-btn');
 const viewResults = document.getElementById('view-results');
 const viewPlatforms = document.getElementById('view-platforms');
+const heroResultsLead = document.getElementById('hero-results-lead');
+const heroPlatformsLead = document.getElementById('hero-platforms-lead');
 // No extra filters for Platforms
 // Results sub-tabs
 const tabGraph = document.getElementById("tab-graph");
@@ -350,6 +352,10 @@ function activateView(which, skipHashUpdate = false) {
     viewResultsBtn?.setAttribute('aria-selected', String(isResults));
     viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
     viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
+    if (heroResultsLead)
+        heroResultsLead.hidden = !isResults;
+    if (heroPlatformsLead)
+        heroPlatformsLead.hidden = !isPlatforms;
     if (viewResults)
         viewResults.hidden = !isResults;
     if (viewPlatforms)

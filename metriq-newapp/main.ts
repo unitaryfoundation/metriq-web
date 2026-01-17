@@ -67,6 +67,8 @@ const viewResultsBtn = document.getElementById('view-results-btn') as HTMLButton
 const viewPlatformsBtn = document.getElementById('view-platforms-btn') as HTMLButtonElement | null;
 const viewResults = document.getElementById('view-results') as HTMLElement | null;
 const viewPlatforms = document.getElementById('view-platforms') as HTMLElement | null;
+const heroResultsLead = document.getElementById('hero-results-lead') as HTMLElement | null;
+const heroPlatformsLead = document.getElementById('hero-platforms-lead') as HTMLElement | null;
 
 // No extra filters for Platforms
 
@@ -356,6 +358,8 @@ function activateView(which: 'results'|'platforms', skipHashUpdate = false) {
   viewResultsBtn?.setAttribute('aria-selected', String(isResults));
   viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
   viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
+  if (heroResultsLead) heroResultsLead.hidden = !isResults;
+  if (heroPlatformsLead) heroPlatformsLead.hidden = !isPlatforms;
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
   if (isPlatforms) initPlatformsView(true);
