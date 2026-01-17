@@ -27,6 +27,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="icon" href="public/favicon.ico" sizes="any" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -54,8 +55,8 @@
       <!-- Views selector (moved above hero) -->
       <section class="tabs tabs--views" aria-label="View selector">
         <header class="tabs__nav" role="tablist">
-          <button class="tab is-active" role="tab" aria-selected="true" id="view-results-btn" data-target="#view-results">Results</button>
-          <button class="tab" role="tab" aria-selected="false" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
+          <button class="tab is-active" role="tab" aria-selected="true" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
+          <button class="tab" role="tab" aria-selected="false" id="view-results-btn" data-target="#view-results">Results</button>
         </header>
       </section>
 
@@ -74,7 +75,7 @@
       
 
       <!-- Results view -->
-      <section id="view-results">
+      <section id="view-results" hidden>
         <!-- Tabs -->
         <section class="tabs">
           <header class="tabs__nav" role="tablist" aria-label="Data view selector">
@@ -94,6 +95,18 @@
               <div class="frame-wrap">
                 <div class="skeleton" id="skeleton-graph"><div class="shimmer"></div></div>
                 <div id="chart"></div>
+                <div class="chart-actions" aria-label="Chart downloads">
+                  <div class="download-menu download-menu--up" id="chart-download">
+                    <button type="button" class="btn" id="btn-download-chart" disabled aria-haspopup="menu" aria-expanded="false">
+                      Download plot
+                      <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div class="download-menu__items" id="chart-download-menu" role="menu" aria-label="Download plot as" hidden>
+                      <button type="button" class="download-menu__item" role="menuitem" data-format="png">PNG</button>
+                      <button type="button" class="download-menu__item" role="menuitem" data-format="svg">SVG</button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <aside class="chart-controls" aria-label="Chart filters">
@@ -106,7 +119,7 @@
                 </div>
               </label>
               <label class="chart-control">
-                <span>Provider</span>
+                <span>Cloud Provider</span>
                 <div id="provider-list" class="multi-list" aria-label="Provider multi-select"></div>
                 <div class="multi-actions">
                   <button type="button" class="btn-mini" id="provider-clear">None</button>
@@ -132,7 +145,7 @@
       </section>
 
       <!-- Platforms view -->
-      <section id="view-platforms" hidden>
+      <section id="view-platforms">
         <div class="panel__head">
           <h3 class="panel__title">Platforms</h3>
         </div>
@@ -144,21 +157,37 @@
         </div>
       </section>
 
+      <!-- Updates -->
+      <section class="updates" aria-labelledby="updates-heading" hidden>
+        <div class="panel__head updates__head">
+          <h3 class="panel__title" id="updates-heading">Updates</h3>
+        </div>
+        <div class="updates__list" id="updates-list" role="list"></div>
+      </section>
+
       <!-- Insights -->
       <section class="insights" aria-labelledby="insights-heading">
         <div class="insights__stack">
           <article class="insight-card">
             <h3>FAQ</h3>
-            <dl class="faq">
-              <div>
-                <dt>What if a result looks wrong?</dt>
-                <dd>Please create an issue in the <a href="https://github.com/unitaryfoundation/metriq-data/issues" target="_blank" rel="noopener">metriq-data</a>  GitHub repository.</dd>
-              </div>
-              <div>
-                <dt>Can I add benchmarks results?</dt>
-                <dd>Yes, in fact everyone is encouraged to. Please use the <code>upload</code> command from the <a href="https://github.com/unitaryfoundation/metriq-gym" target="_blank" rel="noopener">metriq-gym</a> CLI.</dd>
-              </div>
-            </dl>
+            <div class="faq" role="list">
+              <details class="faq-item" role="listitem">
+                <summary class="faq-q">What if a result looks wrong?</summary>
+                <div class="faq-a">Please create an issue in the <a href="https://github.com/unitaryfoundation/metriq-data/issues" target="_blank" rel="noopener">metriq-data</a> GitHub repository.</div>
+              </details>
+              <details class="faq-item" role="listitem">
+                <summary class="faq-q">Can I add benchmarks results?</summary>
+                <div class="faq-a">Yes, in fact everyone is encouraged to. Please use the <code>upload</code> command from the <a href="https://github.com/unitaryfoundation/metriq-gym" target="_blank" rel="noopener">metriq-gym</a> CLI.</div>
+              </details>
+              <details class="faq-item" role="listitem">
+                <summary class="faq-q">How was the baseline device chosen?</summary>
+                <div class="faq-a">The device <code>ibm_torino</code> from IBM Quantum Cloud is used as a consistent reference point for the derived “score” scale (so 100 means “on par with the baseline”); it was chosen because it is a widely-run, stable platform that provides good coverage across benchmarks. Note this choice does not bias the data: raw benchmark metrics are unchanged, and the baseline is only an anchor for normalization/visual reference (and can be changed in the configuration of the dataset). Picking a different baseline would primarily rescale the scores, but the relative comparisons between platforms would remain the same.</div>
+              </details>
+              <details class="faq-item" role="listitem">
+                <summary class="faq-q">What are Metriq's "classical" inspirations?</summary>
+                <div class="faq-a">Metriq draws inspiration from established “classical” benchmarking efforts like <a href="https://www.geekbench.com/" target="_blank" rel="noopener">Geekbench</a> for CPU/GPU, and <a href="https://mlcommons.org/benchmarks/" target="_blank" rel="noopener">MLCommons</a> and <a href="https://epoch.ai/benchmarks" target="_blank" rel="noopener">Epoch AI</a> for AI/ML models, adapted to the needs and constraints of quantum hardware and workflows.</div>
+              </details>
+            </div>
           </article>
           <article class="insight-card">
             <h3>Citation & licence</h3>

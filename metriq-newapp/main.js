@@ -45,6 +45,7 @@ const DEFAULT_EMBED_URL = "https://example.com/public-view";
 const CONFIG_PATH = "./data/config.json";
 // <-- override with ?src= to bypass the generated Metabase embed URL
 const METABASE_EMBED_JSON = "./data/metabase-embed.json";
+const UPDATES_JSON = "./data/updates.json";
 // ---- Elements ---- (typed for TS)
 const iframe = document.getElementById("embed");
 const skeleton = document.getElementById("skeleton");
@@ -70,6 +71,9 @@ const tabTable = document.getElementById("tab-table");
 const panelGraph = document.getElementById("panel-graph");
 const panelTable = document.getElementById("panel-table");
 const chartTitleEl = panelGraph?.querySelector('.panel__title') || null;
+const downloadChartBtn = document.getElementById('btn-download-chart');
+const downloadChartMenu = document.getElementById('chart-download-menu');
+const downloadChartRoot = document.getElementById('chart-download');
 // No native <select> filters — custom multi-lists are used instead
 const metricSelect = document.getElementById("filter-metric");
 const resetFiltersBtn = null;
@@ -102,6 +106,112 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', 
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 // Optional: baseline device name from config (highlighted in chart/table)
 let baselineDevice = null;
+function setChartDownloadEnabled(enabled) {
+    if (downloadChartBtn)
+        downloadChartBtn.disabled = !enabled;
+    if (!enabled)
+        closeChartDownloadMenu();
+}
+function sanitizeFileStem(input) {
+    return input
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9._-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+}
+function buildChartDownloadName(ext) {
+    const metric = getActiveMetric();
+    const metricId = sanitizeFileStem(String(metric?.id || 'metric')) || 'metric';
+    return `metriq-score-over-time-${metricId}.${ext}`;
+}
+function closeChartDownloadMenu() {
+    if (!downloadChartMenu || !downloadChartBtn)
+        return;
+    downloadChartMenu.hidden = true;
+    downloadChartBtn.setAttribute('aria-expanded', 'false');
+}
+function toggleChartDownloadMenu() {
+    if (!downloadChartMenu || !downloadChartBtn)
+        return;
+    const nextHidden = !downloadChartMenu.hidden ? true : false;
+    downloadChartMenu.hidden = nextHidden;
+    downloadChartBtn.setAttribute('aria-expanded', nextHidden ? 'false' : 'true');
+}
+function downloadBlob(filename, blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+async function downloadChartImage(ext) {
+    if (!chartView)
+        return;
+    try {
+        if (ext === 'svg') {
+            try {
+                const url = await chartView.toImageURL('svg');
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = buildChartDownloadName('svg');
+                a.rel = 'noopener';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                return;
+            }
+            catch { }
+            const svgText = await chartView.toSVG();
+            downloadBlob(buildChartDownloadName('svg'), new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' }));
+            return;
+        }
+        const url = await chartView.toImageURL('png');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = buildChartDownloadName('png');
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+    catch (err) {
+        console.warn(`[chart] download ${ext} failed:`, err);
+    }
+}
+downloadChartBtn?.addEventListener('click', (event) => {
+    if (!downloadChartBtn || downloadChartBtn.disabled)
+        return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleChartDownloadMenu();
+});
+downloadChartMenu?.addEventListener('click', (event) => {
+    const target = event.target;
+    const btn = target && target.closest ? target.closest('button[data-format]') : null;
+    const fmt = (btn && btn.getAttribute('data-format')) || '';
+    if (fmt !== 'png' && fmt !== 'svg')
+        return;
+    closeChartDownloadMenu();
+    downloadChartImage(fmt);
+});
+document.addEventListener('click', (event) => {
+    if (!downloadChartRoot || !downloadChartMenu || downloadChartMenu.hidden)
+        return;
+    const target = event.target;
+    if (!target)
+        return;
+    if (!downloadChartRoot.contains(target))
+        closeChartDownloadMenu();
+});
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape')
+        closeChartDownloadMenu();
+});
 // ---- Symbol scales shared between chart and UI ----
 const PROVIDER_COLORS = [
     '#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc949',
@@ -306,9 +416,58 @@ if (openMetabaseBtn) {
         }
     });
 }
+async function initUpdatesCarousel(config) {
+    const section = document.querySelector('section.updates');
+    const list = document.getElementById('updates-list');
+    if (!section || !list)
+        return;
+    const url = (config && typeof config.updatesUrl === 'string' && String(config.updatesUrl).trim())
+        ? String(config.updatesUrl).trim()
+        : UPDATES_JSON;
+    let items = [];
+    try {
+        const resp = await fetch(appendCacheBust(url), { cache: 'no-store' });
+        if (!resp.ok)
+            throw new Error(`HTTP ${resp.status}`);
+        const json = await resp.json();
+        if (Array.isArray(json))
+            items = json;
+    }
+    catch (err) {
+        // No updates is a valid state; keep section hidden.
+        return;
+    }
+    const normalized = items
+        .map((u) => ({
+        date: u?.date ? String(u.date) : '',
+        title: u?.title ? String(u.title) : '',
+        body: u?.body ? String(u.body) : '',
+        href: u?.href ? String(u.href) : '',
+        linkText: u?.linkText ? String(u.linkText) : '',
+    }))
+        .filter((u) => u.title || u.body);
+    if (!normalized.length)
+        return;
+    const top = normalized
+        .slice()
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+        .slice(0, 2);
+    list.innerHTML = top.map((u) => {
+        const dateLabel = u.date ? formatDateOnly(u.date) : '';
+        const meta = dateLabel ? `<p class="update-card__meta"><span>${escapeHtml(dateLabel)}</span></p>` : '';
+        const title = u.title ? `<h4 class="update-card__title">${escapeHtml(u.title)}</h4>` : '';
+        const body = u.body ? `<p class="update-card__body">${escapeHtml(u.body)}</p>` : '';
+        const link = u.href
+            ? `<a class="update-card__link" href="${escapeAttr(u.href)}" target="_blank" rel="noopener">${escapeHtml(u.linkText || 'Learn more')}</a>`
+            : '';
+        return `<article class="update-card" role="listitem">${meta}${title}${body}${link}</article>`;
+    }).join('');
+    section.hidden = false;
+}
 (async () => {
     const config = await loadAppConfig();
     setupBenchmarkSearch(config);
+    initUpdatesCarousel(config);
     // Wire data download links (force download via Blob when possible)
     const wireDownload = (selector, url, fallbackName, preferFallbackName = false) => {
         document.querySelectorAll(selector).forEach(a => {
@@ -388,8 +547,8 @@ if (openMetabaseBtn) {
     }
     applyEmbedSource(initial);
 })();
-// Default to the Results view on load
-activateView('results');
+// Set an initial view without mutating the URL; hash routing below will apply deep links.
+activateView('platforms', true);
 // ---- Hash routing for deep links ----
 function parseHash() {
     const raw = location.hash.replace(/^#/, '').trim();
@@ -447,7 +606,7 @@ async function applyHashRouting() {
     if (suppressHashHandler)
         return;
     const h = parseHash();
-    const viewParam = String(h.view || 'results');
+    const viewParam = String(h.view || 'platforms');
     const view = (viewParam === 'platforms') ? 'platforms' : 'results';
     activateView(view, true);
     if (view === 'platforms') {
@@ -718,9 +877,8 @@ async function initPlatformsView(forceRender = false) {
         table.innerHTML = `
       <thead>
         <tr>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Provider</th>
+          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Cloud Provider</th>
           <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Device</th>
-          <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Runs</th>
           <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Last seen</th>
         </tr>
       </thead>
@@ -737,7 +895,6 @@ async function initPlatformsView(forceRender = false) {
             tr.innerHTML = `
         <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(p.provider || '')}</td>
         <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><button type=\"button\" class=\"btn\" data-provider=\"${escapeAttr(p.provider)}\" data-device=\"${escapeAttr(p.device)}\">${escapeHtml(p.device || '')}</button></td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${Number(p.runs) || 0}</td>
         <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${escapeHtml(p.last_seen || '')}</td>`;
             tbody.appendChild(tr);
         });
@@ -830,10 +987,10 @@ function renderPlatformsTable() {
         controls.innerHTML = `
       <label class="smart-field">
         <span>Search</span>
-        <input id="platform-q" type="search" placeholder="Search provider or device" autocomplete="off" />
+        <input id="platform-q" type="search" placeholder="Search cloud provider or device" autocomplete="off" />
       </label>
       <label class="smart-field">
-        <span>Provider</span>
+        <span>Cloud Provider</span>
         <select id="platform-provider"><option value="all">All</option></select>
       </label>
       <button type="button" class="btn" id="platform-reset">Reset</button>
@@ -845,12 +1002,11 @@ function renderPlatformsTable() {
         table.innerHTML = `
       <thead>
         <tr>
-          <th data-col="provider" data-label="Provider" class="sortable">Provider</th>
+          <th data-col="provider" data-label="Cloud Provider" class="sortable">Cloud Provider</th>
           <th data-col="device" data-label="Device" class="sortable">Device</th>
           <th data-col="score" data-label="Metriq Score" class="sortable num">Metriq Score</th>
-          <th data-col="runs" data-label="Runs" class="sortable num">Runs</th>
           <th data-col="last_seen" data-label="Last updated" class="sortable num">Last updated</th>
-          <th data-label="Activity">Activity</th>
+          <th data-label="Activity" class="activity-col">Activity</th>
         </tr>
       </thead>
       <tbody></tbody>`;
@@ -937,12 +1093,6 @@ function renderPlatformsTable() {
             if (va !== vb)
                 return (va < vb ? -1 : 1) * dir;
         }
-        else if (platformSortKey === 'runs') {
-            const ra = Number(a.runs) || 0;
-            const rb = Number(b.runs) || 0;
-            if (ra !== rb)
-                return (ra < rb ? -1 : 1) * dir;
-        }
         else if (platformSortKey === 'last_seen') {
             const ta = Number(new Date(a.last_seen || 0));
             const tb = Number(new Date(b.last_seen || 0));
@@ -968,6 +1118,12 @@ function renderPlatformsTable() {
     });
     if (!tbody)
         return;
+    const maxScore = filtered.reduce((max, p) => {
+        const key = getDeviceKey(String(p.provider || ''), String(p.device || ''));
+        const scoreVal = platformScoresCache && platformScoresCache.get(key);
+        const v = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? Number(scoreVal) : Number.NEGATIVE_INFINITY;
+        return v > max ? v : max;
+    }, Number.NEGATIVE_INFINITY);
     const rows = [];
     filtered.forEach((p) => {
         const key = getDeviceKey(String(p.provider || ''), String(p.device || ''));
@@ -978,15 +1134,17 @@ function renderPlatformsTable() {
         const deviceLabel = `${escapeHtml(p.device || '')}${isBaseline ? ' <span class="baseline-badge">Baseline</span>' : ''}`;
         const scoreVal = platformScoresCache && platformScoresCache.get(key);
         const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
+        const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
+            ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
+            : 0;
         const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
         rows.push(`
       <tr>
         <td>${escapeHtml(p.provider || '')}</td>
         <td><a href="${href}">${deviceLabel}</a></td>
-        <td class="num metriq-score" data-provider="${escapeAttr(p.provider || '')}" data-device="${escapeAttr(p.device || '')}" title="View Metriq score breakdown">${scoreText}</td>
-        <td class="num">${Number(p.runs) || 0}</td>
+        <td class="num metriq-score" data-provider="${escapeAttr(p.provider || '')}" data-device="${escapeAttr(p.device || '')}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
         <td class="num">${escapeHtml(lastTs || '')}</td>
-        <td>${spark}</td>
+        <td class="activity-col">${spark}</td>
       </tr>`);
     });
     tbody.innerHTML = rows.join('');
@@ -1565,6 +1723,7 @@ async function renderChart(values, token, metric) {
     const skeletonGraph = document.getElementById("skeleton-graph");
     if (!el) {
         console.error('[chart] #chart element not found');
+        setChartDownloadEnabled(false);
         return;
     }
     if (skeletonGraph)
@@ -1572,6 +1731,7 @@ async function renderChart(values, token, metric) {
     const embed = globalThis.vegaEmbed;
     if (typeof embed !== "function") {
         console.error('[chart] vegaEmbed is undefined — are the Vega scripts loaded?');
+        setChartDownloadEnabled(false);
         if (skeletonGraph)
             skeletonGraph.style.display = "none";
         return;
@@ -1582,6 +1742,7 @@ async function renderChart(values, token, metric) {
     if (!values.length) {
         if (token !== renderSequence)
             return;
+        setChartDownloadEnabled(false);
         if (chartView) {
             if (resizeHandler) {
                 window.removeEventListener('resize', resizeHandler);
@@ -1695,12 +1856,13 @@ async function renderChart(values, token, metric) {
     };
     // Baseline device no longer emphasized in the graph; use reference line instead.
     try {
-        const { view } = await embed(el, spec, { actions: false, renderer: 'svg' });
+        const { view } = await embed(el, spec, { actions: false, renderer: 'canvas' });
         if (token !== renderSequence) {
             view.finalize();
             return;
         }
         chartView = view;
+        setChartDownloadEnabled(true);
         console.info('[chart] rendering Vega view with', values.length, 'rows');
         resizeHandler = () => {
             if (chartView) {
@@ -1723,6 +1885,7 @@ async function renderChart(values, token, metric) {
         if (token !== renderSequence)
             return;
         console.error('[chart] render failed:', err);
+        setChartDownloadEnabled(false);
         el.innerHTML = '<div style="padding:12px;color:#f88">Failed to load chart data. Check the console for details.</div>';
     }
     finally {
@@ -1754,7 +1917,7 @@ function ensureTableUI() {
       <input id="smart-q" type="search" placeholder="Search all columns" autocomplete="off" />
     </label>
     <label class="smart-field">
-      <span>Provider</span>
+      <span>Cloud Provider</span>
       <select id="smart-provider"><option value="all">All</option></select>
     </label>
     <label class="smart-field">
@@ -1885,7 +2048,7 @@ function renderStaticTable(values) {
     table.innerHTML = `
     <thead>
       <tr>
-        <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
+        <th data-sort="provider" class="sortable">Cloud Provider${sortIcon('provider')}</th>
         <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
         <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
         <th data-sort="num_qubits" class="sortable num"># Qubits${sortIcon('num_qubits')}</th>
@@ -2008,6 +2171,7 @@ async function drawTable() {
 }
 async function drawChart() {
     const token = ++renderSequence;
+    setChartDownloadEnabled(false);
     const filtered = getFilteredData();
     const availableMetricDefs = refreshMetricOptions(filtered);
     if (!availableMetricDefs.length) {
@@ -2041,6 +2205,7 @@ async function drawChart() {
 async function initBenchmarksView() {
     const el = document.getElementById('chart');
     const skeletonGraph = document.getElementById('skeleton-graph');
+    setChartDownloadEnabled(false);
     try {
         const [config, data] = await Promise.all([loadAppConfig(), loadBenchmarks()]);
         rawBenchmarks = Array.isArray(data) ? data : [];
