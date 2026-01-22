@@ -47,6 +47,8 @@ const CONFIG_PATH = "./data/config.json";
 // <-- override with ?src= to bypass the generated Metabase embed URL
 const METABASE_EMBED_JSON = "./data/metabase-embed.json";
 const UPDATES_JSON = "./data/updates.json";
+const DEFAULT_GYM_DOCS_URL =
+  "https://unitaryfoundation.github.io/metriq-gym/benchmarks/overview/#available-benchmarks";
 
 // ---- Elements ---- (typed for TS)
 const iframe = document.getElementById("embed") as HTMLIFrameElement | null;
@@ -65,10 +67,14 @@ const detailCloseBtn = (detailModal?.querySelector('.detail-modal__close') as HT
 // Top-level views
 const viewResultsBtn = document.getElementById('view-results-btn') as HTMLButtonElement | null;
 const viewPlatformsBtn = document.getElementById('view-platforms-btn') as HTMLButtonElement | null;
+const viewBenchmarksBtn = document.getElementById('view-benchmarks-btn') as HTMLButtonElement | null;
 const viewResults = document.getElementById('view-results') as HTMLElement | null;
 const viewPlatforms = document.getElementById('view-platforms') as HTMLElement | null;
+const viewBenchmarks = document.getElementById('view-benchmarks') as HTMLElement | null;
 const heroResultsLead = document.getElementById('hero-results-lead') as HTMLElement | null;
 const heroPlatformsLead = document.getElementById('hero-platforms-lead') as HTMLElement | null;
+const heroBenchmarksLead = document.getElementById('hero-benchmarks-lead') as HTMLElement | null;
+const benchmarksDocsIframe = document.getElementById('benchmarks-docs') as HTMLIFrameElement | null;
 
 // No extra filters for Platforms
 
@@ -102,6 +108,7 @@ let benchmarksPromise;
 let rawBenchmarks = [];
 let platformsPromise;
 let platformsLoaded = false;
+let docsLoaded = false;
 let platformsIndexCache: any[] | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformSortKey: 'score' | 'provider' | 'device' | 'last_seen' = 'score';
@@ -351,23 +358,46 @@ function activateTab(which) {
 tabGraph?.addEventListener("click", () => activateTab("graph"));
 tabTable?.addEventListener("click", () => activateTab("table"));
 
-function activateView(which: 'results'|'platforms', skipHashUpdate = false) {
+async function initBenchmarksDocsView() {
+  if (docsLoaded) return;
+  docsLoaded = true;
+  if (!benchmarksDocsIframe) return;
+
+  try {
+    const config = appConfigCache || await loadAppConfig();
+    const url = (config && typeof (config as any).gymDocsUrl === 'string' && String((config as any).gymDocsUrl).trim())
+      ? String((config as any).gymDocsUrl).trim()
+      : DEFAULT_GYM_DOCS_URL;
+    benchmarksDocsIframe.src = url;
+  } catch (err) {
+    benchmarksDocsIframe.src = DEFAULT_GYM_DOCS_URL;
+  }
+}
+
+function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate = false) {
   const isResults = which === 'results';
   const isPlatforms = which === 'platforms';
+  const isBenchmarks = which === 'benchmarks';
   viewResultsBtn?.classList.toggle('is-active', isResults);
   viewResultsBtn?.setAttribute('aria-selected', String(isResults));
   viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
   viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
+  viewBenchmarksBtn?.classList.toggle('is-active', isBenchmarks);
+  viewBenchmarksBtn?.setAttribute('aria-selected', String(isBenchmarks));
   if (heroResultsLead) heroResultsLead.hidden = !isResults;
   if (heroPlatformsLead) heroPlatformsLead.hidden = !isPlatforms;
+  if (heroBenchmarksLead) heroBenchmarksLead.hidden = !isBenchmarks;
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
+  if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
   if (isPlatforms) initPlatformsView(true);
+  if (isBenchmarks) void initBenchmarksDocsView();
   if (!skipHashUpdate) updateHash({ view: which });
 }
 
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
 viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
+viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
 
 // ---- Iframe wiring ----
 const params = new URLSearchParams(location.search);
@@ -431,9 +461,10 @@ if (openMetabaseBtn) {
 }
 
 async function initUpdatesCarousel(config: any) {
-  const section = document.querySelector<HTMLElement>('section.updates');
-  const list = document.getElementById('updates-list') as HTMLElement | null;
-  if (!section || !list) return;
+  const section = document.getElementById('updates-section') as HTMLElement | null;
+  const viewport = document.getElementById('updates-viewport') as HTMLElement | null;
+  const track = document.getElementById('updates-track') as HTMLElement | null;
+  if (!section || !viewport || !track) return;
 
   const url = (config && typeof (config as any).updatesUrl === 'string' && String((config as any).updatesUrl).trim())
     ? String((config as any).updatesUrl).trim()
@@ -462,14 +493,13 @@ async function initUpdatesCarousel(config: any) {
 
   if (!normalized.length) return;
 
-  const top = normalized
+  const sorted = normalized
     .slice()
-    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-    .slice(0, 2);
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 
-  list.innerHTML = top.map((u) => {
+  track.innerHTML = sorted.map((u) => {
     const dateLabel = u.date ? formatDateOnly(u.date) : '';
-    const meta = dateLabel ? `<p class="update-card__meta"><span>${escapeHtml(dateLabel)}</span></p>` : '';
+    const meta = dateLabel ? `<p class="update-card__meta">${escapeHtml(dateLabel)}</p>` : '';
     const title = u.title ? `<h4 class="update-card__title">${escapeHtml(u.title)}</h4>` : '';
     const body = u.body ? `<p class="update-card__body">${escapeHtml(u.body)}</p>` : '';
     const link = u.href
@@ -614,7 +644,9 @@ async function applyHashRouting() {
   if (suppressHashHandler) return;
   const h = parseHash();
   const viewParam = String(h.view || 'platforms');
-  const view = (viewParam === 'platforms') ? 'platforms' : 'results';
+  const view = (viewParam === 'platforms')
+    ? 'platforms'
+    : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
   activateView(view, true);
   if (view === 'platforms') {
     if (h.provider && h.device) {

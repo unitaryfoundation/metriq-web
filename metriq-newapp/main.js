@@ -46,6 +46,7 @@ const CONFIG_PATH = "./data/config.json";
 // <-- override with ?src= to bypass the generated Metabase embed URL
 const METABASE_EMBED_JSON = "./data/metabase-embed.json";
 const UPDATES_JSON = "./data/updates.json";
+const DEFAULT_GYM_DOCS_URL = "https://unitaryfoundation.github.io/metriq-gym/benchmarks/overview/#available-benchmarks";
 // ---- Elements ---- (typed for TS)
 const iframe = document.getElementById("embed");
 const skeleton = document.getElementById("skeleton");
@@ -62,10 +63,14 @@ const detailCloseBtn = detailModal?.querySelector('.detail-modal__close') || nul
 // Top-level views
 const viewResultsBtn = document.getElementById('view-results-btn');
 const viewPlatformsBtn = document.getElementById('view-platforms-btn');
+const viewBenchmarksBtn = document.getElementById('view-benchmarks-btn');
 const viewResults = document.getElementById('view-results');
 const viewPlatforms = document.getElementById('view-platforms');
+const viewBenchmarks = document.getElementById('view-benchmarks');
 const heroResultsLead = document.getElementById('hero-results-lead');
 const heroPlatformsLead = document.getElementById('hero-platforms-lead');
+const heroBenchmarksLead = document.getElementById('hero-benchmarks-lead');
+const benchmarksDocsIframe = document.getElementById('benchmarks-docs');
 // No extra filters for Platforms
 // Results sub-tabs
 const tabGraph = document.getElementById("tab-graph");
@@ -92,6 +97,7 @@ let benchmarksPromise;
 let rawBenchmarks = [];
 let platformsPromise;
 let platformsLoaded = false;
+let docsLoaded = false;
 let platformsIndexCache = null;
 let platformScoresCache = null;
 let platformSortKey = 'score';
@@ -345,28 +351,55 @@ function activateTab(which) {
 }
 tabGraph?.addEventListener("click", () => activateTab("graph"));
 tabTable?.addEventListener("click", () => activateTab("table"));
+async function initBenchmarksDocsView() {
+    if (docsLoaded)
+        return;
+    docsLoaded = true;
+    if (!benchmarksDocsIframe)
+        return;
+    try {
+        const config = appConfigCache || await loadAppConfig();
+        const url = (config && typeof config.gymDocsUrl === 'string' && String(config.gymDocsUrl).trim())
+            ? String(config.gymDocsUrl).trim()
+            : DEFAULT_GYM_DOCS_URL;
+        benchmarksDocsIframe.src = url;
+    }
+    catch (err) {
+        benchmarksDocsIframe.src = DEFAULT_GYM_DOCS_URL;
+    }
+}
 function activateView(which, skipHashUpdate = false) {
     const isResults = which === 'results';
     const isPlatforms = which === 'platforms';
+    const isBenchmarks = which === 'benchmarks';
     viewResultsBtn?.classList.toggle('is-active', isResults);
     viewResultsBtn?.setAttribute('aria-selected', String(isResults));
     viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
     viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
+    viewBenchmarksBtn?.classList.toggle('is-active', isBenchmarks);
+    viewBenchmarksBtn?.setAttribute('aria-selected', String(isBenchmarks));
     if (heroResultsLead)
         heroResultsLead.hidden = !isResults;
     if (heroPlatformsLead)
         heroPlatformsLead.hidden = !isPlatforms;
+    if (heroBenchmarksLead)
+        heroBenchmarksLead.hidden = !isBenchmarks;
     if (viewResults)
         viewResults.hidden = !isResults;
     if (viewPlatforms)
         viewPlatforms.hidden = !isPlatforms;
+    if (viewBenchmarks)
+        viewBenchmarks.hidden = !isBenchmarks;
     if (isPlatforms)
         initPlatformsView(true);
+    if (isBenchmarks)
+        void initBenchmarksDocsView();
     if (!skipHashUpdate)
         updateHash({ view: which });
 }
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
 viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
+viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
 // ---- Iframe wiring ----
 const params = new URLSearchParams(location.search);
 const srcParam = params.get("src");
@@ -423,9 +456,10 @@ if (openMetabaseBtn) {
     });
 }
 async function initUpdatesCarousel(config) {
-    const section = document.querySelector('section.updates');
-    const list = document.getElementById('updates-list');
-    if (!section || !list)
+    const section = document.getElementById('updates-section');
+    const viewport = document.getElementById('updates-viewport');
+    const track = document.getElementById('updates-track');
+    if (!section || !viewport || !track)
         return;
     const url = (config && typeof config.updatesUrl === 'string' && String(config.updatesUrl).trim())
         ? String(config.updatesUrl).trim()
@@ -454,13 +488,12 @@ async function initUpdatesCarousel(config) {
         .filter((u) => u.title || u.body);
     if (!normalized.length)
         return;
-    const top = normalized
+    const sorted = normalized
         .slice()
-        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-        .slice(0, 2);
-    list.innerHTML = top.map((u) => {
+        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    track.innerHTML = sorted.map((u) => {
         const dateLabel = u.date ? formatDateOnly(u.date) : '';
-        const meta = dateLabel ? `<p class="update-card__meta"><span>${escapeHtml(dateLabel)}</span></p>` : '';
+        const meta = dateLabel ? `<p class="update-card__meta">${escapeHtml(dateLabel)}</p>` : '';
         const title = u.title ? `<h4 class="update-card__title">${escapeHtml(u.title)}</h4>` : '';
         const body = u.body ? `<p class="update-card__body">${escapeHtml(u.body)}</p>` : '';
         const link = u.href
@@ -613,7 +646,9 @@ async function applyHashRouting() {
         return;
     const h = parseHash();
     const viewParam = String(h.view || 'platforms');
-    const view = (viewParam === 'platforms') ? 'platforms' : 'results';
+    const view = (viewParam === 'platforms')
+        ? 'platforms'
+        : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
     activateView(view, true);
     if (view === 'platforms') {
         if (h.provider && h.device) {

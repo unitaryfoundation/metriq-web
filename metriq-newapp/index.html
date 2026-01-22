@@ -57,6 +57,7 @@
         <header class="tabs__nav" role="tablist">
           <button class="tab is-active" role="tab" aria-selected="true" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
           <button class="tab" role="tab" aria-selected="false" id="view-results-btn" data-target="#view-results">Results</button>
+          <button class="tab" role="tab" aria-selected="false" id="view-benchmarks-btn" data-target="#view-benchmarks">Benchmarks</button>
         </header>
       </section>
 
@@ -67,6 +68,7 @@
             <h1 class="h1">Quantum computing benchmarks</h1>
             <p class="lead" id="hero-results-lead">Explore the latest <strong>metriq-gym</strong> results. Switch between an interactive <strong>Graph</strong> for trends and a <strong>Table</strong> for the raw numbers.</p>
             <p class="lead" id="hero-platforms-lead" hidden>The Metriq score in the leaderboard is a composite score computed from benchmarks in the <strong>metriq-gym</strong> suite.</p>
+            <p class="lead" id="hero-benchmarks-lead" hidden>Browse the <strong>metriq-gym</strong> documentation for benchmark definitions, how to run them, and how to interpret the results.</p>
             
           </div>
           <!-- <div class="hero__badge">Live</div> -->
@@ -99,7 +101,8 @@
                 <div class="chart-actions" aria-label="Chart downloads">
                   <div class="download-menu download-menu--up" id="chart-download">
                     <button type="button" class="btn" id="btn-download-chart" disabled aria-haspopup="menu" aria-expanded="false">
-                      Download plot
+                      <i class="fa-solid fa-download" aria-hidden="true"></i>
+                      Plot
                       <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
                     </button>
                     <div class="download-menu__items" id="chart-download-menu" role="menu" aria-label="Download plot as" hidden>
@@ -138,7 +141,7 @@
               <div id="table-static"></div>
             </div>
             <div class="table-actions">
-              <a class="btn link-benchmarks-json" href="#" download="benchmarks.json">Download Benchmarks JSON</a>
+              <a class="btn link-benchmarks-json" href="#" download="benchmarks.json"><i class="fa-solid fa-download" aria-hidden="true"></i> Benchmarks JSON</a>
             </div>
           </section>
         </div>
@@ -150,21 +153,26 @@
         <div id="platforms-container"></div>
 
         <div class="table-actions">
-          <a class="btn link-platforms-json" href="#" download="platform-index.json">Download Platforms Index JSON</a>
+          <a class="btn link-platforms-json" href="#" download="platform-index.json"><i class="fa-solid fa-download" aria-hidden="true"></i> Platforms Index JSON</a>
         </div>
       </section>
 
-      <!-- Updates -->
-      <section class="updates" aria-labelledby="updates-heading" hidden>
-        <div class="panel__head updates__head">
-          <h3 class="panel__title" id="updates-heading">What's new</h3>
+      <!-- Benchmarks docs view -->
+      <section id="view-benchmarks" hidden>
+        <div class="frame-wrap docs-frame">
+          <iframe id="benchmarks-docs" title="Benchmarks documentation" loading="lazy"></iframe>
         </div>
-        <div class="updates__list" id="updates-list" role="list"></div>
       </section>
 
       <!-- Insights -->
       <section class="insights" aria-labelledby="insights-heading">
         <div class="insights__stack">
+          <article class="insight-card updates" id="updates-section" hidden>
+            <h3 id="updates-heading">What's new</h3>
+            <div class="updates__viewport" id="updates-viewport" role="region" aria-label="What's new" tabindex="0">
+              <div class="updates__track" id="updates-track" role="list"></div>
+            </div>
+          </article>
           <article class="insight-card">
             <h3>FAQ</h3>
             <div class="faq" role="list">
