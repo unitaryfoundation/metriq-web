@@ -39,17 +39,6 @@ jobs:
       - name: Build TypeScript (metriq-newapp)
         run: npm run build:newapp
 
-      - name: Generate Metabase embed token
-        working-directory: metriq-newapp
-        env:
-          METABASE_SECRET_KEY: ${{ secrets.METABASE_SECRET_KEY }}
-          METABASE_QUESTION_ID: ${{ secrets.METABASE_QUESTION_ID }}
-          METABASE_SITE_URL: ${{ secrets.METABASE_SITE_URL }}
-          METABASE_BORDERED: ${{ secrets.METABASE_BORDERED }}
-          METABASE_TITLED: ${{ secrets.METABASE_TITLED }}
-          METABASE_TTL_SECONDS: ${{ secrets.METABASE_TTL_SECONDS }}
-        run: node scripts/generate-metabase-embed.js
-
       - name: Prepare static artifact
         run: |
           rm -rf build

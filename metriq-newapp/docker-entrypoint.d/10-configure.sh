@@ -4,27 +4,6 @@ set -e
 APP_ROOT="/usr/share/nginx/html"
 cd "$APP_ROOT"
 
-# Generate Metabase embed JSON if secrets are present
-if [ -n "$METABASE_SECRET_KEY" ] && [ -n "$METABASE_QUESTION_ID" ]; then
-  echo "[entrypoint] generating Metabase embed URL"
-  METABASE_SECRET_KEY="$METABASE_SECRET_KEY" \
-  METABASE_QUESTION_ID="$METABASE_QUESTION_ID" \
-  METABASE_SITE_URL="${METABASE_SITE_URL:-https://metriq.info/meta}" \
-  METABASE_BORDERED="${METABASE_BORDERED:-true}" \
-  METABASE_TITLED="${METABASE_TITLED:-true}" \
-  METABASE_TTL_SECONDS="${METABASE_TTL_SECONDS:-1209600}" \
-  node scripts/generate-metabase-embed.js || {
-    echo "[entrypoint] failed to generate Metabase embed; continuing with existing file" >&2
-  }
-else
-  echo "[entrypoint] METABASE_SECRET_KEY or METABASE_QUESTION_ID not set; using existing data/metabase-embed.json"
-fi
-
-# Ensure nginx can read the embed config
-if [ -f "$APP_ROOT/data/metabase-embed.json" ]; then
-  chmod 644 "$APP_ROOT/data/metabase-embed.json"
-fi
-
 # Determine data URLs, preferring mounted metriq-data when env is unset.
 CONFIG_FILE="$APP_ROOT/data/config.json"
 if [ -z "$BENCHMARKS_URL" ] && [ -d "$APP_ROOT/metriq-data" ]; then

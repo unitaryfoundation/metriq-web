@@ -1,60 +1,14 @@
-const BENCHMARKS_FALLBACK = [
-  {
-    provider: 'ProviderX',
-    device: 'Helios-1',
-    benchmark: 'Task1',
-    timestamp: '2024-01-05T10:15:00Z',
-    metrics: { accuracy: 72.1, latency_ms: 128 },
-    errors: { accuracy: 1.8, latency_ms: 6 }
-  },
-  {
-    provider: 'ProviderX',
-    device: 'Helios-2',
-    benchmark: 'Task1',
-    timestamp: '2024-01-19T14:20:00Z',
-    metrics: { accuracy: 74.6, latency_ms: 110 },
-    errors: { accuracy: 1.2, latency_ms: 5 }
-  },
-  {
-    provider: 'ProviderY',
-    device: 'Aquila-3',
-    benchmark: 'Task2',
-    timestamp: '2024-02-02T09:05:00Z',
-    metrics: { accuracy: 68.4, energy_kwh: 42.3 },
-    errors: { accuracy: 2.6, energy_kwh: 1.7 }
-  },
-  {
-    provider: 'ProviderY',
-    device: 'Aquila-4',
-    benchmark: 'Task2',
-    timestamp: '2024-03-12T18:45:00Z',
-    metrics: { accuracy: 80.9, energy_kwh: 38.1 },
-    errors: { accuracy: 1.4, energy_kwh: 1.1 }
-  },
-  {
-    provider: 'ProviderZ',
-    device: 'Orion-5',
-    benchmark: 'Task3',
-    timestamp: '2024-03-28T07:30:00Z',
-    metrics: { fidelity: 0.955, shots: 1024 },
-    errors: { fidelity: 0.012, shots: 48 }
-  }
-];
-
 // ---- Config ----
-const DEFAULT_EMBED_URL = "https://example.com/public-view"; 
 const CONFIG_PATH = "./data/config.json";
-// <-- override with ?src= to bypass the generated Metabase embed URL
-const METABASE_EMBED_JSON = "./data/metabase-embed.json";
 const UPDATES_JSON = "./data/updates.json";
 const DEFAULT_GYM_DOCS_URL =
   "https://unitaryfoundation.github.io/metriq-gym/benchmarks/overview/#available-benchmarks";
+const DEFAULT_BENCHMARKS_URL =
+  "https://unitaryfoundation.github.io/metriq-data/benchmark.latest.json";
+const DEFAULT_PLATFORMS_INDEX_URL =
+  "https://unitaryfoundation.github.io/metriq-data/platforms/index.json";
 
 // ---- Elements ---- (typed for TS)
-const iframe = document.getElementById("embed") as HTMLIFrameElement | null;
-const skeleton = document.getElementById("skeleton") as HTMLElement | null;
-const reloadBtn = document.getElementById("btn-reload") as HTMLButtonElement | null;
-const openMetabaseBtn = document.getElementById("btn-open-metabase") as HTMLButtonElement | null;
 const searchInput = document.getElementById("benchmark-search") as HTMLInputElement | null;
 const searchTrigger = document.getElementById("search-trigger") as HTMLButtonElement | null;
 const searchDatalist = document.getElementById("benchmark-options") as HTMLDataListElement | null;
@@ -399,10 +353,6 @@ viewResultsBtn?.addEventListener('click', () => activateView('results'));
 viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
 viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
 
-// ---- Iframe wiring ----
-const params = new URLSearchParams(location.search);
-const srcParam = params.get("src");
-let embedBaseSrc = srcParam || DEFAULT_EMBED_URL;
 let benchmarkPages = [];
 
 type UpdateItem = {
@@ -412,53 +362,6 @@ type UpdateItem = {
   href?: string;
   linkText?: string;
 };
-
-async function resolveMetabaseEmbedUrl() {
-  try {
-    const resp = await fetch(METABASE_EMBED_JSON, { cache: "no-store" });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const url = data?.iframeUrl?.trim?.();
-    return url ? url : null;
-  } catch (err) {
-    console.warn("[embed] failed to load metabase embed:", err);
-    return null;
-  }
-}
-
-function applyEmbedSource(url) {
-  embedBaseSrc = url;
-  if (!iframe) return;
-  if (skeleton) skeleton.style.display = "block";
-  if (iframe) (iframe as HTMLIFrameElement).src = url;
-}
-
-if (iframe) {
-  iframe.addEventListener("load", () => {
-    if (skeleton) skeleton.style.display = "none";
-  });
-}
-
-if (reloadBtn) {
-  reloadBtn.addEventListener("click", () => {
-    if (!embedBaseSrc) return;
-    applyEmbedSource(embedBaseSrc);
-  });
-}
-
-if (openMetabaseBtn) {
-  openMetabaseBtn.addEventListener('click', async () => {
-    try {
-      const config = appConfigCache || await loadAppConfig();
-      const targetUrl = config?.metabaseExploreUrl || config?.metabaseEmbedUrl || embedBaseSrc || DEFAULT_EMBED_URL;
-      if (targetUrl) {
-        window.open(targetUrl, '_blank', 'noopener');
-      }
-    } catch (err) {
-      console.warn('[metabase] unable to open external table:', err);
-    }
-  });
-}
 
 async function initUpdatesCarousel(config: any) {
   const section = document.getElementById('updates-section') as HTMLElement | null;
@@ -572,19 +475,13 @@ async function initUpdatesCarousel(config: any) {
   };
 
   try {
-    const bUrl = (config && (config as any).benchmarksUrl) || './data/benchmarks.json';
+    const bUrl = (config && (config as any).benchmarksUrl) || DEFAULT_BENCHMARKS_URL;
     wireDownload('.link-benchmarks-json', bUrl, 'benchmarks.json');
   } catch {}
   try {
-    const pUrl = (config && (config as any).platformsIndexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
+    const pUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
     wireDownload('.link-platforms-json', pUrl, 'platform-index.json', true);
   } catch {}
-  let initial = srcParam;
-  if (!initial) {
-    const generated = await resolveMetabaseEmbedUrl();
-    initial = generated || config.metabaseEmbedUrl || DEFAULT_EMBED_URL;
-  }
-  applyEmbedSource(initial);
 })();
 
 // Set an initial view without mutating the URL; hash routing below will apply deep links.
@@ -664,27 +561,21 @@ async function loadBenchmarks() {
   if (!benchmarksPromise) {
     benchmarksPromise = (async () => {
       const config = await loadAppConfig();
-      const url = config.benchmarksUrl || './data/benchmarks.json';
-      try {
-        const requestUrl = appendCacheBust(url);
-        const resp = await fetch(requestUrl, { cache: 'no-store' });
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status} loading ${url}`);
-        }
-        const json = await resp.json();
-        if (Array.isArray(json)) {
-          // Detect metriq-data ETL shape and adapt
-          const looksLikeEtl = json.length > 0 && typeof json[0] === 'object' && json[0] !== null && (
-            'results' in json[0] || 'params' in json[0] || 'job_type' in json[0]
-          );
-          const rows = looksLikeEtl ? json.map(adaptMetriqEtlRow) : json;
-          return rows.map(normalizeRun);
-        }
-        console.warn('[chart] data/benchmarks.json did not return an array, using fallback.');
-      } catch (fetchErr) {
-        console.warn('[chart] fetch failed, using inline fallback dataset:', fetchErr);
+      const url = config.benchmarksUrl || DEFAULT_BENCHMARKS_URL;
+      const requestUrl = appendCacheBust(url);
+      const resp = await fetch(requestUrl, { cache: 'no-store' });
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status} loading ${url}`);
       }
-      return BENCHMARKS_FALLBACK.map(normalizeRun);
+      const json = await resp.json();
+      if (!Array.isArray(json)) {
+        throw new Error(`Benchmark data at ${url} is not a JSON array`);
+      }
+      const looksLikeEtl = json.length > 0 && typeof json[0] === 'object' && json[0] !== null && (
+        'results' in json[0] || 'params' in json[0] || 'job_type' in json[0]
+      );
+      const rows = looksLikeEtl ? json.map(adaptMetriqEtlRow) : json;
+      return rows.map(normalizeRun);
     })();
   }
   return benchmarksPromise;
@@ -694,8 +585,7 @@ async function loadPlatformsIndex() {
   if (!platformsPromise) {
     platformsPromise = (async () => {
       const config = await loadAppConfig();
-      const defaultUrl = 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
-      const url = (config && (config as any).platformsIndexUrl) || defaultUrl;
+      const url = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
       try {
         const resp = await fetch(appendCacheBust(url), { cache: 'no-store' });
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
@@ -721,8 +611,7 @@ async function loadPlatformScores() {
   const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
 
   const config = await loadAppConfig();
-  const defaultUrl = 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
-  const indexUrl = (config && (config as any).platformsIndexUrl) || defaultUrl;
+  const indexUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
   const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
 
   await Promise.all(platforms.map(async (p: any) => {
@@ -763,7 +652,7 @@ async function showPlatformDetailPage(provider: string, device: string) {
   container.innerHTML = '<div class="meta">Loading platform…</div>';
   try {
     const config = await loadAppConfig();
-    const indexUrl = (config && (config as any).platformsIndexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms/index.json';
+    const indexUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
     const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
     const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
     const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });

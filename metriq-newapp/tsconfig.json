@@ -13,8 +13,7 @@
     "rootDir": "."
   },
   "include": [
-    "main.ts",
-    "scripts/**/*.ts"
+    "main.ts"
   ],
   "exclude": ["node_modules", "**/*.test.ts"]
 }

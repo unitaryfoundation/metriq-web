@@ -1,9 +1,8 @@
-# Multi-purpose image: serves the metriq-newapp static site via nginx
-# and (optionally) regenerates the Metabase embed token at container start.
+# Multi-purpose image: serves the metriq-newapp static site via nginx.
 
 FROM nginx:1.25-alpine
 
-# Install Node.js so we can run the embed generator script if secrets are provided
+# Install Node.js so we can compile TypeScript and apply runtime config overrides
 RUN apk add --no-cache nodejs npm
 
 WORKDIR /usr/share/nginx/html
@@ -11,8 +10,8 @@ WORKDIR /usr/share/nginx/html
 # Copy application files
 COPY ./ /usr/share/nginx/html/
 
-# Install runtime dependency and TypeScript, then compile TS → JS
-RUN npm install --no-save jsonwebtoken typescript @types/node \
+# Install TypeScript, then compile TS → JS
+RUN npm install --no-save typescript @types/node \
  && npx tsc -p . \
  && npm cache clean --force
 
