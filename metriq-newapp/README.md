@@ -2,6 +2,37 @@
 
 This directory contains the standalone benchmarks UI. It can be served via an nginx server or run as a container.
 
+The shipped entrypoint is `main.js`, which is generated from the versioned `main.ts` (and is git-ignored).
+
+## Local development (watch + reload)
+
+Run a TypeScript watcher and a live-reloading static server in two terminals:
+
+```bash
+# Terminal 1: compile TypeScript on save
+cd metriq-web
+npx tsc -p metriq-newapp --watch --preserveWatchOutput
+```
+
+```bash
+# Terminal 2: serve the static site and auto-reload when main.js changes
+cd metriq-web
+npx live-server metriq-newapp --port=8080
+```
+
+Then open `http://localhost:8080`.
+
+### Debugging TypeScript via sourcemaps
+
+`tsconfig.json` defaults to `"sourceMap": false` for the shipped bundle, but you can enable sourcemaps for local debugging by passing flags to `tsc`:
+
+```bash
+cd metriq-web
+npx tsc -p metriq-newapp --watch --sourceMap --inlineSources --preserveWatchOutput
+```
+
+In Chrome DevTools, ensure “Enable JavaScript source maps” is on; you should be able to set breakpoints in `main.ts`.
+
 ## Docker workflow
 
 ```bash
