@@ -790,52 +790,6 @@ async function initPlatformsView(forceRender = false) {
       deviceSeriesCache = computeDeviceSeries(Array.isArray(runs) ? runs : []);
     } catch {}
     renderPlatformsTable();
-    platformsLoaded = true;
-    return;
-    if (!platforms.length) {
-      container.innerHTML = '<div class="meta">No platforms found.</div>';
-      platformsLoaded = true;
-      return;
-    }
-    const fragment = document.createDocumentFragment();
-    const table = document.createElement('table');
-    table.style.width = '100%';
-    table.style.borderCollapse = 'collapse';
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Cloud Provider</th>
-          <th style=\"text-align:left;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Device</th>
-          <th style=\"text-align:right;padding:8px;border-bottom:1px solid rgba(0,0,0,.08)\">Last seen</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
-    const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
-    platforms.sort((a: any, b: any) => {
-      const p = String(a.provider||'').localeCompare(String(b.provider||''));
-      if (p !== 0) return p;
-      return String(a.device||'').localeCompare(String(b.device||''));
-    }).forEach((p: any) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\">${escapeHtml(p.provider||'')}</td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05)\"><button type=\"button\" class=\"btn\" data-provider=\"${escapeAttr(p.provider)}\" data-device=\"${escapeAttr(p.device)}\">${escapeHtml(p.device||'')}</button></td>
-        <td style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,.05);text-align:right\">${escapeHtml(p.last_seen||'')}</td>`;
-      tbody.appendChild(tr);
-    });
-    fragment.appendChild(table);
-    container.innerHTML = '';
-    container.appendChild(fragment);
-    container.addEventListener('click', (ev) => {
-      const target = ev.target as HTMLElement;
-      const btn = (target && target.closest('button[data-provider][data-device]')) as HTMLButtonElement | null;
-      if (btn) {
-        const provider = btn.getAttribute('data-provider') || '';
-        const device = btn.getAttribute('data-device') || '';
-        navigateToPlatform(provider, device);
-      }
-    });
   } catch (err) {
     console.error('[platforms] init failed:', err);
     container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load platforms.</div>';

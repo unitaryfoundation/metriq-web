@@ -1,6 +1,6 @@
 # Metriq New App
 
-This directory contains the standalone benchmarks UI. It can be served via nginx or run as a container.
+This directory contains the standalone benchmarks UI. It can be served via an nginx server or run as a container.
 
 ## Docker workflow
 

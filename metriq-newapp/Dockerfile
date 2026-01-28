@@ -1,6 +1,6 @@
 # Multi-purpose image: serves the metriq-newapp static site via nginx.
 
-FROM nginx:1.25-alpine
+FROM nginx:1.28-alpine
 
 # Install Node.js so we can compile TypeScript and apply runtime config overrides
 RUN apk add --no-cache nodejs npm
