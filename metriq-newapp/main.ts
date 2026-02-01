@@ -65,10 +65,10 @@ let platformsLoaded = false;
 let docsLoaded = false;
 let platformsIndexCache: any[] | null = null;
 let platformScoresCache: Map<string, number> | null = null;
-let platformSortKey: 'score' | 'provider' | 'device' | 'last_seen' = 'score';
+let platformQubitsCache: Map<string, number> | null = null;
+let platformSortKey: 'score' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
 let platformSortDir: 'asc' | 'desc' = 'desc';
-let platformFilterText = '';
-let platformFilterProvider = 'all';
+let platformProviderFilter = '';
 let deviceSeriesCache: Map<string, number[]> | null = null;
 let suppressHashHandler = false;
 let chartView = null;
@@ -344,8 +344,12 @@ function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate 
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
   if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
-  if (isPlatforms) initPlatformsView(true);
-  if (isBenchmarks) void initBenchmarksDocsView();
+  // When hash routing is driving view changes, it will load the relevant sub-view
+  // (platform list vs platform detail vs help page). Avoid racing those renders here.
+  if (!skipHashUpdate) {
+    if (isPlatforms) initPlatformsView(true);
+    if (isBenchmarks) void initBenchmarksDocsView();
+  }
   if (!skipHashUpdate) updateHash({ view: which });
 }
 
@@ -537,6 +541,32 @@ function navigateToPlatform(provider: string, device: string) {
   }, 0);
 }
 
+function renderMetriqScoreHelp() {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="detail-page" style="display:flex;flex-direction:column;gap:18px;padding-top:4px;">
+      <div class="meta"><a href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <h3 style="margin:0;">Metriq Score</h3>
+        <div class="meta">What the “Metriq Score” column means</div>
+      </div>
+      <div style="background:#fff;border:1px solid #dbeafe;border-radius:14px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06);">
+        <p style="margin:0 0 10px;line-height:1.55;">
+          Metriq Score is an aggregate score computed from benchmark results. It is intended as a single number that summarizes device performance.
+        </p>
+        <p style="margin:0 0 10px;line-height:1.55;">
+          Click any score cell in the Platforms table to view a breakdown (series, value, and component weights) for that device.
+        </p>
+        <p style="margin:0;line-height:1.55;">
+          See the Metriq Gym docs for more context:
+          <a href="${DEFAULT_GYM_DOCS_URL}" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:none;font-weight:600;">docs</a>.
+        </p>
+      </div>
+    </div>
+  `.trim();
+}
+
 async function applyHashRouting() {
   if (suppressHashHandler) return;
   const h = parseHash();
@@ -546,6 +576,10 @@ async function applyHashRouting() {
     : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
   activateView(view, true);
   if (view === 'platforms') {
+    if (String((h as any).help || '') === 'metriq-score') {
+      renderMetriqScoreHelp();
+      return;
+    }
     if (h.provider && h.device) {
       await showPlatformDetailPage(h.provider, h.device);
       return;
@@ -603,9 +637,37 @@ async function loadPlatformsIndex() {
   return platformsPromise;
 }
 
+function extractPlatformNumQubits(detail: any): number | null {
+  const md = detail?.current?.device_metadata ?? detail?.device_metadata ?? null;
+  const candidates = [
+    md?.num_qubits,
+    md?.max_qubits,
+    md?.qubits,
+    md?.width,
+    detail?.num_qubits,
+    detail?.numQubits,
+  ];
+  for (const c of candidates) {
+    const n = parseNumQubits(c);
+    if (n !== null) return n;
+  }
+  const comps = detail?.metriq_score?.components;
+  if (comps && typeof comps === 'object') {
+    const vals = Object.values(comps as Record<string, any>);
+    let max: number | null = null;
+    for (const v of vals) {
+      const n = parseNumQubits(v?.num_qubits ?? v?.max_qubits ?? v?.qubits ?? v?.width);
+      if (n !== null) max = max === null ? n : Math.max(max, n);
+    }
+    return max;
+  }
+  return null;
+}
+
 async function loadPlatformScores() {
-  if (platformScoresCache) return platformScoresCache;
-  platformScoresCache = new Map();
+  if (platformScoresCache && platformQubitsCache) return platformScoresCache;
+  if (!platformScoresCache) platformScoresCache = new Map();
+  if (!platformQubitsCache) platformQubitsCache = new Map();
 
   const data = await loadPlatformsIndex();
   const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
@@ -618,6 +680,7 @@ async function loadPlatformScores() {
     const provider = String(p.provider || '');
     const device = String(p.device || '');
     if (!provider || !device) return;
+    const key = getDeviceKey(provider, device);
     const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
     try {
       const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
@@ -626,7 +689,11 @@ async function loadPlatformScores() {
       const ms = json && json.metriq_score;
       const val = ms && typeof ms.value === 'number' ? Number(ms.value) : null;
       if (val !== null && Number.isFinite(val)) {
-        platformScoresCache!.set(getDeviceKey(provider, device), val);
+        platformScoresCache!.set(key, val);
+      }
+      const nq = extractPlatformNumQubits(json);
+      if (nq !== null && Number.isFinite(nq)) {
+        platformQubitsCache!.set(key, nq);
       }
     } catch {
       // ignore errors
@@ -841,148 +908,333 @@ function renderSparkline(values: number[], width=100, height=24, stroke='#2563eb
   return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${base}${polyline}</svg>`;
 }
 
+let globalTooltipHideTimer: any = null;
+
+function hideGlobalTooltipSoon(ms = 180) {
+  const tip = document.getElementById('global-tooltip') as HTMLDivElement | null;
+  if (!tip) return;
+  clearTimeout(globalTooltipHideTimer);
+  globalTooltipHideTimer = setTimeout(() => { tip.hidden = true; }, ms);
+}
+
+function cancelHideGlobalTooltip() {
+  clearTimeout(globalTooltipHideTimer);
+}
+
+function ensureGlobalTooltip() {
+  let tip = document.getElementById('global-tooltip') as HTMLDivElement | null;
+  if (tip) return tip;
+  tip = document.createElement('div');
+  tip.id = 'global-tooltip';
+  tip.className = 'global-tooltip';
+  tip.hidden = true;
+  tip.setAttribute('role', 'tooltip');
+  tip.addEventListener('mouseenter', cancelHideGlobalTooltip);
+  tip.addEventListener('mouseleave', () => hideGlobalTooltipSoon());
+  tip.addEventListener('click', (ev) => {
+    const target = ev.target as HTMLElement | null;
+    const link = target && target.closest ? (target.closest('a') as HTMLAnchorElement | null) : null;
+    if (link) {
+      // Allow navigation, but hide tooltip immediately.
+      tip!.hidden = true;
+    }
+  });
+  document.body.appendChild(tip);
+
+  const hide = () => { tip!.hidden = true; };
+  window.addEventListener('scroll', hide, { passive: true });
+  window.addEventListener('resize', hide);
+  document.addEventListener('keydown', (ev) => { if (!tip!.hidden && ev.key === 'Escape') hide(); });
+
+  return tip;
+}
+
+function showGlobalTooltip(anchorEl: HTMLElement, html: string) {
+  const tip = ensureGlobalTooltip();
+  cancelHideGlobalTooltip();
+  tip.innerHTML = html;
+  tip.hidden = false;
+
+  // Position after content is set.
+  const anchor = anchorEl.getBoundingClientRect();
+  const tipRect = tip.getBoundingClientRect();
+  const pad = 8;
+
+  let left = anchor.left;
+  let top = anchor.bottom + 8;
+
+  // Clamp within viewport.
+  left = Math.max(pad, Math.min(left, window.innerWidth - tipRect.width - pad));
+
+  // If it would go below viewport, show above.
+  if (top + tipRect.height + pad > window.innerHeight) {
+    top = Math.max(pad, anchor.top - tipRect.height - 8);
+  }
+
+  tip.style.left = `${left}px`;
+  tip.style.top = `${top}px`;
+}
+
+let globalPopoverOutsideHandlerBound = false;
+let globalPopoverCloseFn: (() => void) | null = null;
+
+function ensureGlobalPopover() {
+  let pop = document.getElementById('global-popover') as HTMLDivElement | null;
+  if (pop) return pop;
+  pop = document.createElement('div');
+  pop.id = 'global-popover';
+  pop.className = 'global-popover';
+  pop.hidden = true;
+  pop.addEventListener('click', (ev) => ev.stopPropagation());
+  pop.addEventListener('mousedown', (ev) => ev.stopPropagation());
+  document.body.appendChild(pop);
+
+  if (!globalPopoverOutsideHandlerBound) {
+    globalPopoverOutsideHandlerBound = true;
+    document.addEventListener('mousedown', () => { globalPopoverCloseFn?.(); });
+    document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') globalPopoverCloseFn?.(); });
+  }
+  return pop;
+}
+
+function showGlobalPopover(anchorEl: HTMLElement, html: string) {
+  const pop = ensureGlobalPopover();
+  pop.innerHTML = html;
+  pop.hidden = false;
+
+  const anchor = anchorEl.getBoundingClientRect();
+  const popRect = pop.getBoundingClientRect();
+  const pad = 10;
+
+  let left = anchor.left;
+  let top = anchor.bottom + 8;
+
+  left = Math.max(pad, Math.min(left, window.innerWidth - popRect.width - pad));
+  if (top + popRect.height + pad > window.innerHeight) {
+    top = Math.max(pad, anchor.top - popRect.height - 8);
+  }
+
+  pop.style.left = `${left}px`;
+  pop.style.top = `${top}px`;
+}
+
+function closeGlobalPopover() {
+  const pop = document.getElementById('global-popover') as HTMLDivElement | null;
+  if (pop) pop.hidden = true;
+  globalPopoverCloseFn = null;
+}
+
+function ensurePlatformsHeaderTooltipsBound(table: HTMLTableElement) {
+  const tipHtmlFor = (which: string) => {
+    if (which === 'platforms-activity') {
+      return `Runs per week over the last 12 weeks (newest week on the right).`;
+    }
+    if (which === 'platforms-score') {
+      return `Aggregate score for the device. Click a score cell to see the breakdown. <a href="#view=platforms&help=metriq-score">Learn more</a>`;
+    }
+    return '';
+  };
+
+  const bindHeaderTip = (el: HTMLElement) => {
+    if ((el as any).dataset.tipBound === '1') return;
+    const which = el.getAttribute('data-tip') || '';
+    const html = tipHtmlFor(which);
+    if (!html) return;
+    const show = () => showGlobalTooltip(el, html);
+    const hide = () => hideGlobalTooltipSoon();
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('mouseleave', hide);
+    el.addEventListener('mousemove', cancelHideGlobalTooltip);
+    el.addEventListener('focus', show);
+    el.addEventListener('blur', hide);
+    (el as any).dataset.tipBound = '1';
+  };
+
+  const tipEls = table.querySelectorAll<HTMLElement>('.th-help[data-tip]');
+  tipEls.forEach(bindHeaderTip);
+}
+
+function renderPlatformsProviderHeaderHtml() {
+  const has = !!(platformProviderFilter || '').trim();
+  return `
+    <button type="button" class="th-filter-btn${has ? ' is-active' : ''}" id="platform-provider-filter-btn" title="Filter by cloud provider">
+      <span class="th-filter-btn__inner">
+        <i class="fa-solid fa-filter" aria-hidden="true"></i>
+        <span class="th-filter-label">Provider</span>
+      </span>
+    </button>
+  `.trim();
+}
+
+function ensurePlatformsProviderFilterBound(table: HTMLTableElement) {
+  const btn = table.querySelector('#platform-provider-filter-btn') as HTMLButtonElement | null;
+  if (btn && !(btn as any).dataset.bound) {
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const existing = document.getElementById('global-popover') as HTMLDivElement | null;
+      if (existing && !existing.hidden && existing.dataset.anchorId === btn.id) {
+        closeGlobalPopover();
+        return;
+      }
+
+      const providers = Array.from(new Set(
+        (Array.isArray(platformsIndexCache) ? platformsIndexCache : [])
+          .map((p: any) => String(p?.provider || '').trim())
+          .filter((s: string) => !!s),
+      )).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+      const current = platformProviderFilter || '';
+      const currentLower = current.trim().toLowerCase();
+      const currentExact = providers.find((p) => p.toLowerCase() === currentLower) || '';
+      const optionsHtml = [
+        `<button type="button" class="popover-option${currentExact ? '' : ' is-active'}" data-provider="">All providers</button>`,
+        ...providers.map((p) => (
+          `<button type="button" class="popover-option${p === currentExact ? ' is-active' : ''}" data-provider="${escapeAttr(p)}">${escapeHtml(p)}</button>`
+        )),
+      ].join('');
+
+      showGlobalPopover(btn, `
+        <div class="popover-title">Provider</div>
+        <div class="popover-options"${providers.length ? '' : ' aria-disabled="true"'}>
+          ${optionsHtml}
+        </div>
+        <div class="popover-hint">Tip: click again to close.</div>
+      `.trim());
+
+      const pop = document.getElementById('global-popover') as HTMLDivElement | null;
+      if (pop) pop.dataset.anchorId = btn.id;
+
+      globalPopoverCloseFn = () => { closeGlobalPopover(); };
+
+      const optionBtns = pop?.querySelectorAll<HTMLButtonElement>('button.popover-option[data-provider]');
+      optionBtns?.forEach((b) => {
+        b.addEventListener('click', (e) => {
+          e.preventDefault();
+          platformProviderFilter = b.getAttribute('data-provider') || '';
+          renderPlatformsTable();
+          closeGlobalPopover();
+        });
+      });
+    });
+    (btn as any).dataset.bound = '1';
+  }
+}
+
 function renderPlatformsTable() {
   const container = document.getElementById('platforms-container');
   if (!container) return;
+  // Legacy controls header (search/select) is no longer used.
+  const legacyControls = document.getElementById('platform-controls');
+  if (legacyControls) legacyControls.remove();
   const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache.slice() : [];
-  const providers = Array.from(new Set(platforms.map((p: any) => String(p.provider || '')))).sort();
 
-  let controls = document.getElementById('platform-controls') as HTMLDivElement | null;
   let wrap = document.getElementById('platforms-table-wrap') as HTMLDivElement | null;
   let table = wrap ? (wrap.querySelector('table') as HTMLTableElement | null) : null;
   let tbody = table ? (table.querySelector('tbody') as HTMLTableSectionElement | null) : null;
 
-  if (!controls || !wrap || !table || !tbody) {
-    container.innerHTML = '';
-    controls = document.createElement('div');
-    controls.id = 'platform-controls';
-    controls.className = 'smart-controls';
-    controls.innerHTML = `
-      <label class="smart-field">
-        <span>Search</span>
-        <input id="platform-q" type="search" placeholder="Search cloud provider or device" autocomplete="off" />
-      </label>
-      <label class="smart-field">
-        <span>Cloud Provider</span>
-        <select id="platform-provider"><option value="all">All</option></select>
-      </label>
-      <button type="button" class="btn" id="platform-reset">Reset</button>
-    `;
+		  if (!wrap || !table || !tbody) {
+		    container.innerHTML = '';
+		    wrap = document.createElement('div');
+		    wrap.id = 'platforms-table-wrap';
+		    table = document.createElement('table');
+		    table.className = 'smart-table';
+		    table.innerHTML = `
+		      <colgroup>
+		        <col style="width: 220px;" />
+		        <col style="width: 70px;" />
+		        <col style="width: 150px;" />
+		        <col />
+		        <col style="width: 130px;" />
+		        <col style="width: 200px;" />
+		      </colgroup>
+		      <thead>
+		        <tr>
+		          <th data-col="device" data-label="Device" class="sortable">Device</th>
+		          <th data-col="num_qubits" data-label="Qubits" class="sortable">Qubits</th>
+		          <th data-col="provider" data-label="Provider" class="sortable">${renderPlatformsProviderHeaderHtml()}</th>
+		          <th data-col="score" data-label="Metriq Score" class="sortable num">
+		            <span class="th-help" tabindex="0" data-tip="platforms-score">Metriq Score</span>
+		          </th>
+		          <th data-col="last_seen" data-label="Last Updated" class="sortable num">Last Updated</th>
+		          <th data-label="Recent Activity" class="activity-col">
+		            <span class="th-help" tabindex="0" data-tip="platforms-activity">Recent Activity</span>
+		          </th>
+		        </tr>
+		      </thead>
+	      <tbody></tbody>`;
+	    tbody = table.querySelector('tbody') as HTMLTableSectionElement;
+	    wrap.appendChild(table);
+	    container.appendChild(wrap);
 
-    wrap = document.createElement('div');
-    wrap.id = 'platforms-table-wrap';
-    table = document.createElement('table');
-    table.className = 'smart-table';
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th data-col="provider" data-label="Cloud Provider" class="sortable">Cloud Provider</th>
-          <th data-col="device" data-label="Device" class="sortable">Device</th>
-          <th data-col="score" data-label="Metriq Score" class="sortable num">Metriq Score</th>
-          <th data-col="last_seen" data-label="Last updated" class="sortable num">Last updated</th>
-          <th data-label="Activity" class="activity-col">Activity</th>
-        </tr>
-      </thead>
-      <tbody></tbody>`;
-    tbody = table.querySelector('tbody') as HTMLTableSectionElement;
-    wrap.appendChild(table);
-    container.appendChild(controls);
-    container.appendChild(wrap);
+		    ensurePlatformsHeaderTooltipsBound(table);
+		    ensurePlatformsProviderFilterBound(table);
 
-    const qInput = controls.querySelector('#platform-q') as HTMLInputElement | null;
-    const provSel = controls.querySelector('#platform-provider') as HTMLSelectElement | null;
-    const resetBtn = controls.querySelector('#platform-reset') as HTMLButtonElement | null;
-    let qTimer: any;
-    if (qInput) {
-      qInput.addEventListener('input', () => {
-        clearTimeout(qTimer);
-        qTimer = setTimeout(() => {
-          platformFilterText = qInput.value || '';
-          renderPlatformsTable();
-        }, 150);
-      });
-    }
-    if (provSel) {
-      provSel.addEventListener('change', () => {
-        platformFilterProvider = provSel.value || 'all';
-        renderPlatformsTable();
-      });
-    }
-    if (resetBtn) {
-      resetBtn.addEventListener('click', () => {
-        platformFilterText = '';
-        platformFilterProvider = 'all';
-        platformSortKey = 'score';
-        platformSortDir = 'desc';
-        renderPlatformsTable();
-      });
-    }
+			    const headCellsInit = table.querySelectorAll<HTMLTableCellElement>('thead th[data-col]');
+			    headCellsInit.forEach((th) => {
+			      th.style.cursor = 'pointer';
+			      th.addEventListener('click', (ev) => {
+		        const clickCol = String(th.getAttribute('data-col')) as typeof platformSortKey;
+		        if (platformSortKey === clickCol) {
+		          platformSortDir = platformSortDir === 'asc' ? 'desc' : 'asc';
+			        } else {
+			          platformSortKey = clickCol;
+		          platformSortDir = (clickCol === 'device') ? 'asc' : 'desc';
+		        }
+	        renderPlatformsTable();
+	      });
+	    });
+	  }
 
-    const headCellsInit = table.querySelectorAll<HTMLTableCellElement>('thead th[data-col]');
-    headCellsInit.forEach((th) => {
-      th.style.cursor = 'pointer';
-      th.addEventListener('click', () => {
-        const clickCol = String(th.getAttribute('data-col')) as typeof platformSortKey;
-        if (platformSortKey === clickCol) {
-          platformSortDir = platformSortDir === 'asc' ? 'desc' : 'asc';
-        } else {
-          platformSortKey = clickCol;
-          platformSortDir = (clickCol === 'provider' || clickCol === 'device') ? 'asc' : 'desc';
-        }
-        renderPlatformsTable();
-      });
-    });
-  }
+	  // Provider filter header (created once above) is overwritten by sort indicators; restore and bind each render.
+	  const providerTh = table!.querySelector('thead th[data-col="provider"]') as HTMLTableCellElement | null;
+	  if (providerTh) providerTh.innerHTML = renderPlatformsProviderHeaderHtml();
+	  ensurePlatformsProviderFilterBound(table!);
 
-  const qInput = controls!.querySelector('#platform-q') as HTMLInputElement | null;
-  const provSel = controls!.querySelector('#platform-provider') as HTMLSelectElement | null;
-  if (qInput) qInput.value = platformFilterText;
-  if (provSel) {
-    provSel.innerHTML = `<option value="all">All</option>` + providers.map(p => `<option value="${escapeAttr(p)}"${platformFilterProvider===p?' selected':''}>${escapeHtml(p)}</option>`).join('');
-    if (platformFilterProvider === 'all') provSel.value = 'all';
-    else if (providers.includes(platformFilterProvider)) provSel.value = platformFilterProvider;
-  }
+	  const providerTerm = (platformProviderFilter || '').toLowerCase().trim();
+	  const filtered = platforms.filter((p: any) => {
+	    if (providerTerm) {
+	      const prov = String(p.provider || '').toLowerCase();
+	      if (prov !== providerTerm) return false;
+	    }
+	    return true;
+	  });
 
-  const term = (platformFilterText || '').toLowerCase();
-  const filtered = platforms.filter((p: any) => {
-    if (platformFilterProvider !== 'all' && String(p.provider || '') !== platformFilterProvider) return false;
-    if (term) {
-      const prov = String(p.provider || '').toLowerCase();
-      const dev = String(p.device || '').toLowerCase();
-      if (!prov.includes(term) && !dev.includes(term)) return false;
-    }
-    return true;
-  });
+	  filtered.sort((a: any, b: any) => {
+	    const keyA = getDeviceKey(String(a.provider||''), String(a.device||''));
+	    const keyB = getDeviceKey(String(b.provider||''), String(b.device||''));
+	    const sa = platformScoresCache && platformScoresCache.get(keyA);
+	    const sb = platformScoresCache && platformScoresCache.get(keyB);
+	    const qa = platformQubitsCache && platformQubitsCache.get(keyA);
+	    const qb = platformQubitsCache && platformQubitsCache.get(keyB);
+	    const dir = platformSortDir === 'asc' ? 1 : -1;
 
-  filtered.sort((a: any, b: any) => {
-    const keyA = getDeviceKey(String(a.provider||''), String(a.device||''));
-    const keyB = getDeviceKey(String(b.provider||''), String(b.device||''));
-    const sa = platformScoresCache && platformScoresCache.get(keyA);
-    const sb = platformScoresCache && platformScoresCache.get(keyB);
-    const dir = platformSortDir === 'asc' ? 1 : -1;
+	    if (platformSortKey === 'score') {
+	      const va = sa ?? Number.NEGATIVE_INFINITY;
+	      const vb = sb ?? Number.NEGATIVE_INFINITY;
+	      if (va !== vb) return (va < vb ? -1 : 1) * dir;
+	    } else if (platformSortKey === 'num_qubits') {
+	      const va = qa ?? Number.NEGATIVE_INFINITY;
+	      const vb = qb ?? Number.NEGATIVE_INFINITY;
+	      if (va !== vb) return (va < vb ? -1 : 1) * dir;
+	    } else if (platformSortKey === 'last_seen') {
+	      const ta = Number(new Date(a.last_seen || 0));
+	      const tb = Number(new Date(b.last_seen || 0));
+	      if (ta !== tb) return (ta < tb ? -1 : 1) * dir;
+	    } else if (platformSortKey === 'provider') {
+	      const pa = String(a.provider||'');
+	      const pb = String(b.provider||'');
+	      if (pa !== pb) return pa.localeCompare(pb) * dir;
+	    } else if (platformSortKey === 'device') {
+	      const da = String(a.device||'');
+	      const db = String(b.device||'');
+	      if (da !== db) return da.localeCompare(db) * dir;
+	    }
 
-    if (platformSortKey === 'score') {
-      const va = sa ?? Number.NEGATIVE_INFINITY;
-      const vb = sb ?? Number.NEGATIVE_INFINITY;
-      if (va !== vb) return (va < vb ? -1 : 1) * dir;
-    } else if (platformSortKey === 'last_seen') {
-      const ta = Number(new Date(a.last_seen || 0));
-      const tb = Number(new Date(b.last_seen || 0));
-      if (ta !== tb) return (ta < tb ? -1 : 1) * dir;
-    } else if (platformSortKey === 'provider') {
-      const pa = String(a.provider||'');
-      const pb = String(b.provider||'');
-      if (pa !== pb) return pa.localeCompare(pb) * dir;
-    } else if (platformSortKey === 'device') {
-      const da = String(a.device||'');
-      const db = String(b.device||'');
-      if (da !== db) return da.localeCompare(db) * dir;
-    }
-
-    const p = String(a.provider||'').localeCompare(String(b.provider||''));
-    if (p !== 0) return p;
-    return String(a.device||'').localeCompare(String(b.device||''));
-  });
+	    const p = String(a.provider||'').localeCompare(String(b.provider||''));
+	    if (p !== 0) return p;
+	    return String(a.device||'').localeCompare(String(b.device||''));
+	  });
 
   if (!tbody) return;
   const maxScore = filtered.reduce((max: number, p: any) => {
@@ -992,29 +1244,31 @@ function renderPlatformsTable() {
     return v > max ? v : max;
   }, Number.NEGATIVE_INFINITY);
 
-  const rows: string[] = [];
-  filtered.forEach((p: any) => {
-    const key = getDeviceKey(String(p.provider||''), String(p.device||''));
-    const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
-    const spark = series.length ? renderSparkline(series) : '';
-    const href = `#view=platforms&provider=${encodeURIComponent(String(p.provider||''))}&device=${encodeURIComponent(String(p.device||''))}`;
-    const isBaseline = baselineDevice && String(p.device||'') === baselineDevice;
-    const deviceLabel = `${escapeHtml(p.device||'')}${isBaseline ? ' <span class="baseline-badge">Baseline</span>' : ''}`;
-    const scoreVal = platformScoresCache && platformScoresCache.get(key);
-    const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
-    const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
-      ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
-      : 0;
-    const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
-    rows.push(`
-      <tr>
-        <td>${escapeHtml(p.provider||'')}</td>
-        <td><a href="${href}">${deviceLabel}</a></td>
-        <td class="num metriq-score" data-provider="${escapeAttr(p.provider||'')}" data-device="${escapeAttr(p.device||'')}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
-        <td class="num">${escapeHtml(lastTs||'')}</td>
-        <td class="activity-col">${spark}</td>
-      </tr>`);
-  });
+		  const rows: string[] = [];
+			  filtered.forEach((p: any) => {
+		    const key = getDeviceKey(String(p.provider||''), String(p.device||''));
+		    const numQubits = platformQubitsCache && platformQubitsCache.get(key);
+		    const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
+		    const spark = series.length ? renderSparkline(series) : '';
+		    const href = `#view=platforms&provider=${encodeURIComponent(String(p.provider||''))}&device=${encodeURIComponent(String(p.device||''))}`;
+		    const isBaseline = baselineDevice && String(p.device||'') === baselineDevice;
+		    const deviceLabel = `${escapeHtml(p.device||'')}${isBaseline ? ' <span class="baseline-badge">Baseline</span>' : ''}`;
+		    const scoreVal = platformScoresCache && platformScoresCache.get(key);
+		    const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
+		    const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
+		      ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
+		      : 0;
+		    const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
+		      rows.push(`
+			      <tr>
+			        <td><a href="${href}">${deviceLabel}</a></td>
+			        <td>${numQubits !== undefined && numQubits !== null ? escapeHtml(String(numQubits)) : '—'}</td>
+			        <td title="${escapeAttr(p.provider||'')}">${escapeHtml(p.provider||'')}</td>
+			        <td class="num metriq-score" data-provider="${escapeAttr(p.provider||'')}" data-device="${escapeAttr(p.device||'')}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
+			        <td class="num">${escapeHtml(lastTs||'')}</td>
+			        <td class="activity-col">${spark}</td>
+			      </tr>`);
+		  });
   tbody.innerHTML = rows.join('');
   if (table && (table as any).dataset) {
     const dataTable = table as any;
@@ -1032,15 +1286,27 @@ function renderPlatformsTable() {
     }
   }
 
-  const headCells = table!.querySelectorAll<HTMLTableCellElement>('thead th[data-col]');
-  headCells.forEach((th) => {
-    const col = String(th.getAttribute('data-col')) as typeof platformSortKey;
-    const baseLabel = th.getAttribute('data-label') || th.textContent || '';
-    const isActive = platformSortKey === col;
-    const icon = isActive ? (platformSortDir === 'asc' ? ' ▲' : ' ▼') : '';
-    th.innerHTML = `${escapeHtml(baseLabel)}${icon}`;
-  });
-}
+		  const headCells = table!.querySelectorAll<HTMLTableCellElement>('thead th[data-col]');
+			  headCells.forEach((th) => {
+			    const col = String(th.getAttribute('data-col')) as typeof platformSortKey;
+			    const baseLabel = th.getAttribute('data-label') || th.textContent || '';
+			    const isActive = platformSortKey === col;
+			    const icon = isActive ? `<span class="sort-icon" aria-hidden="true">${platformSortDir === 'asc' ? '▲' : '▼'}</span>` : '';
+			    if (col === 'score') {
+			      th.innerHTML = `
+			        <span class="th-help" tabindex="0" data-tip="platforms-score">${escapeHtml(baseLabel)}</span>${icon}
+			      `.trim();
+			    } else if (col === 'provider') {
+			      th.innerHTML = `${renderPlatformsProviderHeaderHtml()}${icon}`;
+			    } else {
+			      th.innerHTML = `${escapeHtml(baseLabel)}${icon}`;
+			    }
+			  });
+
+		  // Sorting indicator updates overwrite header markup; re-bind tooltip triggers after update.
+		  ensurePlatformsHeaderTooltipsBound(table!);
+		  ensurePlatformsProviderFilterBound(table!);
+		}
 
 function adaptMetriqEtlRow(row: any) {
   const provider = row?.provider ?? 'Unknown';
@@ -1402,14 +1668,7 @@ function openRunDetail(run) {
   if (!detailModal || !detailTitle || !detailBody || !detailSubtitle) return;
   if (!run) return;
   const metric = getActiveMetric();
-  const metricLabel = metric.unit ? `${metric.label} (${metric.unit})` : metric.label;
   const metricFormat = metric.format || '.3f';
-  const providerRuns = rawBenchmarks.filter(item => item.provider === run.provider);
-  const deviceRuns = rawBenchmarks.filter(item => item.device === run.device);
-  const providerStats = summarizeMetric(providerRuns, metric.id);
-  const deviceStats = summarizeMetric(deviceRuns, metric.id);
-  const providerList = buildRunList(providerRuns, metric, 5, false);
-  const deviceList = buildRunList(deviceRuns, metric, 5, true);
   const runMetricValue = getMetricValue(run, metric.id);
   const runMetric = formatMetricValue(runMetricValue, metricFormat, metric.unit);
   const runError = getMetricError(run, metric.id);
@@ -1420,24 +1679,6 @@ function openRunDetail(run) {
   detailTitle.textContent = `${run.provider} · ${run.device}`;
   detailSubtitle.textContent = `${run.benchmark} · ${runMetricWithError} · ${formatTimestamp(run.timestamp)}`;
   detailBody.innerHTML = `
-    <section class="detail-section">
-      <h5>Provider insight</h5>
-      <div class="detail-pillrow">
-        <span class="detail-pill">${providerRuns.length} run${providerRuns.length === 1 ? '' : 's'}</span>
-        <span class="detail-pill">Avg ${formatMetricValue(providerStats?.average, metricFormat, metric.unit)}</span>
-        <span class="detail-pill">Max ${formatMetricValue(providerStats?.max, metricFormat, metric.unit)}</span>
-      </div>
-      <ul>${providerList || '<li>No additional runs</li>'}</ul>
-    </section>
-    <section class="detail-section">
-      <h5>Device insight</h5>
-      <div class="detail-pillrow">
-        <span class="detail-pill">${deviceRuns.length} run${deviceRuns.length === 1 ? '' : 's'}</span>
-        <span class="detail-pill">Avg ${formatMetricValue(deviceStats?.average, metricFormat, metric.unit)}</span>
-        <span class="detail-pill">Max ${formatMetricValue(deviceStats?.max, metricFormat, metric.unit)}</span>
-      </div>
-      <ul>${deviceList || '<li>No additional runs</li>'}</ul>
-    </section>
     <section class="detail-section">
       <h5>Job parameters</h5>
       ${renderJobParams(run)}
@@ -1797,18 +2038,18 @@ function ensureTableUI() {
   if (container.getAttribute('data-smart') === '1') return container as HTMLDivElement;
   container.setAttribute('data-smart', '1');
   const controls = document.createElement('div');
-  controls.className = 'smart-controls';
-  controls.innerHTML = `
-    <label class="smart-field">
-      <span>Search</span>
-      <input id="smart-q" type="search" placeholder="Search all columns" autocomplete="off" />
-    </label>
-    <label class="smart-field">
-      <span>Cloud Provider</span>
-      <select id="smart-provider"><option value="all">All</option></select>
-    </label>
-    <label class="smart-field">
-      <span>Device</span>
+	  controls.className = 'smart-controls';
+	  controls.innerHTML = `
+	    <label class="smart-field">
+	      <span>Search</span>
+	      <input id="smart-q" type="search" placeholder="Search all columns" autocomplete="off" />
+	    </label>
+	    <label class="smart-field">
+	      <span>Provider</span>
+	      <select id="smart-provider"><option value="all">All</option></select>
+	    </label>
+	    <label class="smart-field">
+	      <span>Device</span>
       <select id="smart-device"><option value="all">All</option></select>
     </label>
     <label class="smart-field">
@@ -1901,31 +2142,35 @@ function renderStaticTable(values: any[]) {
 
   // Apply filters and sorting
   const working = applyTableFilters(values.slice());
-  sortTableRows(working);
-
-  const table = document.createElement('table');
-  table.className = 'smart-table';
-  const sortIcon = (key: SortKey) => tableState.sortKey===key ? (tableState.sortDir==='asc'?' ▲':' ▼') : '';
-  // Build metric columns dynamically
-  let metricDefs = Array.isArray(allMetricDefs) && allMetricDefs.length ? allMetricDefs : [];
-  if (!metricDefs.length) {
-    const ids = Array.from(collectMetricIdsWithValues(working) as any) as string[];
-    metricDefs = ids.map(id => ({ id, label: id, unit: '', scale: 'linear', format: null } as any));
-  }
-  const metricHeaders = metricDefs.map((def: any) => `<th data-sort="metric:${escapeAttr(def.id)}" class="sortable num">${escapeHtml(buildMetricLabel(def))}${sortIcon(`metric:${def.id}` as SortKey)}</th>`).join('');
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th data-sort="provider" class="sortable">Cloud Provider${sortIcon('provider')}</th>
-        <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
-        <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
-        <th data-sort="num_qubits" class="sortable num"># Qubits${sortIcon('num_qubits')}</th>
-        ${metricHeaders}
-        <th data-sort="timestamp" class="sortable">Date${sortIcon('timestamp')}</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
+	  sortTableRows(working);
+	
+	  const table = document.createElement('table');
+	  table.className = 'smart-table';
+	  const sortIcon = (key: SortKey) => (
+	    tableState.sortKey === key
+	      ? `<span class="sort-icon" aria-hidden="true">${tableState.sortDir === 'asc' ? '▲' : '▼'}</span>`
+	      : ''
+	  );
+	  // Build metric columns dynamically
+	  let metricDefs = Array.isArray(allMetricDefs) && allMetricDefs.length ? allMetricDefs : [];
+	  if (!metricDefs.length) {
+	    const ids = Array.from(collectMetricIdsWithValues(working) as any) as string[];
+	    metricDefs = ids.map(id => ({ id, label: id, unit: '', scale: 'linear', format: null } as any));
+	  }
+	  const metricHeaders = metricDefs.map((def: any) => `<th data-sort="metric:${escapeAttr(def.id)}" class="sortable num">${escapeHtml(buildMetricLabel(def))}${sortIcon(`metric:${def.id}` as SortKey)}</th>`).join('');
+	  table.innerHTML = `
+	    <thead>
+	      <tr>
+	        <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
+	        <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
+	        <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
+	        <th data-sort="num_qubits" class="sortable num">Qubits${sortIcon('num_qubits')}</th>
+	        ${metricHeaders}
+	        <th data-sort="timestamp" class="sortable num">Date${sortIcon('timestamp')}</th>
+	      </tr>
+	    </thead>
+	    <tbody></tbody>
+	  `;
   const tbody = table.querySelector('tbody') as HTMLTableSectionElement;
   working.forEach(run => {
     const metricValue = getMetricValue(run, metric.id);
