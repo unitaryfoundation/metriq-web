@@ -52,28 +52,41 @@
         <strong>Beta:</strong> This is a preview and may contain discrepancies; data and visuals are still stabilizing. Please check back soon for the 1.0 release.
       </div>
 
-      <!-- Views selector (moved above hero) -->
-      <section class="tabs tabs--views" aria-label="View selector">
-        <header class="tabs__nav" role="tablist">
-          <button class="tab is-active" role="tab" aria-selected="true" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
-          <button class="tab" role="tab" aria-selected="false" id="view-results-btn" data-target="#view-results">Results</button>
-          <button class="tab" role="tab" aria-selected="false" id="view-benchmarks-btn" data-target="#view-benchmarks">Benchmarks</button>
-        </header>
-      </section>
+	      <!-- Page title -->
+	      <section class="hero hero--pagehead">
+	        <div class="hero__inner">
+	          <div class="hero__text">
+	            <h1 class="h1">Quantum computing benchmarks</h1>
+	            <p class="lead">
+	              Metriq is a collaborative platform maintained by <a href="https://unitary.foundation" target="_blank" rel="noopener noreferrer">Unitary Foundation</a> for community-driven quantum benchmarking that integrates benchmark execution (<a href="https://github.com/unitaryfoundation/metriq-gym" target="_blank" rel="noopener noreferrer">metriq-gym</a>), data collection (<a href="https://github.com/unitaryfoundation/metriq-data" target="_blank" rel="noopener noreferrer">metriq-data</a>), and public presentation into a unified workflow.
+	            </p>
+	          </div>
+	        </div>
+	      </section>
 
-      <!-- Hero copy -->
-      <section class="hero">
-        <div class="hero__inner">
-          <div class="hero__text">
-            <h1 class="h1">Quantum computing benchmarks</h1>
-            <p class="lead" id="hero-results-lead">Explore the latest <strong>metriq-gym</strong> results. Switch between an interactive <strong>Graph</strong> for trends and a <strong>Table</strong> for the raw numbers.</p>
-            <p class="lead" id="hero-platforms-lead" hidden>The Metriq score in the leaderboard is a composite score computed from benchmarks in the <strong>metriq-gym</strong> suite.</p>
-            <p class="lead" id="hero-benchmarks-lead" hidden>Browse the <strong>metriq-gym</strong> documentation for benchmark definitions, how to run them, and how to interpret the results.</p>
-            
-          </div>
-          <!-- <div class="hero__badge">Live</div> -->
-        </div>
-      </section>
+	      <!-- View selector -->
+	      <section class="tabs tabs--views" aria-label="View selector">
+	        <header class="tabs__nav" role="tablist">
+	          <button class="tab is-active" role="tab" aria-selected="true" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
+	          <button class="tab" role="tab" aria-selected="false" id="view-results-btn" data-target="#view-results">Results</button>
+	          <button class="tab" role="tab" aria-selected="false" id="view-benchmarks-btn" data-target="#view-benchmarks">Benchmarks</button>
+	        </header>
+	      </section>
+
+	      <!-- Per-view caption (shown under top-level tabs) -->
+	      <div class="view-caption" aria-live="polite">
+	        <p class="lead" id="hero-platforms-lead">
+	          A scoreboard that assigns each device a composite Metriq Score based on results from the <strong>metriq-gym</strong> benchmark suite.
+	          For individual benchmark runs, explore the &laquo;Results&raquo; tab.
+            For an in-depth understanding of each benchmark, visit the documentation in the &laquo;Benchmarks&raquo; tab.
+	        </p>
+	        <p class="lead" id="hero-results-lead" hidden>
+	          Explore the latest <strong>metriq-gym</strong> results. Switch between an interactive <strong>Graph</strong> for trends and a <strong>Table</strong> for the raw numbers.
+	        </p>
+	        <p class="lead" id="hero-benchmarks-lead" hidden>
+	          Browse the <strong>metriq-gym</strong> documentation for benchmark definitions, how to run them, and how to interpret the results.
+	        </p>
+	      </div>
 
       
 
