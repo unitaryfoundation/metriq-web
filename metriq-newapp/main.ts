@@ -42,11 +42,7 @@ const downloadChartBtn = document.getElementById('btn-download-chart') as HTMLBu
 const downloadChartMenu = document.getElementById('chart-download-menu') as HTMLElement | null;
 const downloadChartRoot = document.getElementById('chart-download') as HTMLElement | null;
 
-// No native <select> filters — custom multi-lists are used instead
 const metricSelect = document.getElementById("filter-metric") as HTMLSelectElement | null;
-const resetFiltersBtn = null as any;
-
-// No filterElements map needed
 
 const filterState: { provider: string[]; benchmark: string[] } = {
   provider: [],
@@ -245,7 +241,9 @@ function renderMultiList(listId: string, options: string[], selected: string[], 
       symbolHtml = `<span class="symbol-shape">${shapeSvg(shape)}</span>`;
     }
     item.innerHTML = `${symbolHtml}<span>${escapeHtml(opt)}</span>`;
-    item.addEventListener('click', () => {
+    item.addEventListener('click', (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (kind === 'provider') {
         toggleMultiSelection('provider', options, opt);
       } else {
@@ -285,10 +283,10 @@ function renderMultiLists() {
   const pAll = document.getElementById('provider-all') as HTMLButtonElement | null;
   const bClear = document.getElementById('benchmark-clear') as HTMLButtonElement | null;
   const bAll = document.getElementById('benchmark-all') as HTMLButtonElement | null;
-  if (pClear) pClear.onclick = () => { filterState.provider = []; renderMultiLists(); drawChart(); };
-  if (pAll) pAll.onclick = () => { filterState.provider = providers.slice(); renderMultiLists(); drawChart(); };
-  if (bClear) bClear.onclick = () => { filterState.benchmark = []; renderMultiLists(); drawChart(); };
-  if (bAll) bAll.onclick = () => { filterState.benchmark = benchmarks.slice(); renderMultiLists(); drawChart(); };
+  if (pClear) pClear.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.provider = []; renderMultiLists(); drawChart(); };
+  if (pAll) pAll.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.provider = providers.slice(); renderMultiLists(); drawChart(); };
+  if (bClear) bClear.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.benchmark = []; renderMultiLists(); drawChart(); };
+  if (bAll) bAll.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.benchmark = benchmarks.slice(); renderMultiLists(); drawChart(); };
 }
 
 function activateTab(which) {
@@ -555,12 +553,20 @@ function renderMetriqScoreHelp() {
         <p style="margin:0 0 10px;line-height:1.55;">
           Metriq Score is an aggregate score computed from benchmark results. It is intended as a single number that summarizes device performance.
         </p>
+        <p style="margin:0 0 8px;line-height:1.55;">
+          In broad strokes, the composite score is calculated as:
+        </p>
+        <ol style="margin:0 0 10px;padding-left:18px;line-height:1.55;">
+          <li>
+            For each benchmark, individual run scores are normalized against the corresponding benchmark score of a baseline device.
+          </li>
+          <li>
+            Those normalized values are then summed using benchmark weights defined in
+            <a href="https://github.com/unitaryfoundation/metriq-data/blob/main/scripts/scoring.json" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:none;font-weight:600;">scoring.json</a>.
+          </li>
+        </ol>
         <p style="margin:0 0 10px;line-height:1.55;">
           Click any score cell in the Platforms table to view a breakdown (series, value, and component weights) for that device.
-        </p>
-        <p style="margin:0;line-height:1.55;">
-          See the Metriq Gym docs for more context:
-          <a href="${DEFAULT_GYM_DOCS_URL}" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:none;font-weight:600;">docs</a>.
         </p>
       </div>
     </div>

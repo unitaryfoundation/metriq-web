@@ -69,7 +69,7 @@ h1,h2,h3,h4,.h1{font-family:var(--font-sans);font-weight:600}
 .card__body{padding:18px 0 24px}
 
 .frame-wrap{position:relative;height:min(78vh,900px);border-radius:0;overflow:hidden;background:#fff;border:none}
-#panel-table .frame-wrap{overflow:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}
+#panel-table .frame-wrap{overflow:hidden}
 #panel-table .frame-wrap::-webkit-scrollbar{display:none}
 #chart{width:100%;min-height:420px}
 /* Allow legends to render outside the plotting region */
@@ -90,16 +90,40 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .chart-actions{display:flex;justify-content:flex-end;margin-top:10px}
 
 /* Smart table modern style */
-#smart-table-wrap table.smart-table{width:100%;border-collapse:separate;border-spacing:0;border:1px solid rgba(15,23,42,.10);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 14px 30px rgba(15,23,42,.06);font-size:16px;line-height:1.25}
+#smart-table-wrap table.smart-table{width:100%;border-collapse:separate;border-spacing:0;border:0;background:transparent;font-size:16px;line-height:1.25}
 #smart-table-wrap thead th{background:#f0f7ff;color:#1f2b3c;font-weight:700;padding:11px 12px;border-bottom:1px solid #dbeafe;user-select:none;vertical-align:middle;white-space:nowrap}
 #smart-table-wrap thead th[data-sort]{position:relative;padding-right:26px}
 #smart-table-wrap thead th.sortable{cursor:pointer}
+#panel-table #smart-table-wrap{
+  position:relative;
+  isolation:isolate;
+  flex:1 1 auto;
+  min-height:0;
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:12px;
+  background:#fff;
+  box-shadow:0 14px 30px rgba(15,23,42,.06);
+}
+#panel-table #smart-table-wrap thead{position:sticky;top:0;z-index:30}
+#panel-table #smart-table-wrap thead th{
+  position:sticky;
+  top:0;
+  z-index:31;
+  background:#f0f7ff;
+  box-shadow:0 1px 0 #dbeafe;
+}
+#panel-table #smart-table-wrap thead th:first-child{border-top-left-radius:12px}
+#panel-table #smart-table-wrap thead th:last-child{border-top-right-radius:12px}
+#panel-table #smart-table-wrap thead th[data-sort]{z-index:32}
 #smart-table-wrap tbody td{padding:11px 12px;border-top:1px solid rgba(15,23,42,.06);vertical-align:middle;white-space:nowrap}
 #smart-table-wrap tbody tr:nth-child(even){background:#fafcff}
 #smart-table-wrap tbody tr:hover{background:#f6faff}
 #smart-table-wrap tbody tr{cursor:pointer}
 #smart-table-wrap td.num,#smart-table-wrap th.num{text-align:right}
 #smart-table-wrap{overflow-x:auto}
+#panel-table #table-static{height:100%;display:flex;flex-direction:column;min-height:0}
 #smart-table-wrap a{color:inherit;text-decoration:none}
 #smart-table-wrap a:hover{text-decoration:underline}
 #smart-table-wrap code{background:#f8fafc;border:1px solid #eef2ff;border-radius:6px;padding:2px 6px}
@@ -307,11 +331,15 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
   flex-wrap:wrap;
   gap:12px;
   align-items:flex-end;
-  margin:8px 0 10px;
+  margin:0 0 10px;
   padding:10px 12px;
   background:#f8fbff;
   border:1px solid #dbeafe;
   border-radius:10px;
+}
+#panel-table .smart-controls{
+  flex:0 0 auto;
+  z-index:20;
 }
 .smart-field{display:flex;flex-direction:column;gap:6px;min-width:180px}
 .smart-field span{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#1f2b3c;font-weight:600}

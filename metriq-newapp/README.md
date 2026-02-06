@@ -2,7 +2,7 @@
 
 This directory contains the standalone benchmarks UI. It can be served via an nginx server or run as a container.
 
-The shipped entrypoint is `main.js`, which is generated from the versioned `main.ts` (and is git-ignored).
+The shipped entrypoint is `main.js`, which is generated from the versioned `main.ts`.
 
 ## Local development (watch + reload)
 
