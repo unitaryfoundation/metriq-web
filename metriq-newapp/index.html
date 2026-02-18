@@ -23,6 +23,8 @@
     <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
     <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
     <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css"/>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -37,6 +39,9 @@
           <img class="brand__logo" src="public/metriq_logo_horizontal_transparent.png" alt="Metriq logo" />
         </a>
         <div class="actions">
+          <button class="btn-mini" id="start-tour-btn" type="button" aria-label="Start Tour">
+            <i class="fa-solid fa-circle-question" aria-hidden="true"></i> Take a tour
+          </button>
           <div class="search" hidden>
             <label class="sr-only" for="benchmark-search">Search benchmark pages</label>
             <input type="search" id="benchmark-search" name="benchmark-search" placeholder="Search benchmark pages" list="benchmark-options" autocomplete="off" />
@@ -240,6 +245,7 @@
 
     <div id="footer-slot" aria-live="polite"></div>
 
+    <script src="tour.js"></script>
     <script type="module" src="main.js"></script>
   </body>
 </html>

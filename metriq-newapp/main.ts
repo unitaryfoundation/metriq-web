@@ -484,6 +484,18 @@ async function initUpdatesCarousel(config: any) {
     const pUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
     wireDownload('.link-platforms-json', pUrl, 'platform-index.json', true);
   } catch {}
+
+  // ---- Guided Tour ----
+  // Initializes the tour logic from tour.js (which attaches MetriqTour to window)
+  const tourInstance = new (window as any).MetriqTour();
+  const startTourBtn = document.getElementById('start-tour-btn');
+  if (startTourBtn) {
+    startTourBtn.addEventListener('click', () => {
+      tourInstance.start();
+    });
+  }
+  // Check if it's the first visit
+  tourInstance.checkFirstVisit();
 })();
 
 // Set an initial view without mutating the URL; hash routing below will apply deep links.

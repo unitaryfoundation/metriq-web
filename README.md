@@ -22,7 +22,6 @@ Metriq is free to sign up and submit results, whether you are a researcher publi
 - As of September 2025, the codebase is being actively refactored and improved. There may be breaking changes to the API and/or web app.  
   If you plan to open a pull request, it is particularly important to open an issue first to discuss your plans.
 
-
 ## 🗂️ Overview
 
 This project consists of three main components:
@@ -32,8 +31,6 @@ This project consists of three main components:
 3. **PostgreSQL database**: Stores all benchmark data. Utilities for managing the database can be found in the [unitaryfoundation/metriq-postgres](https://github.com/unitaryfoundation/metriq-postgres) repository.
 
 Together, these components power the Metriq platform, enabling users to submit, explore, and analyze quantum computing benchmarks in a collaborative and transparent environment.
-
-
 
 ## 🛠️ Developer Setup
 
@@ -75,6 +72,7 @@ npm install
 npm install -g nodemon   # if not already installed
 nodemon start index.js
 ```
+
 This starts the backend API server (development mode).
 
 #### **Frontend (`./metriq-app`):**
@@ -84,14 +82,13 @@ cd metriq-app
 npm install
 npm start
 ```
-This starts the frontend React app (development mode).
 
+This starts the frontend React app (development mode).
 
 You should now be able to access:
 
 - The web app at [http://localhost:3000](http://localhost:3000)
 - The API at [http://localhost:8080](http://localhost:8080) (default ports)
-
 
 > _Note: We plan to add Docker support in the future for easier setup, see [this issue](https://github.com/unitaryfoundation/metriq-web/issues/236)_.
 
@@ -107,8 +104,28 @@ You may need to adjust these files to match your local environment (e.g., databa
 We welcome contributions from the community!  
 If you have ideas or want to contribute, please [open an issue](https://github.com/unitaryfoundation/metriq-web/issues) to discuss your plans before submitting a pull request.
 
-
-
 ## 📫 Contact
 
 For questions, suggestions, or deployment inquiries, please contact us at [metriq@unitary.foundation](mailto:metriq@unitary.foundation).
+
+---
+
+## 🗺️ Guided Tour
+
+Metriq includes a guided tour to help new users navigate the platform's key features.
+
+### Usage
+
+- **Auto-Start**: The tour launches automatically on the first visit.
+- **Manual Start**: Users can restart the tour anytime by clicking the **"Take a tour"** button in the top navigation bar.
+
+### Configuration
+
+The tour logic is located in `metriq-newapp/tour.ts`.
+
+- **Steps**: Modify the `getSteps()` method to add, remove, or reorder tour steps.
+- **Styling**: Driver.js popovers are styled in `metriq-newapp/styles.css` to match the application's theme.
+
+### Persistence
+
+The tour uses `localStorage` (key: `metriq_tour_completed`) to track if a user has already seen the tour, preventing it from auto-starting on subsequent visits.
