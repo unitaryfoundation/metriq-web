@@ -22,7 +22,7 @@ class MetriqTour {
         const driverConstructor = (window as any).driver?.js?.driver || (window as any).driver;
         
         if (!driverConstructor) {
-            console.error("Driver.js not loaded");
+            console.error("MetriqTour: Driver.js not loaded");
             return;
         }
 
@@ -37,6 +37,8 @@ class MetriqTour {
             onDestroyStarted: () => {
                 if (!this.driverObj.hasNextStep() || confirm("Are you sure you want to exit the tour?")) {
                     this.driverObj.destroy();
+                    // Mark as seen only when fully dismissed or finished
+                    localStorage.setItem(this.STORAGE_KEY, 'true');
                 }
             },
         });
@@ -71,7 +73,7 @@ class MetriqTour {
                     align: 'center'
                 },
                 onHighlightStarted: () => {
-                   window.scrollTo({ top: 0, behavior: 'instant' });
+                   window.scrollTo({ top: 0, behavior: 'auto' });
                    document.getElementById('view-platforms-btn')?.click();
                    void document.body.offsetHeight; // Force reflow
                 }
@@ -110,7 +112,7 @@ class MetriqTour {
                     align: 'center'
                 },
                 onHighlightStarted: () => {
-                    window.scrollTo({ top: 0, behavior: 'instant' });
+                    window.scrollTo({ top: 0, behavior: 'auto' });
                     document.getElementById('view-results-btn')?.click();
                     void document.body.offsetHeight; // Force reflow
                 }
@@ -166,7 +168,7 @@ class MetriqTour {
                     align: 'center'
                 },
                 onHighlightStarted: () => {
-                    window.scrollTo({ top: 0, behavior: 'instant' });
+                    window.scrollTo({ top: 0, behavior: 'auto' });
                     document.getElementById('view-benchmarks-btn')?.click();
                     void document.body.offsetHeight;
                 }
@@ -189,15 +191,16 @@ class MetriqTour {
     }
 
     public start() {
+        if (!this.driverObj) return;
         this.driverObj.drive();
     }
 
     public checkFirstVisit() {
+        if (!this.driverObj) return;
         if (!localStorage.getItem(this.STORAGE_KEY)) {
             // Optional: Delay slightly to allow page to settle
             setTimeout(() => {
                 this.start();
-                localStorage.setItem(this.STORAGE_KEY, 'true');
             }, 1000);
         }
     }
