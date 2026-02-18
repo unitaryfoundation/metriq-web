@@ -1868,13 +1868,11 @@ iframe {
 /* Tour button brand color match */
 #start-tour-btn {
   color: var(--accent-2);
-  border: 1px solid rgba(31, 180, 194, 0.5);
 }
 #start-tour-btn:hover {
   background: rgba(31, 180, 194, 0.08);
   text-decoration: none;
   color: var(--accent-2);
-  border-color: var(--accent-2);
 }
 
 /* Driver.js overrides */
