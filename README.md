@@ -107,25 +107,3 @@ If you have ideas or want to contribute, please [open an issue](https://github.c
 ## 📫 Contact
 
 For questions, suggestions, or deployment inquiries, please contact us at [metriq@unitary.foundation](mailto:metriq@unitary.foundation).
-
----
-
-## 🗺️ Guided Tour
-
-Metriq includes a guided tour to help new users navigate the platform's key features.
-
-### Usage
-
-- **Auto-Start**: The tour launches automatically on the first visit.
-- **Manual Start**: Users can restart the tour anytime by clicking the **"Take a tour"** button in the top navigation bar.
-
-### Configuration
-
-The tour logic is located in `metriq-newapp/tour.ts`.
-
-- **Steps**: Modify the `getSteps()` method to add, remove, or reorder tour steps.
-- **Styling**: Driver.js popovers are styled in `metriq-newapp/styles.css` to match the application's theme.
-
-### Persistence
-
-The tour uses `localStorage` (key: `metriq_tour_completed`) to track if a user has already seen the tour, preventing it from auto-starting on subsequent visits.
