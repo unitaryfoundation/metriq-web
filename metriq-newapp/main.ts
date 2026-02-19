@@ -504,9 +504,9 @@ async function initUpdatesCarousel(config: any) {
     });
   }
   // Check if it's the first visit (only if the instance is usable)
-  if (tourInstance && typeof tourInstance.checkFirstVisit === 'function') {
-    tourInstance.checkFirstVisit();
-  }
+  // if (tourInstance && typeof tourInstance.checkFirstVisit === 'function') {
+  //   tourInstance.checkFirstVisit();
+  // }
 })();
 
 // Set an initial view without mutating the URL; hash routing below will apply deep links.

@@ -15,7 +15,6 @@ interface TourStep {
 
 class MetriqTour {
     private driverObj: any;
-    private readonly STORAGE_KEY = 'metriq_tour_completed';
 
     constructor() {
         // Fix for Driver.js CDN potentially namespacing the constructor
@@ -34,13 +33,6 @@ class MetriqTour {
             closeBtnText: 'Close',
             nextBtnText: 'Next',
             prevBtnText: 'Previous',
-            onDestroyStarted: () => {
-                if (!this.driverObj.hasNextStep() || confirm("Are you sure you want to exit the tour?")) {
-                    this.driverObj.destroy();
-                    // Mark as seen only when fully dismissed or finished
-                    localStorage.setItem(this.STORAGE_KEY, 'true');
-                }
-            },
         });
     }
 
@@ -177,7 +169,7 @@ class MetriqTour {
                 element: '.brand', // Back to start/neutral
                 popover: {
                     title: 'Start Exploring',
-                    description: 'You are ready to analyze the state of the art. Restart this tour via the help icon at any time.',
+                    description: "You are ready to analyze the state of the art. Restart this tour via the 'Take a tour' button at any time.",
                     side: 'bottom',
                     align: 'start'
                 },
@@ -195,15 +187,7 @@ class MetriqTour {
         this.driverObj.drive();
     }
 
-    public checkFirstVisit() {
-        if (!this.driverObj) return;
-        if (!localStorage.getItem(this.STORAGE_KEY)) {
-            // Optional: Delay slightly to allow page to settle
-            setTimeout(() => {
-                this.start();
-            }, 1000);
-        }
-    }
+
 }
 
 // Global instance to be used by main.ts or inline script
