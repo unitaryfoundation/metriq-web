@@ -3,7 +3,7 @@
 declare const driver: any;
 
 interface TourStep {
-    element: string;
+    element?: string;
     popover: {
         title: string;
         description: string;
@@ -51,7 +51,7 @@ class MetriqTour {
                 element: '.tabs--views',
                 popover: {
                     title: 'Primary Navigation',
-                    description: 'Switch between the high-level Platform Leaderboard, granular Benchmark Results, and Documentation.',
+                    description: 'Switch between the high-level platform leaderboard, explore individual benchmark results, and read benchmark definitions',
                     side: 'bottom',
                     align: 'center'
                 }
@@ -60,7 +60,7 @@ class MetriqTour {
                 element: '#view-platforms-btn',
                 popover: {
                     title: 'Platform Leaderboard',
-                    description: 'Compare global quantum systems using the aggregated Metriq Score—a normalized performance metric across diverse architectures.',
+                    description: 'Compare global quantum systems using the aggregated Metriq Score—a normalized performance metric across diverse architectures. <a href="#view=platforms&help=metriq-score">Learn more</a>',
                     side: 'bottom',
                     align: 'center'
                 },
@@ -74,7 +74,7 @@ class MetriqTour {
                 element: '#platforms-container', // Target container instead of table to be safer
                 popover: {
                     title: 'Device Specifications',
-                    description: 'Drill down into QPU details, qubit counts, and historical performance metrics for specific hardware backends.',
+                    description: 'At a glance view of perfomance across providers and devices, as well as information on recent benchmark data contributions.',
                     side: 'top',
                     align: 'center'
                 },
@@ -87,7 +87,7 @@ class MetriqTour {
                 element: '.link-platforms-json',
                 popover: {
                     title: 'Platforms Index JSON',
-                    description: 'Download the complete dataset of quantum platforms in JSON format for offline analysis.',
+                    description: 'Download a JSON view of the high-level platform data',
                     side: 'left',
                     align: 'center'
                 },
@@ -99,7 +99,7 @@ class MetriqTour {
                 element: '#view-results-btn',
                 popover: {
                     title: 'Benchmark Analysis',
-                    description: 'Analyze raw submission data. Track performance trends across different compiler passes and quantum stacks.',
+                    description: 'Explore granular individual benchmark results from the community-contributed metriq dataset',
                     side: 'bottom',
                     align: 'center'
                 },
@@ -113,7 +113,7 @@ class MetriqTour {
                 element: '#panel-graph', // Target the graph panel
                 popover: {
                     title: 'Performance Trends',
-                    description: 'Visualize metric evolution. Track improvements in gate fidelity, compilation efficiency, and algorithmic success rates.',
+                    description: 'Visualize benchmark and provider performance over time',
                     side: 'left',
                     align: 'center'
                 },
@@ -127,7 +127,7 @@ class MetriqTour {
                 element: '.smart-controls',
                 popover: {
                     title: 'Parametric Filtering',
-                    description: 'Isolate specific variables. Slice the dataset by Cloud Provider, Hardware Backend, or Benchmark Protocol.',
+                    description: 'Isolate specific variables. Slice the dataset by cloud provider, device, or benchmark protocol.',
                     side: 'bottom',
                     align: 'center'
                 },
@@ -138,11 +138,10 @@ class MetriqTour {
                 }
             },
             {
-                element: '#panel-table', // Target the table panel
                 popover: {
-                    title: 'Raw Data Matrix',
-                    description: 'Access the underlying dataset. Sort and extract specific run parameters, timestamps, and metric values.',
-                    side: 'left',
+                    title: 'Result Deep Dive',
+                    description: 'Click on any row in the table to see more details about the Device, job parameters, and raw results.',
+                    side: 'bottom',
                     align: 'center'
                 },
                 onHighlightStarted: () => {
@@ -155,7 +154,7 @@ class MetriqTour {
                 element: '#view-benchmarks-btn',
                 popover: {
                     title: 'Benchmark Definitions',
-                    description: 'Reference the Metriq Gym documentation. Understand the circuit depth, width, and success criteria for each test.',
+                    description: 'Reference the Metriq Gym documentation to understand benchmark definitions and parameters.',
                     side: 'bottom',
                     align: 'center'
                 },
