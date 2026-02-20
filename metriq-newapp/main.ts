@@ -761,7 +761,7 @@ function renderPlatformDetailPage(detail: any) {
 
   let scoreHtml = '<div class="meta">No Metriq score available.</div>';
   if (metriqScore && typeof metriqScore === 'object') {
-    const val = Number((metriqScore as any).value);
+    const val = parseFiniteNumber((metriqScore as any).value);
     const series = (metriqScore as any).series || '';
     const components = (metriqScore as any).components && typeof (metriqScore as any).components === 'object'
       ? Object.entries((metriqScore as any).components as Record<string, any>)
@@ -771,29 +771,51 @@ function renderPlatformDetailPage(detail: any) {
       const wb = Number(b[1]?.weight) || 0;
       return wb - wa;
     });
-    const rows = components.map(([name, c]) => {
-      const w = Number(c?.weight);
-      const n = Number(c?.normalized);
-      const ts = c?.timestamp ? dateOnlyFormatter.format(new Date(c.timestamp)) : '';
+    const componentRows = components.map(([name, c]) => {
+      const weight = parseFiniteNumber(c?.weight);
+      const normalized = parseFiniteNumber(c?.normalized);
+      const raw = parseFiniteNumber(c?.raw_score ?? c?.raw ?? c?.raw_value);
+      const normalizedTsSource = c?.normalized_timestamp ?? c?.timestamp;
+      const hasNormalizedTimestamp =
+        normalizedTsSource !== null &&
+        normalizedTsSource !== undefined &&
+        String(normalizedTsSource).trim() !== '';
+      const normalizedAvailable = (c?.normalized_available === true)
+        || (c?.normalized_available !== false && hasNormalizedTimestamp && normalized !== null);
+      const rawAvailable = (c?.raw_available === true)
+        || (c?.raw_available !== false && raw !== null);
+      const ts = hasNormalizedTimestamp ? dateOnlyFormatter.format(new Date(normalizedTsSource)) : '';
+      return { name, weight, raw, rawAvailable, normalized, normalizedAvailable, ts };
+    });
+    const hasAnyRaw = componentRows.some((row) => row.rawAvailable);
+    const rows = componentRows.map((row) => {
+      const rawCell = hasAnyRaw
+        ? `<td class="num">${row.rawAvailable && row.raw !== null ? row.raw.toFixed(3) : '—'}</td>`
+        : '';
       return `<tr>
-        <td>${escapeHtml(name)}</td>
-        <td class="num">${Number.isFinite(w) ? w.toFixed(2) : '–'}</td>
-        <td class="num">${Number.isFinite(n) ? n.toFixed(3) : '–'}</td>
-        <td class="num">${escapeHtml(ts)}</td>
+        <td>${escapeHtml(row.name)}</td>
+        <td class="num">${row.weight !== null ? row.weight.toFixed(2) : '—'}</td>
+        ${rawCell}
+        <td class="num">${row.normalizedAvailable && row.normalized !== null ? row.normalized.toFixed(3) : '—'}</td>
+        <td class="num">${escapeHtml(row.ts)}</td>
       </tr>`;
     }).join('');
+    const rawNote = hasAnyRaw
+      ? ''
+      : '<div class="meta" style="margin-top:8px;">Raw component scores are not included in this payload (baseline raw values may be unavailable by design).</div>';
     scoreHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null ? val.toFixed(2) : '—'}</span>
       </div>
       ${components.length ? `
         <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
-          <table class="smart-table" style="width:100%;min-width:520px;">
+          <table class="smart-table" style="width:100%;min-width:${hasAnyRaw ? 620 : 520}px;">
             <thead>
               <tr>
                 <th>Component</th>
                 <th class="num">Weight</th>
+                ${hasAnyRaw ? '<th class="num">Raw</th>' : ''}
                 <th class="num">Normalized</th>
                 <th class="num">Timestamp</th>
               </tr>
@@ -801,6 +823,7 @@ function renderPlatformDetailPage(detail: any) {
             <tbody>${rows}</tbody>
           </table>
         </div>
+        ${rawNote}
       ` : '<div class="meta">No components</div>'}
     `.trim();
   }
@@ -1329,9 +1352,9 @@ function adaptMetriqEtlRow(row: any) {
   const rawErrors = (row && typeof row.errors === 'object' && row.errors != null) ? row.errors : {};
   const rawDirections = (row && typeof row.directions === 'object' && row.directions != null) ? row.directions : {};
   const rawParams = params;
-  const score = Number(row?.metriq_score);
+  const score = parseFiniteNumber(row?.metriq_score);
   let metrics: Record<string, number> = {};
-  if (Number.isFinite(score)) {
+  if (score !== null) {
     // Normalize the exposed metric id from 'metriq_score' → 'score'
     metrics = { score: score };
   } else {
@@ -1354,12 +1377,12 @@ function normalizeRun(run: any) {
     ? { ...(clone.errors as Record<string, unknown>) as Record<string, number> }
     : {};
   if (clone.accuracy !== undefined && metrics.accuracy === undefined) {
-    const val = Number(clone.accuracy);
-    if (Number.isFinite(val)) metrics.accuracy = val;
+    const val = parseFiniteNumber(clone.accuracy);
+    if (val !== null) metrics.accuracy = val;
   }
   Object.keys(metrics).forEach(key => {
-    const num = Number(metrics[key]);
-    if (!Number.isFinite(num)) {
+    const num = parseFiniteNumber(metrics[key]);
+    if (num === null) {
       delete metrics[key];
     } else {
       metrics[key] = num;
@@ -1367,8 +1390,8 @@ function normalizeRun(run: any) {
   });
   clone.metrics = metrics;
   Object.keys(errors).forEach(key => {
-    const num = Number(errors[key]);
-    if (!Number.isFinite(num) || num < 0) {
+    const num = parseFiniteNumber(errors[key]);
+    if (num === null || num < 0) {
       delete errors[key];
     } else {
       errors[key] = num;
@@ -1400,6 +1423,19 @@ function parseNumQubits(value: any): number | null {
     if (!trimmed) return null;
     const num = Number(trimmed);
     if (Number.isFinite(num)) return num;
+  }
+  return null;
+}
+
+function parseFiniteNumber(value: any): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
 }
@@ -1584,7 +1620,7 @@ function collectMetricIdsWithValues(runs) {
   runs.forEach(run => {
     const metrics = run.metrics || {};
     Object.entries(metrics).forEach(([key, value]) => {
-      if (Number.isFinite(Number(value))) {
+      if (parseFiniteNumber(value) !== null) {
         ids.add(key);
       }
     });
@@ -1645,14 +1681,13 @@ function updateChartHeading(metric) {
 
 function getMetricValue(run, metricId) {
   const metrics = run.metrics || {};
-  const value = Number(metrics[metricId]);
-  return Number.isFinite(value) ? value : null;
+  return parseFiniteNumber(metrics[metricId]);
 }
 
 function getMetricError(run, metricId) {
   const errors = run.errors || {};
-  const value = Number(errors[metricId]);
-  return Number.isFinite(value) && value >= 0 ? value : null;
+  const value = parseFiniteNumber(errors[metricId]);
+  return value !== null && value >= 0 ? value : null;
 }
 
 function setupFilters(values) {
