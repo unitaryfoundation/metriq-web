@@ -49,6 +49,8 @@ const filterState: { provider: string[]; benchmark: string[] } = {
   benchmark: [],
 };
 
+let dataMode: 'all' | 'frontier' = 'all';
+
 let allMetricDefs = [];
 let currentMetricId = null;
 
@@ -222,16 +224,20 @@ function shapeSvg(shape: string, color = 'currentColor'): string {
   }
 }
 
-function renderMultiList(listId: string, options: string[], selected: string[], kind: 'provider'|'benchmark') {
+function renderMultiList(listId: string, options: string[], selected: string[], kind: 'provider'|'benchmark', searchTerm?: string) {
   const el = document.getElementById(listId);
   if (!el) return;
   el.innerHTML = '';
   const frag = document.createDocumentFragment();
   const selSet = new Set(selected || []);
+  const term = (searchTerm || '').trim().toLowerCase();
   options.forEach(opt => {
+    if (term && !opt.toLowerCase().includes(term)) return;
+    const isSelected = selSet.has(opt);
     const item = document.createElement('button');
     item.type = 'button';
-    item.className = 'multi-item' + (selSet.has(opt) ? ' is-selected' : '');
+    item.className = 'multi-item' + (isSelected ? ' is-selected' : '');
+    const checkIcon = isSelected ? 'fa-square-check' : 'fa-square';
     let symbolHtml = '';
     if (kind === 'provider') {
       const col = providerColorMap.get(opt) || '#888';
@@ -240,7 +246,7 @@ function renderMultiList(listId: string, options: string[], selected: string[], 
       const shape = benchmarkShapeMap.get(opt) || 'circle';
       symbolHtml = `<span class="symbol-shape">${shapeSvg(shape)}</span>`;
     }
-    item.innerHTML = `${symbolHtml}<span>${escapeHtml(opt)}</span>`;
+    item.innerHTML = `<i class="fa-regular ${checkIcon} multi-item__check" aria-hidden="true"></i>${symbolHtml}<span>${escapeHtml(opt)}</span>`;
     item.addEventListener('click', (event: MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
@@ -276,17 +282,45 @@ function renderMultiLists() {
     if (!filterState.benchmark || filterState.benchmark.length === 0) filterState.benchmark = benchmarks.slice();
     multiBootstrapped = true;
   }
-  renderMultiList('provider-list', providers, filterState.provider, 'provider');
-  renderMultiList('benchmark-list', benchmarks, filterState.benchmark, 'benchmark');
-  // Wire actions
+
+  const benchSearchEl = document.getElementById('filter-search-benchmark') as HTMLInputElement | null;
+  const provSearchEl = document.getElementById('filter-search-provider') as HTMLInputElement | null;
+  const benchSearchTerm = benchSearchEl ? benchSearchEl.value : '';
+  const provSearchTerm = provSearchEl ? provSearchEl.value : '';
+
+  // Compute visible (search-filtered) items for each group
+  const visibleProviders = provSearchTerm
+    ? providers.filter(p => p.toLowerCase().includes(provSearchTerm.trim().toLowerCase()))
+    : providers;
+  const visibleBenchmarks = benchSearchTerm
+    ? benchmarks.filter(b => b.toLowerCase().includes(benchSearchTerm.trim().toLowerCase()))
+    : benchmarks;
+
+  renderMultiList('provider-list', providers, filterState.provider, 'provider', provSearchTerm);
+  renderMultiList('benchmark-list', benchmarks, filterState.benchmark, 'benchmark', benchSearchTerm);
+
+  const benchCount = document.getElementById('benchmark-count');
+  const provCount = document.getElementById('provider-count');
+  if (benchCount) benchCount.textContent = `${filterState.benchmark.length} of ${benchmarks.length}`;
+  if (provCount) provCount.textContent = `${filterState.provider.length} of ${providers.length}`;
+
+  // Wire actions — "Select all" / "Deselect all" only affect visible (filtered) items
   const pClear = document.getElementById('provider-clear') as HTMLButtonElement | null;
   const pAll = document.getElementById('provider-all') as HTMLButtonElement | null;
   const bClear = document.getElementById('benchmark-clear') as HTMLButtonElement | null;
   const bAll = document.getElementById('benchmark-all') as HTMLButtonElement | null;
-  if (pClear) pClear.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.provider = []; renderMultiLists(); drawChart(); };
-  if (pAll) pAll.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.provider = providers.slice(); renderMultiLists(); drawChart(); };
-  if (bClear) bClear.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.benchmark = []; renderMultiLists(); drawChart(); };
-  if (bAll) bAll.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.benchmark = benchmarks.slice(); renderMultiLists(); drawChart(); };
+  const visibleProvSet = new Set(visibleProviders);
+  const visibleBenchSet = new Set(visibleBenchmarks);
+  // Highlight the button matching current visible-subset state
+  const allVisibleProvSelected = visibleProviders.every(p => filterState.provider.includes(p));
+  const noVisibleProvSelected = visibleProviders.every(p => !filterState.provider.includes(p));
+  const allVisibleBenchSelected = visibleBenchmarks.every(b => filterState.benchmark.includes(b));
+  const noVisibleBenchSelected = visibleBenchmarks.every(b => !filterState.benchmark.includes(b));
+  if (pClear) { pClear.classList.toggle('is-current', noVisibleProvSelected); pClear.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.provider = filterState.provider.filter(p => !visibleProvSet.has(p)); renderMultiLists(); drawChart(); }; }
+  if (pAll) { pAll.classList.toggle('is-current', allVisibleProvSelected); pAll.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.provider = visibleProviders.slice(); renderMultiLists(); drawChart(); }; }
+  if (bClear) { bClear.classList.toggle('is-current', noVisibleBenchSelected); bClear.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.benchmark = filterState.benchmark.filter(b => !visibleBenchSet.has(b)); renderMultiLists(); drawChart(); }; }
+  if (bAll) { bAll.classList.toggle('is-current', allVisibleBenchSelected); bAll.onclick = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); filterState.benchmark = visibleBenchmarks.slice(); renderMultiLists(); drawChart(); }; }
+
 }
 
 function activateTab(which) {
@@ -299,11 +333,11 @@ function activateTab(which) {
   panelGraph?.classList.toggle("is-active", isGraph);
   panelTable?.classList.toggle("is-active", isTable);
   if (isTable) {
-    drawTable();
+    void drawTable();
   }
   if (isGraph) {
     // Force a fresh draw to ensure visibility after being hidden
-    drawChart();
+    void drawChart();
   }
 }
 
@@ -1521,9 +1555,9 @@ if (searchInput) {
 if (metricSelect) {
   metricSelect.addEventListener('change', () => {
     currentMetricId = (metricSelect as HTMLSelectElement).value;
-    drawChart();
+    void drawChart();
     // Refresh static table metric column as well
-    drawTable();
+    void drawTable();
   });
 }
 
@@ -1679,10 +1713,54 @@ function getMetricError(run, metricId) {
   return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+function initFilterGroupToggles() {
+  document.querySelectorAll<HTMLButtonElement>('.filter-group__toggle').forEach(btn => {
+    // Auto-collapse on mobile
+    if (window.matchMedia('(max-width: 720px)').matches) {
+      btn.setAttribute('aria-expanded', 'false');
+    }
+    btn.addEventListener('click', () => {
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', String(!expanded));
+    });
+  });
+}
+
+function setupFilterSearchInputs() {
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
+  const handler = () => {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      renderMultiLists();
+    }, 150);
+  };
+  const benchSearch = document.getElementById('filter-search-benchmark') as HTMLInputElement | null;
+  const provSearch = document.getElementById('filter-search-provider') as HTMLInputElement | null;
+  if (benchSearch) benchSearch.addEventListener('input', handler);
+  if (provSearch) provSearch.addEventListener('input', handler);
+}
+
+function initDataModeToggle() {
+  const container = document.getElementById('data-mode-toggle');
+  if (!container) return;
+  container.addEventListener('click', (event: MouseEvent) => {
+    const btn = (event.target as HTMLElement)?.closest('.toggle-pill') as HTMLButtonElement | null;
+    if (!btn || btn.classList.contains('is-active')) return;
+    const mode = btn.getAttribute('data-mode');
+    if (mode !== 'all' && mode !== 'frontier') return;
+    dataMode = mode;
+    container.querySelectorAll('.toggle-pill').forEach(el => el.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    drawChart();
+  });
+}
+
 function setupFilters(values) {
   populateFilterOptions(values);
   if (filtersInitialized) return;
-  // Custom multi-lists handle their own click events (renderMultiList)
+  initFilterGroupToggles();
+  setupFilterSearchInputs();
+  initDataModeToggle();
   filtersInitialized = true;
 }
 
@@ -1930,76 +2008,183 @@ async function renderChart(values, token, metric) {
   const shapeDomain = benchmarks;
   const shapeRange = benchmarks.map(b => benchmarkShapeMap.get(b) as string);
 
+  const chartHeight = Math.min(420, window.innerHeight * 0.45);
+
+  // Shared layers for both main chart and overview
+  const baseLayers: any[] = [
+    // Horizontal baseline at Score = 100
+    {
+      transform: [{
+        aggregate: [
+          { op: 'min', field: 'timestamp', as: 'x_min' },
+          { op: 'max', field: 'timestamp', as: 'x_max' }
+        ]
+      },
+      { calculate: "timeOffset('day', datum.x_min, -1)", as: 'x_pad_min' },
+      { calculate: "timeOffset('day', datum.x_max, 1)", as: 'x_pad_max' }
+      ],
+      mark: { type: 'rule', strokeDash: [6,4], opacity: 0.85 },
+      encoding: {
+        color: { value: '#9ca3af' },
+        x: { field: 'x_pad_min', type: 'temporal' },
+        x2: { field: 'x_pad_max', type: 'temporal' },
+        y: { datum: 100 }
+      }
+    }
+  ];
+
+  // Data-mode-specific layers
+  const dataLayers: any[] = dataMode === 'all' ? [
+    // Error bars layer
+    {
+      transform: [{ filter: 'datum.metricLower !== null && datum.metricUpper !== null' }],
+      mark: { type: 'rule', strokeWidth: 1.5, opacity: 0.5 },
+      encoding: {
+        y: { field: 'metricLower', type: 'quantitative', scale: yScale },
+        y2: { field: 'metricUpper' },
+        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } }
+      }
+    },
+    // Points layer
+    {
+      mark: { type: 'point', filled: true, size: 80, opacity: 0.95, stroke: '#fff', strokeWidth: 0.8 },
+      encoding: {
+        y: { field: 'metricValue', type: 'quantitative', title: metricLabel, scale: yScale },
+        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } },
+        shape: { field: 'benchmark', type: 'nominal', legend: null, scale: { domain: shapeDomain, range: shapeRange } },
+        tooltip: [
+          { field: 'device', title: 'Device' },
+          { field: 'provider', title: 'Provider' },
+          { field: 'benchmark', title: 'Benchmark' },
+          { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
+          { field: 'metricError', title: 'Error', type: 'quantitative', format: tooltipFormat },
+          { field: 'timestamp', title: 'Timestamp', type: 'temporal', format: '%Y-%m-%d %H:%M' }
+        ]
+      }
+    }
+  ] : [
+    // Dimmed points for context
+    {
+      mark: { type: 'point', filled: true, size: 40, opacity: 0.15 },
+      encoding: {
+        y: { field: 'metricValue', type: 'quantitative', title: metricLabel, scale: yScale },
+        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } },
+        shape: { field: 'benchmark', type: 'nominal', legend: null, scale: { domain: shapeDomain, range: shapeRange } }
+      }
+    },
+    // Frontier envelope line per provider
+    {
+      transform: [
+        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: 'frontierMax' }], groupby: ['provider'], frame: [null, 0] }
+      ],
+      mark: { type: 'line', strokeWidth: 2, opacity: 0.7, interpolate: 'step-after' },
+      encoding: {
+        y: { field: 'frontierMax', type: 'quantitative', scale: yScale },
+        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } }
+      }
+    },
+    // Highlighted frontier points (where a new max was set per provider)
+    {
+      transform: [
+        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: 'frontierMax' }], groupby: ['provider'], frame: [null, 0] },
+        { filter: 'datum.metricValue === datum.frontierMax' }
+      ],
+      mark: { type: 'point', filled: true, size: 100, opacity: 0.95, stroke: '#fff', strokeWidth: 1 },
+      encoding: {
+        y: { field: 'metricValue', type: 'quantitative', scale: yScale },
+        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } },
+        shape: { field: 'benchmark', type: 'nominal', legend: null, scale: { domain: shapeDomain, range: shapeRange } },
+        tooltip: [
+          { field: 'device', title: 'Device' },
+          { field: 'provider', title: 'Provider' },
+          { field: 'benchmark', title: 'Benchmark' },
+          { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
+          { field: 'timestamp', title: 'Timestamp', type: 'temporal', format: '%Y-%m-%d %H:%M' }
+        ]
+      }
+    }
+  ];
+
+  // Top-performer annotation: text labels on frontier-setting data points.
+  // - "Data points" mode: global frontier-setters (new all-time highs across all providers)
+  // - "Frontier trend" mode: per-provider frontier-setters (matching the highlighted dots)
+  const annotationMark = { type: 'text' as const, align: 'left' as const, dx: 10, dy: -6, fontSize: 11, fontWeight: 600, font: 'Inter, system-ui, sans-serif', clip: true };
+  const annotationEncoding = {
+    y: { field: 'metricValue', type: 'quantitative', scale: yScale },
+    text: { field: 'device', type: 'nominal' },
+    color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } }
+  };
+  const topPerformerLayer: any[] = dataMode === 'frontier' ? [
+    // Per-provider: label points that set a new high for their provider
+    {
+      transform: [
+        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: '_provMax' }], groupby: ['provider'], frame: [null, 0] },
+        { filter: 'datum.metricValue >= datum._provMax' },
+        { sort: [{ field: 'timestamp' }], window: [{ op: 'row_number', as: '_tieBreak' }], groupby: ['provider', '_provMax'] },
+        { filter: 'datum._tieBreak === 1' }
+      ],
+      mark: annotationMark,
+      encoding: annotationEncoding
+    }
+  ] : [
+    // Global: label points that set a new all-time high across all providers
+    {
+      transform: [
+        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: '_globalMax' }], frame: [null, 0] },
+        { filter: 'datum.metricValue >= datum._globalMax' },
+        { sort: [{ field: 'timestamp' }], window: [{ op: 'row_number', as: '_tieBreak' }], groupby: ['_globalMax'] },
+        { filter: 'datum._tieBreak === 1' }
+      ],
+      mark: annotationMark,
+      encoding: annotationEncoding
+    }
+  ];
+
   const spec: any = {
     $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
     description: `${metricLabel} over time`,
     width: 'container',
-    height: 420,
+    height: chartHeight,
     autosize: { type: 'fit', contains: 'padding' },
-    // Standard padding (no legends; using dropdown filters instead)
     padding: { left: 8, top: 8, right: 8, bottom: 8 },
-    // Use default axis/grid styling
-    // (grid lines allowed; baseline reference is handled via a rule layer below)
+    config: {
+      axis: {
+        gridColor: '#e8ecf2',
+        gridDash: [3, 3],
+        gridOpacity: 0.6,
+        domain: false,
+        tickSize: 4,
+        tickColor: '#d0d7e2',
+        labelColor: '#6c778a',
+        labelFont: 'Inter, system-ui, sans-serif',
+        labelFontSize: 11,
+        labelPadding: 6,
+        titleColor: '#4a5568',
+        titleFont: 'Inter, system-ui, sans-serif',
+        titleFontSize: 12,
+        titleFontWeight: 500,
+        titlePadding: 12
+      },
+      view: { stroke: null }
+    },
     data: { values },
     transform,
-    // No legend-driven selections; dropdowns control filtering
     encoding: {
-      x: { field: 'timestamp', type: 'temporal', title: 'Run date', axis: { format: '%Y-%m-%d' } }
+      x: { field: 'timestamp', type: 'temporal', title: 'Run date', axis: { format: '%Y-%m-%d' } },
+      y: { field: 'metricValue', type: 'quantitative', title: metricLabel, scale: yScale }
     },
     layer: [
-      // Invisible rule to pad x-domain by ±1 day so points aren't on edges
       {
-        transform: [{
-          aggregate: [
-            { op: 'min', field: 'timestamp', as: 'x_min' },
-            { op: 'max', field: 'timestamp', as: 'x_max' }
-          ]
-        },
-        { calculate: "timeOffset('day', datum.x_min, -1)", as: 'x_pad_min' },
-        { calculate: "timeOffset('day', datum.x_max, 1)", as: 'x_pad_max' }],
-        mark: { type: 'rule', opacity: 0 },
-        encoding: {
-          x: { field: 'x_pad_min', type: 'temporal' },
-          x2: { field: 'x_pad_max', type: 'temporal' },
-          y: { datum: 100 }
-        }
+        params: [{
+          name: 'zoom',
+          select: { type: 'interval' },
+          bind: 'scales'
+        }],
+        mark: { type: 'point', opacity: 0 }
       },
-      // Horizontal baseline at Score = 100 (across full width incl. padding)
-      {
-        transform: [{
-          aggregate: [
-            { op: 'min', field: 'timestamp', as: 'x_min' },
-            { op: 'max', field: 'timestamp', as: 'x_max' }
-          ]
-        },
-        { calculate: "timeOffset('day', datum.x_min, -1)", as: 'x_pad_min' },
-        { calculate: "timeOffset('day', datum.x_max, 1)", as: 'x_pad_max' }
-        ],
-        mark: { type: 'rule', strokeDash: [6,4], opacity: 0.85 },
-        encoding: {
-          color: { value: '#9ca3af' },
-          x: { field: 'x_pad_min', type: 'temporal' },
-          x2: { field: 'x_pad_max', type: 'temporal' },
-          y: { datum: 100 }
-        }
-      },
-      // Points layer (filtered by dropdown state; no legends)
-      {
-        mark: { type: 'point', filled: true, size: 70, opacity: 0.95 },
-        encoding: {
-          y: { field: 'metricValue', type: 'quantitative', title: metricLabel, scale: yScale },
-          color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } },
-          shape: { field: 'benchmark', type: 'nominal', legend: null, scale: { domain: shapeDomain, range: shapeRange } },
-          tooltip: [
-            { field: 'device', title: 'Device' },
-            { field: 'provider', title: 'Provider' },
-            { field: 'benchmark', title: 'Benchmark' },
-            { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
-            { field: 'metricError', title: 'Error', type: 'quantitative', format: tooltipFormat },
-            { field: 'timestamp', title: 'Timestamp', type: 'temporal', format: '%Y-%m-%d %H:%M' }
-          ]
-        }
-      }
+      ...baseLayers,
+      ...dataLayers,
+      ...topPerformerLayer
     ]
   };
       
@@ -2014,12 +2199,18 @@ async function renderChart(values, token, metric) {
     chartView = view;
     setChartDownloadEnabled(true);
     console.info('[chart] rendering Vega view with', values.length, 'rows');
+
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     resizeHandler = () => {
-      if (chartView) {
-        chartView.resize().run();
-      }
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (chartView) {
+          chartView.resize().run();
+        }
+      }, 150);
     };
-    resizeHandler();
+    // Initial resize without debounce
+    if (chartView) chartView.resize().run();
     window.addEventListener('resize', resizeHandler, { passive: true });
     // Only open modal when a point (symbol) in the plot area is clicked
     view.addEventListener('click', (event: any, item: any) => {
@@ -2300,9 +2491,9 @@ function renderStaticTable(values: any[]) {
 
 async function drawTable() {
   try {
-    await loadBenchmarks();
+    const data = await loadBenchmarks();
     // Always include all runs, independent from chart filters
-    renderStaticTable(Array.isArray(rawBenchmarks) ? rawBenchmarks : []);
+    renderStaticTable(Array.isArray(data) ? data : []);
   } catch (err) {
     const container = document.getElementById('table-static');
     if (container) {
@@ -2342,6 +2533,29 @@ async function drawChart() {
       return { ...run, metricValue, metricError, metricLower, metricUpper };
     })
     .filter(Boolean);
+  const countEl = document.getElementById('result-count');
+  if (countEl) {
+    if (rawBenchmarks.length === 0) {
+      countEl.textContent = '';
+    } else if (dataMode === 'frontier') {
+      // Count frontier-setting points per provider (matches the Vega frontier layer)
+      const sorted = [...chartValues].sort((a: any, b: any) =>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+      const providerMax = new Map<string, number>();
+      let frontierCount = 0;
+      for (const d of sorted) {
+        const prev = providerMax.get(d.provider) ?? -Infinity;
+        if (d.metricValue >= prev) {
+          providerMax.set(d.provider, d.metricValue);
+          frontierCount++;
+        }
+      }
+      countEl.textContent = `${frontierCount} Frontier point${frontierCount !== 1 ? 's' : ''}`;
+    } else {
+      countEl.textContent = `${chartValues.length} Result${chartValues.length !== 1 ? 's' : ''}`;
+    }
+  }
   await renderChart(chartValues, token, metric);
 }
 
