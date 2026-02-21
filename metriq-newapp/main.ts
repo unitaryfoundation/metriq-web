@@ -2551,7 +2551,7 @@ async function drawChart() {
           frontierCount++;
         }
       }
-      countEl.textContent = `${frontierCount} Frontier point${frontierCount !== 1 ? 's' : ''}`;
+      countEl.textContent = `${frontierCount} Result${frontierCount !== 1 ? 's' : ''}`;
     } else {
       countEl.textContent = `${chartValues.length} Result${chartValues.length !== 1 ? 's' : ''}`;
     }
