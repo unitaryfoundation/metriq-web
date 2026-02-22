@@ -540,32 +540,3 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .footer-social a:hover{transform:translateY(-2px);background:rgba(37,99,235,.18)}
 .footer-bottom{padding:12px 24px 36px;text-align:center;font-size:13px;color:var(--muted);border-top:1px solid rgba(15,23,42,.08)}
 
-/* Tour button brand color match */
-#start-tour-btn {
-  color: var(--accent-2);
-}
-#start-tour-btn:hover {
-  background: rgba(31, 180, 194, 0.08);
-  text-decoration: none;
-  color: var(--accent-2);
-}
-
-/* Driver.js overrides */
-.driver-popover {
-  font-family: var(--font-sans) !important;
-  border-radius: 12px !important;
-}
-.driver-popover-title {
-  font-family: var(--font-sans) !important;
-  font-weight: 600 !important;
-  font-size: 16px !important;
-}
-.driver-popover-description {
-  font-family: var(--font-sans) !important;
-  font-size: 14px !important;
-  line-height: 1.5 !important;
-}
-.driver-popover-footer button {
-  font-family: var(--font-sans) !important;
-  border-radius: 6px !important;
-}

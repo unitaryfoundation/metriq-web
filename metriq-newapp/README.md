@@ -111,6 +111,5 @@ Push to the `static-app` branch (or trigger `workflow_dispatch`) and GitHub Page
 The app includes a guided tour powered by [Driver.js](https://driverjs.com/) to help new users navigate the interface.
 
 - **Entry Point**: `tour.ts` contains the tour configuration and logic.
-- **Integration**: The tour instance is attached to `window.MetriqTour` and initialized in `main.ts`.
-- **Persistence**: The tour automatically runs on the first visit (checked via `localStorage`). Users can manually restart it using the "Take a tour" button.
+- **Integration**: The tour instance is attached to `window.MetriqTour` and initialized in `main.ts`. Users can start the tour using the "Take a tour" button.
 - **Maintenance**: To update steps or copy, edit the `getSteps()` method in `tour.ts`.
