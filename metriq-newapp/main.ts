@@ -499,7 +499,8 @@ async function initUpdatesCarousel(config: any) {
 
   const startTourBtn = document.getElementById('start-tour-btn');
   if (startTourBtn && tourInstance && typeof tourInstance.start === 'function') {
-    startTourBtn.addEventListener('click', () => {
+    startTourBtn.addEventListener('click', (e) => {
+      e.preventDefault();
       tourInstance.start();
     });
   }

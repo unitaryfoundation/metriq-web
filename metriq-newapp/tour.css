@@ -1,11 +1,23 @@
 /* Tour button brand color match */
-#start-tour-btn {
-  color: var(--accent-2);
-}
-#start-tour-btn:hover {
-  background: rgba(31, 180, 194, 0.08);
+.subtle-link {
+  color: var(--muted);
   text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.18s ease;
+}
+
+.subtle-link i {
   color: var(--accent-2);
+  font-size: 14px;
+}
+
+.subtle-link:hover {
+  color: var(--text);
+  text-decoration: underline;
 }
 
 /* Driver.js overrides */
