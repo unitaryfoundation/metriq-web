@@ -6,6 +6,8 @@ on:
     paths:
       - 'metriq-newapp/**'
       - '.github/workflows/metriq-newapp-deploy.yml'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 
 permissions:
@@ -31,7 +33,6 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            metriq-newapp/package-lock.json
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
