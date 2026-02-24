@@ -484,6 +484,30 @@ async function initUpdatesCarousel(config: any) {
     const pUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
     wireDownload('.link-platforms-json', pUrl, 'platform-index.json', true);
   } catch {}
+
+  // ---- Guided Tour ----
+  // Initializes the tour logic from tour.js (which attaches MetriqTour to window)
+  const MetriqTourCtor = (window as any).MetriqTour;
+  let tourInstance: any | null = null;
+  if (typeof MetriqTourCtor === 'function') {
+    try {
+      tourInstance = new MetriqTourCtor();
+    } catch {
+      tourInstance = null;
+    }
+  }
+
+  const startTourBtn = document.getElementById('start-tour-btn');
+  if (startTourBtn && tourInstance && typeof tourInstance.start === 'function') {
+    startTourBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      tourInstance.start();
+    });
+  }
+  // Check if it's the first visit (only if the instance is usable)
+  // if (tourInstance && typeof tourInstance.checkFirstVisit === 'function') {
+  //   tourInstance.checkFirstVisit();
+  // }
 })();
 
 // Set an initial view without mutating the URL; hash routing below will apply deep links.

@@ -65,6 +65,7 @@ docker run -d \
 ```
 
 In this setup:
+
 - Nginx serves the metriq-data dist files under `/metriq-data/...` inside the container.
 - The entrypoint script detects the mounted dist and sets:
   - `benchmarksUrl` → `/metriq-data/benchmark.latest.json` (unless BENCHMARKS_URL is set)
@@ -85,11 +86,13 @@ Deploying the static site is handled by `.github/workflows/metriq-newapp-deploy.
 Push to the `static-app` branch (or trigger `workflow_dispatch`) and GitHub Pages will publish the latest build.
 
 ## Metrics support
+
 - By default the app visualizes a single `score` (scalar) per run when present in the dataset (normalized from the ETL `metriq_score`). This is the only metric shown in the chart and table.
 - Raw benchmark results (per-metric values, errors, directions) are still available in the run detail modal under "Raw results".
 - `config.json` can declare `metrics` definitions (id, label, unit, scale, format). Any `metriq_score` id in config is normalized to `score`; otherwise the app falls back to whatever metrics exist in `metrics` for legacy datasets.
 
 ## Baseline highlighting
+
 - To highlight a specific device across both the chart and the table, add `baselineDevice` to `data/config.json`:
 
 ```json
@@ -100,4 +103,13 @@ Push to the `static-app` branch (or trigger `workflow_dispatch`) and GitHub Page
   "benchmarkPages": []
 }
 ```
+
 - The baseline device will render with a bold badge in the table and an emphasized overlay in the chart.
+
+## Guided Tour
+
+The app includes a guided tour powered by [Driver.js](https://driverjs.com/) to help new users navigate the interface.
+
+- **Entry Point**: `tour.ts` contains the tour configuration and logic.
+- **Integration**: The tour instance is attached to `window.MetriqTour` and initialized in `main.ts`. Users can start the tour using the "Take a tour" button.
+- **Maintenance**: To update steps or copy, edit the `getSteps()` method in `tour.ts`.
