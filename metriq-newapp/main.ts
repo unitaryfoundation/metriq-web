@@ -1992,7 +1992,16 @@ async function renderChart(values, token, metric) {
   const metricLabel = buildMetricLabel(metric);
   const scaleType = metric?.scale === 'log' ? 'log' : 'linear';
   const tooltipFormat = typeof metric?.format === 'string' ? metric.format : undefined;
-  const yScale = { type: scaleType, zero: scaleType === 'linear' };
+  const metricVals = values.map((d: any) => d.metricValue).filter((v: number) => v != null && isFinite(v));
+  const yMin = Math.min(...metricVals);
+  const yMax = Math.max(...metricVals);
+  const yPad = (yMax - yMin) * 0.1 || 1;
+  const yScale: any = { type: scaleType, nice: true, domain: [Math.max(0, yMin - yPad), yMax + yPad] };
+  const timestamps = values.map((d: any) => new Date(d.timestamp).getTime()).filter((t: number) => isFinite(t));
+  const tMin = Math.min(...timestamps);
+  const tMax = Math.max(...timestamps);
+  const tPad = (tMax - tMin) * 0.05 || 86400000;
+  const xScale: any = { domain: [new Date(tMin - tPad).toISOString(), new Date(tMax + tPad).toISOString()] };
   const transform = metric?.scale === 'log'
     ? [{ filter: 'datum.metricValue > 0' }]
     : [];
@@ -2075,7 +2084,8 @@ async function renderChart(values, token, metric) {
     // Frontier envelope line per provider
     {
       transform: [
-        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: 'frontierMax' }], groupby: ['provider'], frame: [null, 0] }
+        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: 'frontierMax' }], groupby: ['provider'], frame: [null, 0] },
+        { filter: 'datum.metricValue === datum.frontierMax' }
       ],
       mark: { type: 'line', strokeWidth: 2, opacity: 0.7, interpolate: 'step-after' },
       encoding: {
@@ -2170,7 +2180,7 @@ async function renderChart(values, token, metric) {
     data: { values },
     transform,
     encoding: {
-      x: { field: 'timestamp', type: 'temporal', title: 'Run date', axis: { format: '%Y-%m-%d' } },
+      x: { field: 'timestamp', type: 'temporal', title: 'Run date', axis: { format: '%Y-%m-%d' }, scale: xScale },
       y: { field: 'metricValue', type: 'quantitative', title: metricLabel, scale: yScale }
     },
     layer: [
