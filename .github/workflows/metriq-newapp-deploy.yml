@@ -2,7 +2,7 @@ name: Deploy metriq-newapp
 
 on:
   push:
-    branches: [ static-app ]
+    branches: [ main ]
     paths:
       - 'metriq-newapp/**'
       - '.github/workflows/metriq-newapp-deploy.yml'
