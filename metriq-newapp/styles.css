@@ -377,17 +377,11 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .chart-area__head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
 .chart-area__head .panel__title{margin:0;font-size:14px;font-weight:600;letter-spacing:.04px;color:var(--muted)}
 .chart-area__head .meta{margin:2px 0 0}
-.chart-area__subhead{display:flex;justify-content:flex-end;margin-bottom:4px}
-.result-count{font-size:13px;font-weight:600;color:var(--accent);white-space:nowrap}
-.chart-area__actions{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .chart-controls{width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:4px;padding:16px;border-left:1px solid rgba(15,23,42,.08);background:#fff;font-size:13px;color:var(--muted);overflow-y:auto;max-height:560px}
 .chart-controls h4{margin:0;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#1f2b3c;font-weight:600}
 
 /* Collapsible filter groups */
 .filter-group{display:flex;flex-direction:column;gap:0}
-/* Inline variant must come after base .filter-group to override flex-direction */
-.filter-group--inline{flex-direction:row;align-items:center;gap:10px}
-.filter-group--inline .filter-group__label{white-space:nowrap}
 .filter-group__toggle{appearance:none;border:0;background:transparent;display:flex;align-items:center;gap:8px;padding:10px 0;cursor:pointer;font:inherit;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#1f2b3c;width:100%;text-align:left}
 .filter-group__toggle:hover{color:var(--accent)}
 .filter-group__toggle:focus-visible{outline:2px solid color-mix(in srgb, var(--accent) 65%, transparent);outline-offset:2px;border-radius:4px}
@@ -397,14 +391,6 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .filter-group__body{display:flex;flex-direction:column;gap:6px;padding-bottom:6px}
 .filter-group__toggle[aria-expanded="false"] + .filter-group__body{display:none}
 
-/* Show data as toggle pills */
-.filter-group__label{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#1f2b3c}
-.toggle-pills{display:flex;border:1px solid rgba(15,23,42,.14);border-radius:6px;overflow:hidden}
-.toggle-pill{appearance:none;border:none;background:#fff;color:var(--muted);padding:2px 10px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;transition:background .15s ease, color .15s ease;flex:1;text-align:center;line-height:1.4}
-.toggle-pill:not(:last-child){border-right:1px solid rgba(15,23,42,.14)}
-.toggle-pill:hover{background:rgba(37,99,235,.04);color:var(--text)}
-.toggle-pill.is-active{background:var(--accent);color:#fff}
-.toggle-pill:focus-visible{outline:2px solid color-mix(in srgb, var(--accent) 65%, transparent);outline-offset:-2px}
 
 /* Filter search input */
 .filter-search{appearance:none;border:1px solid rgba(15,23,42,.12);background:#fff;color:var(--text);border-radius:6px;padding:6px 10px;font:inherit;font-size:12px;width:100%;transition:border-color .2s ease}
@@ -470,8 +456,6 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
   .chart-controls{width:100%;max-height:none;border-left:none;border-top:1px solid rgba(15,23,42,.08);padding:16px}
   .chart-area{padding:12px}
   .chart-area__head{flex-direction:column;gap:10px}
-  .chart-area__subhead{margin-bottom:8px}
-  .chart-area__actions{flex-wrap:wrap}
   #chart{min-height:240px}
   .multi-list{max-height:180px}
   .multi-item{padding:5px 7px;font-size:12px}

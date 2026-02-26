@@ -49,7 +49,6 @@ const filterState: { provider: string[]; benchmark: string[] } = {
   benchmark: [],
 };
 
-let dataMode: 'all' | 'frontier' = 'all';
 
 let allMetricDefs = [];
 let currentMetricId = null;
@@ -1740,27 +1739,11 @@ function setupFilterSearchInputs() {
   if (provSearch) provSearch.addEventListener('input', handler);
 }
 
-function initDataModeToggle() {
-  const container = document.getElementById('data-mode-toggle');
-  if (!container) return;
-  container.addEventListener('click', (event: MouseEvent) => {
-    const btn = (event.target as HTMLElement)?.closest('.toggle-pill') as HTMLButtonElement | null;
-    if (!btn || btn.classList.contains('is-active')) return;
-    const mode = btn.getAttribute('data-mode');
-    if (mode !== 'all' && mode !== 'frontier') return;
-    dataMode = mode;
-    container.querySelectorAll('.toggle-pill').forEach(el => el.classList.remove('is-active'));
-    btn.classList.add('is-active');
-    drawChart();
-  });
-}
-
 function setupFilters(values) {
   populateFilterOptions(values);
   if (filtersInitialized) return;
   initFilterGroupToggles();
   setupFilterSearchInputs();
-  initDataModeToggle();
   filtersInitialized = true;
 }
 
@@ -2042,8 +2025,7 @@ async function renderChart(values, token, metric) {
     }
   ];
 
-  // Data-mode-specific layers
-  const dataLayers: any[] = dataMode === 'all' ? [
+  const dataLayers: any[] = [
     // Error bars layer
     {
       transform: [{ filter: 'datum.metricLower !== null && datum.metricUpper !== null' }],
@@ -2071,72 +2053,16 @@ async function renderChart(values, token, metric) {
         ]
       }
     }
-  ] : [
-    // Dimmed points for context
-    {
-      mark: { type: 'point', filled: true, size: 40, opacity: 0.15 },
-      encoding: {
-        y: { field: 'metricValue', type: 'quantitative', title: metricLabel, scale: yScale },
-        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } },
-        shape: { field: 'benchmark', type: 'nominal', legend: null, scale: { domain: shapeDomain, range: shapeRange } }
-      }
-    },
-    // Frontier envelope line per provider
-    {
-      transform: [
-        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: 'frontierMax' }], groupby: ['provider'], frame: [null, 0] },
-        { filter: 'datum.metricValue === datum.frontierMax' }
-      ],
-      mark: { type: 'line', strokeWidth: 2, opacity: 0.7, interpolate: 'step-after' },
-      encoding: {
-        y: { field: 'frontierMax', type: 'quantitative', scale: yScale },
-        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } }
-      }
-    },
-    // Highlighted frontier points (where a new max was set per provider)
-    {
-      transform: [
-        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: 'frontierMax' }], groupby: ['provider'], frame: [null, 0] },
-        { filter: 'datum.metricValue === datum.frontierMax' }
-      ],
-      mark: { type: 'point', filled: true, size: 100, opacity: 0.95, stroke: '#fff', strokeWidth: 1 },
-      encoding: {
-        y: { field: 'metricValue', type: 'quantitative', scale: yScale },
-        color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } },
-        shape: { field: 'benchmark', type: 'nominal', legend: null, scale: { domain: shapeDomain, range: shapeRange } },
-        tooltip: [
-          { field: 'device', title: 'Device' },
-          { field: 'provider', title: 'Provider' },
-          { field: 'benchmark', title: 'Benchmark' },
-          { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
-          { field: 'timestamp', title: 'Timestamp', type: 'temporal', format: '%Y-%m-%d %H:%M' }
-        ]
-      }
-    }
   ];
 
-  // Top-performer annotation: text labels on frontier-setting data points.
-  // - "Data points" mode: global frontier-setters (new all-time highs across all providers)
-  // - "Frontier trend" mode: per-provider frontier-setters (matching the highlighted dots)
+  // Top-performer annotation: text labels on global frontier-setting data points.
   const annotationMark = { type: 'text' as const, align: 'left' as const, dx: 10, dy: -6, fontSize: 11, fontWeight: 600, font: 'Inter, system-ui, sans-serif', clip: true };
   const annotationEncoding = {
     y: { field: 'metricValue', type: 'quantitative', scale: yScale },
     text: { field: 'device', type: 'nominal' },
     color: { field: 'provider', type: 'nominal', legend: null, scale: { domain: colorDomain, range: colorRange } }
   };
-  const topPerformerLayer: any[] = dataMode === 'frontier' ? [
-    // Per-provider: label points that set a new high for their provider
-    {
-      transform: [
-        { sort: [{ field: 'timestamp' }], window: [{ op: 'max', field: 'metricValue', as: '_provMax' }], groupby: ['provider'], frame: [null, 0] },
-        { filter: 'datum.metricValue >= datum._provMax' },
-        { sort: [{ field: 'timestamp' }], window: [{ op: 'row_number', as: '_tieBreak' }], groupby: ['provider', '_provMax'] },
-        { filter: 'datum._tieBreak === 1' }
-      ],
-      mark: annotationMark,
-      encoding: annotationEncoding
-    }
-  ] : [
+  const topPerformerLayer: any[] = [
     // Global: label points that set a new all-time high across all providers
     {
       transform: [
@@ -2543,29 +2469,6 @@ async function drawChart() {
       return { ...run, metricValue, metricError, metricLower, metricUpper };
     })
     .filter(Boolean);
-  const countEl = document.getElementById('result-count');
-  if (countEl) {
-    if (rawBenchmarks.length === 0) {
-      countEl.textContent = '';
-    } else if (dataMode === 'frontier') {
-      // Count frontier-setting points per provider (matches the Vega frontier layer)
-      const sorted = [...chartValues].sort((a: any, b: any) =>
-        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-      const providerMax = new Map<string, number>();
-      let frontierCount = 0;
-      for (const d of sorted) {
-        const prev = providerMax.get(d.provider) ?? -Infinity;
-        if (d.metricValue >= prev) {
-          providerMax.set(d.provider, d.metricValue);
-          frontierCount++;
-        }
-      }
-      countEl.textContent = `${frontierCount} Result${frontierCount !== 1 ? 's' : ''}`;
-    } else {
-      countEl.textContent = `${chartValues.length} Result${chartValues.length !== 1 ? 's' : ''}`;
-    }
-  }
   await renderChart(chartValues, token, metric);
 }
 
