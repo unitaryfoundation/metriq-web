@@ -154,50 +154,63 @@
           <div class="tabs__panels">
             <!-- Graph panel -->
             <section id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" class="panel">
-              <div class="panel__head">
+          <div class="chart-row">
+            <div class="chart-area">
+              <div class="chart-area__head">
                 <h3 class="panel__title">Score over time</h3>
-              <p class="meta">Use the filters on the right to focus on specific devices or benchmarks.</p>
               </div>
-              <div class="chart-row">
-                <div class="chart-area">
-                  <div class="frame-wrap">
+              <div class="frame-wrap">
                 <div class="skeleton" id="skeleton-graph"><div class="shimmer"></div></div>
-                    <div id="chart"></div>
-                    <div class="chart-actions" aria-label="Chart downloads">
-                  <div class="download-menu download-menu--up" id="chart-download">
-                    <button type="button" class="btn" id="btn-download-chart" disabled aria-haspopup="menu" aria-expanded="false">
-                      <i class="fa-solid fa-download" aria-hidden="true"></i>
-                          Plot
-                      <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
-                          </button>
-                    <div class="download-menu__items" id="chart-download-menu" role="menu" aria-label="Download plot as" hidden>
-                      <button type="button" class="download-menu__item" role="menuitem" data-format="png">PNG</button>
-                      <button type="button" class="download-menu__item" role="menuitem" data-format="svg">SVG</button>
-                        </div>
-                      </div>
-                    </div>
+                <div id="chart"></div>
+              </div>
+              <div class="chart-actions">
+                <div class="download-menu download-menu--up" id="chart-download">
+                  <button type="button" class="btn" id="btn-download-chart" disabled aria-haspopup="menu" aria-expanded="false">
+                    <i class="fa-solid fa-download" aria-hidden="true"></i>
+                    Plot
+                    <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                  </button>
+                  <div class="download-menu__items" id="chart-download-menu" role="menu" aria-label="Download plot as" hidden>
+                    <button type="button" class="download-menu__item" role="menuitem" data-format="png">PNG</button>
+                    <button type="button" class="download-menu__item" role="menuitem" data-format="svg">SVG</button>
                   </div>
                 </div>
-                <aside class="chart-controls" aria-label="Chart filters">
-              <div class="chart-control" role="group" aria-label="Benchmark filter">
-                    <span>Benchmark</span>
-                <div id="benchmark-list" class="multi-list" aria-label="Benchmark multi-select"></div>
-                    <div class="multi-actions">
-                  <button type="button" class="btn-mini" id="benchmark-clear">None</button>
-                  <button type="button" class="btn-mini" id="benchmark-all">All</button>
-                    </div>
-                  </div>
-              <div class="chart-control" role="group" aria-label="Cloud Provider filter">
-                    <span>Cloud Provider</span>
-                <div id="provider-list" class="multi-list" aria-label="Provider multi-select"></div>
-                    <div class="multi-actions">
-                  <button type="button" class="btn-mini" id="provider-clear">None</button>
-                  <button type="button" class="btn-mini" id="provider-all">All</button>
-                    </div>
-                  </div>
-                </aside>
               </div>
-            </section>
+            </div>
+            <aside class="chart-controls" aria-label="Chart filters">
+              <div class="filter-group" role="group" aria-label="Benchmark filter">
+                <button type="button" class="filter-group__toggle" aria-expanded="true" data-filter-target="benchmark">
+                  <i class="fa-solid fa-chevron-down filter-group__chevron" aria-hidden="true"></i>
+                  <span>Benchmark</span>
+                  <span class="filter-group__count" id="benchmark-count"></span>
+                </button>
+                <div class="filter-group__body" id="filter-body-benchmark">
+                  <input type="search" class="filter-search" id="filter-search-benchmark" placeholder="Search benchmarks…" autocomplete="off" />
+                  <div id="benchmark-list" class="multi-list" aria-label="Benchmark multi-select"></div>
+                  <div class="multi-actions">
+                    <button type="button" class="btn-mini" id="benchmark-clear">Deselect all</button>
+                    <button type="button" class="btn-mini" id="benchmark-all">Select all</button>
+                  </div>
+                </div>
+              </div>
+              <div class="filter-group" role="group" aria-label="Cloud Provider filter">
+                <button type="button" class="filter-group__toggle" aria-expanded="true" data-filter-target="provider">
+                  <i class="fa-solid fa-chevron-down filter-group__chevron" aria-hidden="true"></i>
+                  <span>Cloud Provider</span>
+                  <span class="filter-group__count" id="provider-count"></span>
+                </button>
+                <div class="filter-group__body" id="filter-body-provider">
+                  <input type="search" class="filter-search" id="filter-search-provider" placeholder="Search providers…" autocomplete="off" />
+                  <div id="provider-list" class="multi-list" aria-label="Provider multi-select"></div>
+                  <div class="multi-actions">
+                    <button type="button" class="btn-mini" id="provider-clear">Deselect all</button>
+                    <button type="button" class="btn-mini" id="provider-all">Select all</button>
+                  </div>
+                </div>
+              </div>
+            </aside>
+            </div>
+          </section>
 
             <!-- Table panel -->
           <section id="panel-table" role="tabpanel" aria-labelledby="tab-table" class="panel is-active">
