@@ -1,4 +1,4 @@
-# Multi-purpose image: serves the metriq-newapp static site via nginx.
+# Multi-purpose image: serves the metriq-web static site via nginx.
 
 FROM nginx:1.28-alpine
 

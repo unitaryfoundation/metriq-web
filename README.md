@@ -1,5 +1,4 @@
-# Metriq New App
-
+# Metriq Web
 This directory contains the standalone benchmarks UI. It can be served via an nginx server or run as a container.
 
 The shipped entrypoint is `main.js`, which is generated from the versioned `main.ts`.
@@ -11,13 +10,13 @@ Run a TypeScript watcher and a live-reloading static server in two terminals:
 ```bash
 # Terminal 1: compile TypeScript on save
 cd metriq-web
-npx tsc -p metriq-newapp --watch --preserveWatchOutput
+npx tsc -p . --watch --preserveWatchOutput
 ```
 
 ```bash
 # Terminal 2: serve the static site and auto-reload when main.js changes
 cd metriq-web
-npx live-server metriq-newapp --port=8080
+npx live-server . --port=8080
 ```
 
 Then open `http://localhost:8080`.
@@ -28,7 +27,7 @@ Then open `http://localhost:8080`.
 
 ```bash
 cd metriq-web
-npx tsc -p metriq-newapp --watch --sourceMap --inlineSources --preserveWatchOutput
+npx tsc -p . --watch --sourceMap --inlineSources --preserveWatchOutput
 ```
 
 In Chrome DevTools, ensure “Enable JavaScript source maps” is on; you should be able to set breakpoints in `main.ts`.
@@ -37,13 +36,13 @@ In Chrome DevTools, ensure “Enable JavaScript source maps” is on; you should
 
 ```bash
 # build the image
-METRIQ_TAG=metriq-newapp:latest
-docker build -t $METRIQ_TAG metriq-newapp
+METRIQ_TAG=metriq-web:latest
+docker build -t $METRIQ_TAG .
 
 # run the container
 docker run -d \
   -p 8080:80 \
-  --name metriq-newapp \
+  --name metriq-web \
   $METRIQ_TAG
 ```
 
@@ -54,14 +53,14 @@ When developing locally with the metriq-data repo checked out alongside metriq-w
 ```bash
 # Assume directory layout
 #   /path/to/metriq-data/dist
-#   /path/to/metriq-web/metriq-newapp
+#   /path/to/metriq-web
 
 # From the repo root or any directory, build the image as above, then run:
 docker run -d \
   -p 8080:80 \
   -v /path/to/metriq-data/dist:/usr/share/nginx/html/metriq-data:ro \
-  --name metriq-newapp-local \
-  metriq-newapp:latest
+  --name metriq-web-local \
+  metriq-web:latest
 ```
 
 In this setup:
@@ -77,13 +76,13 @@ The container reads `data/config.json`. Add benchmark landing pages to `config.j
 
 ## GitHub Pages CI/CD pipeline
 
-Deploying the static site is handled by `.github/workflows/metriq-newapp-deploy.yml`. The workflow runs when files inside `metriq-newapp/` change or when triggered manually. It:
+Deploying the static site is handled by `.github/workflows/deploy-pages.yml`. The workflow runs on pushes to `main` or when triggered manually. It:
 
 1. Installs Node dependencies.
-2. Builds TypeScript (metriq-newapp).
-3. Uploads the `metriq-newapp/` bundle (minus Docker assets) to GitHub Pages.
+2. Builds TypeScript from the repo root.
+3. Uploads the static site bundle (`index.html`, compiled JS, CSS, `data/`, and `public/`) to GitHub Pages.
 
-Push to the `static-app` branch (or trigger `workflow_dispatch`) and GitHub Pages will publish the latest build.
+Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish the latest build.
 
 ## Metrics support
 
