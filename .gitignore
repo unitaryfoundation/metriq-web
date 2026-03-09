@@ -1,0 +1,11 @@
+# Dependency directories
+node_modules/
+
+# npm build output
+build/
+
+# generated javascript files
+main.js
+main.js.map
+tour.js
+tour.js.map
