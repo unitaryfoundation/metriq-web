@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-03-13",
+    "title": "The Metriq paper is on arXiv! 🗞️",
+    "body": "Metriq: A Collaborative Platform for Benchmarking Quantum Computers is now available on arXiv.",
+    "href": "https://arxiv.org/abs/2603.08680",
+    "linkText": "Read the paper"
+  },
+  {
     "date": "2026-03-09",
     "title": "metriq-gym 0.7.0 released",
     "body": "New version of metriq-gym now available with improvements to CLOPS and EPLG, and more support for Quantinuum devices.",
