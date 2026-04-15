@@ -1,5 +1,10 @@
 [
   {
+    "date": "2026-04-15",
+    "title": "IBM and OriginQ retired devices",
+    "body": "IBM's ibm_brisbane and OriginQ's wukong_72 and wukong_102 have now been retired by the vendors. Historical results remain available in Metriq for reference."
+  },
+  {
     "date": "2026-03-10",
     "title": "The Metriq paper is on arXiv! 🗞️",
     "body": "Metriq: A Collaborative Platform for Benchmarking Quantum Computers is now available on arXiv.",
