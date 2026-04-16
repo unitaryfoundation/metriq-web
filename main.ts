@@ -61,6 +61,7 @@ let platformsPromise;
 let platformsLoaded = false;
 let docsLoaded = false;
 let platformsIndexCache: any[] | null = null;
+let platformsIndexByKeyCache: Map<string, any> | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformQubitsCache: Map<string, number> | null = null;
 let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
@@ -93,13 +94,22 @@ function normalizePlatformLifecycle(value: any) {
   };
 }
 
+function setPlatformsIndexCache(platforms: any[]) {
+  const items = Array.isArray(platforms) ? platforms.slice() : [];
+  platformsIndexCache = items;
+  platformsIndexByKeyCache = new Map();
+  items.forEach((platform: any) => {
+    const provider = String(platform?.provider || '');
+    const device = String(platform?.device || '');
+    if (!provider || !device) return;
+    platformsIndexByKeyCache!.set(getDeviceKey(provider, device), platform);
+  });
+}
+
 function getPlatformLifecycle(provider: string, device: string, source?: any) {
   const direct = normalizePlatformLifecycle(source?.lifecycle);
   if (direct) return direct;
-  const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache : [];
-  const match = platforms.find((platform: any) =>
-    String(platform?.provider || '') === provider && String(platform?.device || '') === device
-  );
+  const match = platformsIndexByKeyCache?.get(getDeviceKey(provider, device));
   return normalizePlatformLifecycle(match?.lifecycle);
 }
 
@@ -126,7 +136,7 @@ function renderLifecycleBadgeHtml(lifecycle: any) {
   if (!normalized) return '';
   const label = titleCaseStatus(normalized.status);
   const extraClass = normalized.status === 'retired' ? ' status-badge--retired' : '';
-  return `<span class="device-badge status-badge${extraClass}">${escapeHtml(label)}</span>`;
+  return `<span class="device-badge${extraClass}">${escapeHtml(label)}</span>`;
 }
 
 function renderDeviceBadgesHtml(provider: string, device: string, source?: any) {
@@ -843,11 +853,14 @@ async function loadPlatformsIndex() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
         const json = await resp.json();
         if (json && Array.isArray(json.platforms)) {
+          setPlatformsIndexCache(json.platforms);
           return json;
         }
+        setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       } catch (err) {
         console.warn('[platforms] failed to load index:', err);
+        setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       }
     })();
@@ -1138,7 +1151,7 @@ async function initPlatformsView(forceRender = false) {
   try {
     const data = await loadPlatformsIndex();
     const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
-    platformsIndexCache = platforms.slice();
+    setPlatformsIndexCache(platforms);
     try {
       await loadPlatformScores();
     } catch {}
@@ -2763,11 +2776,11 @@ async function initBenchmarksView() {
     const [config, data, platformData] = await Promise.all([
       loadAppConfig(),
       loadBenchmarks(),
-      loadPlatformsIndex().catch(() => ({ generated_at: null, platforms: [] })),
+      loadPlatformsIndex(),
     ]);
     rawBenchmarks = Array.isArray(data) ? data : [];
     const platforms = Array.isArray((platformData as any)?.platforms) ? (platformData as any).platforms : [];
-    platformsIndexCache = platforms.slice();
+    setPlatformsIndexCache(platforms);
     if (!rawBenchmarks.length) {
       if (el) {
         el.innerHTML = '<div class="chart-empty">No benchmark data available.</div>';
