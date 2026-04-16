@@ -61,6 +61,7 @@ let platformsPromise;
 let platformsLoaded = false;
 let docsLoaded = false;
 let platformsIndexCache: any[] | null = null;
+let platformsIndexByKeyCache: Map<string, any> | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformQubitsCache: Map<string, number> | null = null;
 let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
@@ -77,6 +78,98 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', 
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 // Optional: baseline device name from config (highlighted in chart/table)
 let baselineDevice: string | null = null;
+
+function normalizePlatformLifecycle(value: any) {
+  if (!value || typeof value !== 'object') return null;
+  const status = typeof value.status === 'string' ? value.status.trim().toLowerCase() : '';
+  const effectiveAt = typeof value.effective_at === 'string' ? value.effective_at.trim() : '';
+  const sourceUrl = typeof value.source_url === 'string' ? value.source_url.trim() : '';
+  const sourceLabel = typeof value.source_label === 'string' ? value.source_label.trim() : '';
+  if (!status) return null;
+  return {
+    status,
+    effective_at: effectiveAt || null,
+    source_url: sourceUrl || null,
+    source_label: sourceLabel || null,
+  };
+}
+
+function setPlatformsIndexCache(platforms: any[]) {
+  const items = Array.isArray(platforms) ? platforms.slice() : [];
+  platformsIndexCache = items;
+  platformsIndexByKeyCache = new Map();
+  items.forEach((platform: any) => {
+    const provider = String(platform?.provider || '');
+    const device = String(platform?.device || '');
+    if (!provider || !device) return;
+    platformsIndexByKeyCache!.set(getDeviceKey(provider, device), platform);
+  });
+}
+
+function getPlatformLifecycle(provider: string, device: string, source?: any) {
+  const direct = normalizePlatformLifecycle(source?.lifecycle);
+  if (direct) return direct;
+  const match = platformsIndexByKeyCache?.get(getDeviceKey(provider, device));
+  return normalizePlatformLifecycle(match?.lifecycle);
+}
+
+function formatLifecycleEffectiveAt(value: string | null | undefined) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const date = new Date(`${value}T00:00:00Z`);
+    return Number.isNaN(Number(date)) ? value : dateOnlyFormatter.format(date);
+  }
+  const date = new Date(value);
+  return Number.isNaN(Number(date)) ? value : dateOnlyFormatter.format(date);
+}
+
+function titleCaseStatus(status: string) {
+  return status
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function renderLifecycleBadgeHtml(lifecycle: any) {
+  const normalized = normalizePlatformLifecycle(lifecycle);
+  if (!normalized) return '';
+  const label = titleCaseStatus(normalized.status);
+  const extraClass = normalized.status === 'retired' ? ' status-badge--retired' : '';
+  return `<span class="device-badge${extraClass}">${escapeHtml(label)}</span>`;
+}
+
+function renderDeviceBadgesHtml(provider: string, device: string, source?: any) {
+  const badges: string[] = [];
+  const lifecycle = getPlatformLifecycle(provider, device, source);
+  if (lifecycle) {
+    const lifecycleBadge = renderLifecycleBadgeHtml(lifecycle);
+    if (lifecycleBadge) badges.push(lifecycleBadge);
+  }
+  if (baselineDevice && String(device || '') === baselineDevice) {
+    badges.push('<span class="device-badge baseline-badge">Baseline</span>');
+  }
+  return badges.length ? ` ${badges.join(' ')}` : '';
+}
+
+function renderDeviceLabelHtml(provider: string, device: string, source?: any) {
+  return `${escapeHtml(device || '')}${renderDeviceBadgesHtml(provider, device, source)}`;
+}
+
+function renderLifecycleNoteHtml(provider: string, device: string, source?: any) {
+  const lifecycle = getPlatformLifecycle(provider, device, source);
+  if (!lifecycle || lifecycle.status !== 'retired') return '';
+  const effectiveAt = formatLifecycleEffectiveAt(lifecycle.effective_at);
+  const when = effectiveAt ? ` as of ${escapeHtml(effectiveAt)}` : '';
+  const sourceLink = lifecycle.source_url
+    ? ` <a href="${escapeAttr(lifecycle.source_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(lifecycle.source_label || 'Source')}</a>.`
+    : '';
+  return `
+    <div class="platform-status-note platform-status-note--retired" role="note">
+      <strong>Retired:</strong> This device is retired${when}. Historic benchmark results remain visible.${sourceLink}
+    </div>
+  `.trim();
+}
 
 function setChartDownloadEnabled(enabled: boolean) {
   if (downloadChartBtn) downloadChartBtn.disabled = !enabled;
@@ -760,11 +853,14 @@ async function loadPlatformsIndex() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
         const json = await resp.json();
         if (json && Array.isArray(json.platforms)) {
+          setPlatformsIndexCache(json.platforms);
           return json;
         }
+        setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       } catch (err) {
         console.warn('[platforms] failed to load index:', err);
+        setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       }
     })();
@@ -916,6 +1012,7 @@ function renderPlatformDetailPage(detail: any) {
   const currentMeta = detail?.current?.device_metadata || null;
   const history = Array.isArray(detail?.history) ? detail.history : [];
   const metriqScore = detail?.metriq_score || null;
+  const lifecycleNote = renderLifecycleNoteHtml(String(provider), String(device), detail);
   const error = detail?.error ? `<div class="meta" style="color:#f43f5e;">${escapeHtml(String(detail.error))}</div>` : '';
 
   const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<div class="meta">No current device metadata.</div>';
@@ -991,9 +1088,10 @@ function renderPlatformDetailPage(detail: any) {
     <div class="detail-page" style="display:flex;flex-direction:column;gap:20px;padding-top:4px;">
       <div class="detail-header" style="display:flex;flex-direction:column;gap:6px;">
         <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
-        <h3 style="margin:0;">${escapeHtml(provider)} · ${escapeHtml(device)}</h3>
+        <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
       </div>
+      ${lifecycleNote}
       ${error}
       <div class="detail-grid" style="display:flex;flex-direction:column;gap:24px;">
         <section class="detail-section" style="padding:8px 0;">
@@ -1053,7 +1151,7 @@ async function initPlatformsView(forceRender = false) {
   try {
     const data = await loadPlatformsIndex();
     const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
-    platformsIndexCache = platforms.slice();
+    setPlatformsIndexCache(platforms);
     try {
       await loadPlatformScores();
     } catch {}
@@ -1465,34 +1563,37 @@ function renderPlatformsTable() {
     return v > max ? v : max;
   }, Number.NEGATIVE_INFINITY);
 
-		  const rows: string[] = [];
-			  filtered.forEach((p: any) => {
-		    const key = getDeviceKey(String(p.provider||''), String(p.device||''));
-		    const numQubits = platformQubitsCache && platformQubitsCache.get(key);
-		    const coverage = platformCoverageCache && platformCoverageCache.get(key);
-		    const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
-		    const spark = series.length ? renderSparkline(series) : '';
-		    const href = `#view=platforms&provider=${encodeURIComponent(String(p.provider||''))}&device=${encodeURIComponent(String(p.device||''))}`;
-		    const isBaseline = baselineDevice && String(p.device||'') === baselineDevice;
-		    const deviceLabel = `${escapeHtml(p.device||'')}${isBaseline ? ' <span class="baseline-badge">Baseline</span>' : ''}`;
-		    const scoreVal = platformScoresCache && platformScoresCache.get(key);
-		    const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
-		    const coverageText = coverage && coverage.total > 0 ? `${coverage.covered}/${coverage.total}` : '–';
-		    const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
-		      ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
-		      : 0;
-		    const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
-		      rows.push(`
-			      <tr>
-			        <td><a href="${href}">${deviceLabel}</a></td>
-			        <td>${numQubits !== undefined && numQubits !== null ? escapeHtml(String(numQubits)) : '—'}</td>
-			        <td title="${escapeAttr(p.provider||'')}">${escapeHtml(p.provider||'')}</td>
-			        <td class="num metriq-score" data-provider="${escapeAttr(p.provider||'')}" data-device="${escapeAttr(p.device||'')}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
-			        <td class="num">${escapeHtml(coverageText)}</td>
-			        <td class="num">${escapeHtml(lastTs||'')}</td>
-			        <td class="activity-col">${spark}</td>
-			      </tr>`);
-		  });
+  const rows: string[] = [];
+  filtered.forEach((p: any) => {
+    const provider = String(p.provider || '');
+    const device = String(p.device || '');
+    const key = getDeviceKey(provider, device);
+    const numQubits = platformQubitsCache && platformQubitsCache.get(key);
+    const coverage = platformCoverageCache && platformCoverageCache.get(key);
+    const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
+    const spark = series.length ? renderSparkline(series) : '';
+    const href = `#view=platforms&provider=${encodeURIComponent(provider)}&device=${encodeURIComponent(device)}`;
+    const lifecycle = getPlatformLifecycle(provider, device, p);
+    const isRetired = lifecycle?.status === 'retired';
+    const deviceLabel = renderDeviceLabelHtml(provider, device, p);
+    const scoreVal = platformScoresCache && platformScoresCache.get(key);
+    const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
+    const coverageText = coverage && coverage.total > 0 ? `${coverage.covered}/${coverage.total}` : '–';
+    const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
+      ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
+      : 0;
+    const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
+    rows.push(`
+      <tr${isRetired ? ' class="platform-row--retired"' : ''}>
+        <td><a href="${href}">${deviceLabel}</a></td>
+        <td>${numQubits !== undefined && numQubits !== null ? escapeHtml(String(numQubits)) : '—'}</td>
+        <td title="${escapeAttr(provider)}">${escapeHtml(provider)}</td>
+        <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
+        <td class="num">${escapeHtml(coverageText)}</td>
+        <td class="num">${escapeHtml(lastTs || '')}</td>
+        <td class="activity-col">${spark}</td>
+      </tr>`);
+  });
   tbody.innerHTML = rows.join('');
   if (table && (table as any).dataset) {
     const dataTable = table as any;
@@ -1956,10 +2057,12 @@ function openRunDetail(run) {
   const runMetricWithError = runError !== null
     ? `${runMetric} ± ${formatMetricValue(runError, metricFormat, metric.unit)}`
     : runMetric;
+  const lifecycleNote = renderLifecycleNoteHtml(String(run.provider || ''), String(run.device || ''));
 
   detailTitle.textContent = `${run.provider} · ${run.device}`;
   detailSubtitle.textContent = `${run.benchmark} · ${runMetricWithError} · ${formatTimestamp(run.timestamp)}`;
   detailBody.innerHTML = `
+    ${lifecycleNote}
     <section class="detail-section">
       <h5>Job parameters</h5>
       ${renderJobParams(run)}
@@ -2527,10 +2630,13 @@ function renderStaticTable(values: any[]) {
       ? `${formatted} ± ${formatMetricValue(err, metric.format || '.3f', metric.unit)}`
       : formatted;
     const tr = document.createElement('tr');
+    const lifecycle = getPlatformLifecycle(String(run.provider || ''), String(run.device || ''));
+    if (lifecycle?.status === 'retired') {
+      tr.className = 'results-row--retired';
+    }
     const deviceHref = `#`;
     const benchHref = `#`;
-    const isBaseline = baselineDevice && String(run.device||'') === baselineDevice;
-    const deviceLabel = `${escapeHtml(run.device || '')}${isBaseline ? ' <span class=\"baseline-badge\">Baseline</span>' : ''}`;
+    const deviceLabel = renderDeviceLabelHtml(String(run.provider || ''), String(run.device || ''));
     const metricCells = metricDefs.map((def: any) => {
       const mv = getMetricValue(run, def.id);
       const me = getMetricError(run, def.id);
@@ -2667,8 +2773,14 @@ async function initBenchmarksView() {
   const skeletonGraph = document.getElementById('skeleton-graph');
   setChartDownloadEnabled(false);
   try {
-    const [config, data] = await Promise.all([loadAppConfig(), loadBenchmarks()]);
+    const [config, data, platformData] = await Promise.all([
+      loadAppConfig(),
+      loadBenchmarks(),
+      loadPlatformsIndex(),
+    ]);
     rawBenchmarks = Array.isArray(data) ? data : [];
+    const platforms = Array.isArray((platformData as any)?.platforms) ? (platformData as any).platforms : [];
+    setPlatformsIndexCache(platforms);
     if (!rawBenchmarks.length) {
       if (el) {
         el.innerHTML = '<div class="chart-empty">No benchmark data available.</div>';
