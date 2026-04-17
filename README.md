@@ -42,9 +42,14 @@ docker build -t $METRIQ_TAG .
 # run the container
 docker run -d \
   -p 8080:80 \
+  -e METRIQ_SITE_URL=http://localhost:8080 \
   --name metriq-web \
   $METRIQ_TAG
 ```
+
+With `METRIQ_SITE_URL` set at container startup, the entrypoint regenerates `feed.xml`
+so `http://localhost:8080/feed.xml` and its item links point back to your local site.
+The same image can still be deployed with the default canonical production URL.
 
 ### Local metriq-data integration
 
@@ -58,6 +63,7 @@ When developing locally with the metriq-data repo checked out alongside metriq-w
 # From the repo root or any directory, build the image as above, then run:
 docker run -d \
   -p 8080:80 \
+  -e METRIQ_SITE_URL=http://localhost:8080 \
   -v /path/to/metriq-data/dist:/usr/share/nginx/html/metriq-data:ro \
   --name metriq-web-local \
   metriq-web:latest
@@ -69,6 +75,8 @@ In this setup:
 - The entrypoint script detects the mounted dist and sets:
   - `benchmarksUrl` → `/metriq-data/benchmark.latest.json` (unless BENCHMARKS_URL is set)
   - `platformsIndexUrl` → `/metriq-data/platforms/index.json` (unless PLATFORMS_INDEX_URL is set)
+- If `METRIQ_SITE_URL` is set, the entrypoint also regenerates `feed.xml` so RSS item
+  links match the local URL you are serving.
 
 Running `python scripts/aggregate.py` in the metriq-data repo before starting the container ensures the `dist/` directory is up to date.
 

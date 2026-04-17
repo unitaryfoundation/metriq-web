@@ -485,12 +485,26 @@ viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
 let benchmarkPages = [];
 
 type UpdateItem = {
+  id?: string;
   date?: string;
   title?: string;
   body?: string;
   href?: string;
   linkText?: string;
 };
+
+function focusUpdateFromHash(section: HTMLElement, track: HTMLElement) {
+  const targetId = String(parseHash().update || '').trim();
+  if (!targetId) return;
+  const cards = Array.from(track.querySelectorAll<HTMLElement>('[data-update-id]'));
+  const match = cards.find((card) => String(card.getAttribute('data-update-id') || '') === targetId);
+  if (!match) return;
+  section.scrollIntoView({ block: 'start' });
+  match.scrollIntoView({ block: 'nearest' });
+  match.classList.add('update-card--highlight');
+  setTimeout(() => match.classList.remove('update-card--highlight'), 2400);
+  match.focus({ preventScroll: true });
+}
 
 async function initUpdatesCarousel(config: any) {
   const section = document.getElementById('updates-section') as HTMLElement | null;
@@ -515,13 +529,14 @@ async function initUpdatesCarousel(config: any) {
 
   const normalized = items
     .map((u) => ({
+      id: u?.id ? String(u.id).trim() : '',
       date: u?.date ? String(u.date) : '',
       title: u?.title ? String(u.title) : '',
       body: u?.body ? String(u.body) : '',
       href: u?.href ? String(u.href) : '',
       linkText: u?.linkText ? String(u.linkText) : '',
     }))
-    .filter((u) => u.title || u.body);
+    .filter((u) => u.id && (u.title || u.body));
 
   if (!normalized.length) return;
 
@@ -537,10 +552,11 @@ async function initUpdatesCarousel(config: any) {
     const link = u.href
       ? `<a class="update-card__link" href="${escapeAttr(u.href)}" target="_blank" rel="noopener">${escapeHtml(u.linkText || 'Learn more')}</a>`
       : '';
-    return `<article class="update-card" role="listitem">${meta}${title}${body}${link}</article>`;
+    return `<article class="update-card" id="update-${escapeAttr(u.id)}" data-update-id="${escapeAttr(u.id)}" role="listitem" tabindex="-1">${meta}${title}${body}${link}</article>`;
   }).join('');
 
   section.hidden = false;
+  focusUpdateFromHash(section, track);
 }
 
 (async () => {
@@ -677,6 +693,19 @@ function updateHash(next: Record<string, string>) {
         if (!('results_timestamp' in next)) delete merged.results_timestamp;
         if (!('results_tab' in next)) delete merged.results_tab;
       }
+    }
+    const hasScopedRoute = Boolean(
+      merged.provider
+      || merged.device
+      || merged.help
+      || merged.results_provider
+      || merged.results_device
+      || merged.results_benchmark
+      || merged.results_timestamp
+      || merged.results_tab
+    );
+    if (hasScopedRoute || ('view' in next && next.view !== 'platforms')) {
+      delete merged.update;
     }
     const p = new URLSearchParams();
     Object.entries(merged).forEach(([k, v]) => { if (v != null && v !== '') p.set(k, v); });

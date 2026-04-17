@@ -1,10 +1,12 @@
 [
   {
+    "id": "2026-04-15-retired-devices",
     "date": "2026-04-15",
     "title": "IBM and OriginQ retired devices",
     "body": "IBM's ibm_brisbane and OriginQ's wukong_72 and wukong_102 have now been retired by the vendors. Historical results remain available in Metriq for reference."
   },
   {
+    "id": "2026-03-10-metriq-paper-arxiv",
     "date": "2026-03-10",
     "title": "The Metriq paper is on arXiv! 🗞️",
     "body": "Metriq: A Collaborative Platform for Benchmarking Quantum Computers is now available on arXiv.",
@@ -12,6 +14,7 @@
     "linkText": "Read the paper"
   },
   {
+    "id": "2026-03-09-metriq-gym-0-7-0",
     "date": "2026-03-09",
     "title": "metriq-gym 0.7.0 released",
     "body": "New version of metriq-gym now available with improvements to CLOPS and EPLG, and more support for Quantinuum devices.",
@@ -19,11 +22,13 @@
     "linkText": "View changelog"
   },
   {
+    "id": "2026-01-17-platforms-view-default",
     "date": "2026-01-17",
     "title": "Platforms view now default",
     "body": "The app now opens on Platforms by default, with score bars for quick comparison."
   },
   {
+    "id": "2026-01-17-more-data-sources",
     "date": "2026-01-17",
     "title": "More data sources",
     "body": "New devices and fresh benchmark runs were added to the dataset. Check back often as coverage expands."
