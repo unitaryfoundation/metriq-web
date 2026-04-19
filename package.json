@@ -3,11 +3,9 @@
     "generate:rss": "node scripts/generate-rss.mjs",
     "build:newapp": "tsc -p . && npm run generate:rss"
   },
-  "dependencies": {
-    "feed": "5.2.0"
-  },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "feed": "5.2.0",
     "typescript": "^5.4.0"
   }
 }

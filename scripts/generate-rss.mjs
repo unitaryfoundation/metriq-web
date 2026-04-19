@@ -10,6 +10,29 @@ const siteUrl = String(process.env.METRIQ_SITE_URL ?? 'https://metriq.info').tri
 const faviconUrl = `${siteUrl}/public/favicon.ico`;
 const INVALID_DATE_FALLBACK_TIME = 0;
 const asText = (value) => String(value ?? '').trim();
+const sanitizeFileStem = (input) => input
+  .toLowerCase()
+  .trim()
+  .replace(/[^a-z0-9._-]+/g, '-')
+  .replace(/-+/g, '-')
+  .replace(/^-|-$/g, '');
+const stableHash = (input) => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash * 31) + input.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
+};
+const buildFallbackUpdateId = (item, index) => {
+  const date = asText(item?.date);
+  const title = asText(item?.title);
+  const href = asText(item?.href);
+  const body = asText(item?.body);
+  const signature = [date, title, href, body].filter(Boolean).join('|');
+  const stem = sanitizeFileStem([date, title].filter(Boolean).join('-')).slice(0, 64);
+  const hash = stableHash(signature || `update-${index + 1}`);
+  return `${stem || 'update'}-${hash}`;
+};
 const asDate = (value) => {
   const text = asText(value);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T00:00:00Z`) : new Date(text);
@@ -25,16 +48,28 @@ if (!Array.isArray(parsed)) {
   throw new Error('data/updates.json must contain a JSON array');
 }
 
+const usedUpdateIds = new Set();
 const updates = parsed
-  .map((item) => ({
-    id: asText(item?.id),
-    date: asText(item?.date),
-    title: asText(item?.title),
-    body: asText(item?.body),
-    href: asText(item?.href),
-    linkText: asText(item?.linkText),
-  }))
-  .filter((item) => item.id && (item.title || item.body))
+  .map((item, index) => {
+    const explicitId = asText(item?.id);
+    const baseId = explicitId || buildFallbackUpdateId(item, index);
+    let uniqueId = baseId;
+    let duplicateCounter = 2;
+    while (usedUpdateIds.has(uniqueId)) {
+      uniqueId = `${baseId}-${duplicateCounter}`;
+      duplicateCounter += 1;
+    }
+    usedUpdateIds.add(uniqueId);
+    return {
+      id: uniqueId,
+      date: asText(item?.date),
+      title: asText(item?.title),
+      body: asText(item?.body),
+      href: asText(item?.href),
+      linkText: asText(item?.linkText),
+    };
+  })
+  .filter((item) => item.title || item.body)
   .sort((a, b) => b.date.localeCompare(a.date) || a.title.localeCompare(b.title));
 
 const feed = new Feed({
