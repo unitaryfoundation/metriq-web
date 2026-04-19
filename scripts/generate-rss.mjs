@@ -8,11 +8,16 @@ const updatesPath = path.join(rootDir, 'data', 'updates.json');
 const outputPath = path.join(rootDir, 'feed.xml');
 const siteUrl = String(process.env.METRIQ_SITE_URL ?? 'https://metriq.info').trim().replace(/\/+$/, '') || 'https://metriq.info';
 const faviconUrl = `${siteUrl}/public/favicon.ico`;
+const INVALID_DATE_FALLBACK_TIME = 0;
 const asText = (value) => String(value ?? '').trim();
 const asDate = (value) => {
   const text = asText(value);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(text) ? new Date(`${text}T00:00:00Z`) : new Date(text);
-  return Number.isNaN(Number(date)) ? new Date() : date;
+  if (Number.isNaN(Number(date))) {
+    console.warn(`Invalid update date "${text || '<empty>'}" in ${updatesPath}; using Unix epoch fallback.`);
+    return new Date(INVALID_DATE_FALLBACK_TIME);
+  }
+  return date;
 };
 
 const parsed = JSON.parse(readFileSync(updatesPath, 'utf8'));

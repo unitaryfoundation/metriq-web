@@ -587,7 +587,11 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .updates__viewport::-webkit-scrollbar{display:none}
 .updates__track{display:flex;gap:14px;padding:2px 0 10px}
 .update-card{scroll-snap-align:start;flex:0 0 min(420px, calc(100vw - 72px));border:1px solid rgba(15,23,42,.10);border-radius:14px;background:#fff;box-shadow:none;padding:16px 16px 14px}
-.update-card:focus-visible,.update-card--highlight{outline:none;border-color:rgba(37,99,235,.45);box-shadow:0 0 0 3px rgba(37,99,235,.14)}
+.update-card:focus-visible{outline:2px solid transparent;outline-offset:2px;border-color:rgba(37,99,235,.45);box-shadow:0 0 0 3px rgba(37,99,235,.14)}
+.update-card--highlight{border-color:rgba(37,99,235,.45);box-shadow:0 0 0 3px rgba(37,99,235,.14)}
+@media (forced-colors: active){
+  .update-card:focus-visible{outline:2px solid Highlight;box-shadow:none}
+}
 .update-card__meta{margin:0 0 8px;color:var(--muted);font-size:12px}
 .update-card__title{margin:0 0 6px;font-family:var(--font-sans);font-weight:600;font-size:14px;color:var(--text)}
 .update-card__body{margin:0;color:var(--muted);font-size:13px;line-height:1.6}

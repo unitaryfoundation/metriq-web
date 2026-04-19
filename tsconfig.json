@@ -3,6 +3,7 @@
     "target": "ES2020",
     "module": "CommonJS",
     "moduleResolution": "Node",
+    "ignoreDeprecations": "5.0",
     "lib": ["DOM", "ES2020"],
     "types": ["node"],
     "strict": false,

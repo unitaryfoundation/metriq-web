@@ -493,6 +493,25 @@ type UpdateItem = {
   linkText?: string;
 };
 
+function stableHash(input: string) {
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash * 31) + input.charCodeAt(i)) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+function buildFallbackUpdateId(item: UpdateItem, index: number) {
+  const date = String(item?.date || '').trim();
+  const title = String(item?.title || '').trim();
+  const href = String(item?.href || '').trim();
+  const body = String(item?.body || '').trim();
+  const signature = [date, title, href, body].filter(Boolean).join('|');
+  const stem = sanitizeFileStem([date, title].filter(Boolean).join('-')).slice(0, 64);
+  const hash = stableHash(signature || `update-${index + 1}`);
+  return `${stem || 'update'}-${hash}`;
+}
+
 function focusUpdateFromHash(section: HTMLElement, track: HTMLElement) {
   const targetId = String(parseHash().update || '').trim();
   if (!targetId) return;
@@ -527,16 +546,28 @@ async function initUpdatesCarousel(config: any) {
     return;
   }
 
+  const usedUpdateIds = new Set<string>();
   const normalized = items
-    .map((u) => ({
-      id: u?.id ? String(u.id).trim() : '',
-      date: u?.date ? String(u.date) : '',
-      title: u?.title ? String(u.title) : '',
-      body: u?.body ? String(u.body) : '',
-      href: u?.href ? String(u.href) : '',
-      linkText: u?.linkText ? String(u.linkText) : '',
-    }))
-    .filter((u) => u.id && (u.title || u.body));
+    .map((u, index) => {
+      const explicitId = u?.id ? String(u.id).trim() : '';
+      const baseId = explicitId || buildFallbackUpdateId(u, index);
+      let uniqueId = baseId;
+      let duplicateCounter = 2;
+      while (usedUpdateIds.has(uniqueId)) {
+        uniqueId = `${baseId}-${duplicateCounter}`;
+        duplicateCounter += 1;
+      }
+      usedUpdateIds.add(uniqueId);
+      return {
+        id: uniqueId,
+        date: u?.date ? String(u.date) : '',
+        title: u?.title ? String(u.title) : '',
+        body: u?.body ? String(u.body) : '',
+        href: u?.href ? String(u.href) : '',
+        linkText: u?.linkText ? String(u.linkText) : '',
+      };
+    })
+    .filter((u) => u.title || u.body);
 
   if (!normalized.length) return;
 

@@ -1,5 +1,11 @@
 [
   {
+    "id": "2026-04-19-new-devices",
+    "date": "2026-04-19",
+    "title": "Data from new IBM and OriginQ devices",
+    "body": "IBM's ibm_miami and OriginQ's WK_C180 have been added to the dataset, with more devices on the way. Check back often for updates!"
+  },
+  {
     "id": "2026-04-15-retired-devices",
     "date": "2026-04-15",
     "title": "IBM and OriginQ retired devices",
