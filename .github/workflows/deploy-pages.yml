@@ -41,7 +41,7 @@ jobs:
         run: |
           rm -rf build
           mkdir -p build/data build/public
-          cp index.html footer.html styles.css tour.css main.js tour.js build/
+          cp index.html footer.html styles.css tour.css main.js tour.js feed.xml build/
           rsync -a data/ build/data/
           rsync -a public/ build/public/
           echo metriq.info > build/CNAME
