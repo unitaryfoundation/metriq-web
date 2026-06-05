@@ -126,6 +126,7 @@
 	          <button class="tab is-active" role="tab" aria-selected="true" id="view-platforms-btn" data-target="#view-platforms">Platforms</button>
 	          <button class="tab" role="tab" aria-selected="false" id="view-results-btn" data-target="#view-results">Results</button>
 	          <button class="tab" role="tab" aria-selected="false" id="view-benchmarks-btn" data-target="#view-benchmarks">Documentation</button>
+          <button class="tab" role="tab" aria-selected="false" id="view-compare-btn" data-target="#view-compare">Compare</button>
         </header>
       </section>
 
@@ -141,6 +142,9 @@
         </p>
         <p class="lead" id="hero-benchmarks-lead" hidden>
 	          Browse the <strong>metriq-gym</strong> documentation for benchmark definitions, how to run them, and how to interpret the results.
+        </p>
+        <p class="lead" id="hero-compare-lead" hidden>
+          Compare two devices side-by-side across all benchmarks in the metriq-gym suite. Select two devices below to view their scores, component breakdown, and metadata.
         </p>
       </div>
 
@@ -243,6 +247,26 @@
       <section id="view-benchmarks" hidden>
         <div class="frame-wrap docs-frame">
           <iframe id="benchmarks-docs" title="Benchmarks documentation" loading="lazy"></iframe>
+        </div>
+      </section>
+
+      <!-- Compare view -->
+      <section id="view-compare" hidden>
+        <div id="compare-container">
+          <div class="compare-intro">
+            <div class="compare-pickers">
+              <div class="compare-picker">
+                <label for="compare-device-1">Device A</label>
+                <select id="compare-device-1"><option value="">Select a device…</option></select>
+              </div>
+              <div class="compare-vs"><span>vs</span></div>
+              <div class="compare-picker">
+                <label for="compare-device-2">Device B</label>
+                <select id="compare-device-2"><option value="">Select a device…</option></select>
+              </div>
+            </div>
+          </div>
+          <div id="compare-output"></div>
         </div>
       </section>
 
