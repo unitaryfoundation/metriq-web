@@ -62,6 +62,7 @@ let platformsLoaded = false;
 let docsLoaded = false;
 let platformsIndexCache: any[] | null = null;
 let platformsIndexByKeyCache: Map<string, any> | null = null;
+let platformDetailCache: Map<string, any> | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformQubitsCache: Map<string, number> | null = null;
 let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
@@ -705,10 +706,14 @@ function updateHash(next: Record<string, string>) {
       if (next.view !== 'platforms') {
         delete merged.provider;
         delete merged.device;
+        delete merged.compare_provider;
+        delete merged.compare_device;
         delete merged.help;
       } else if (!('provider' in next) && !('device' in next) && !('help' in next)) {
         delete merged.provider;
         delete merged.device;
+        delete merged.compare_provider;
+        delete merged.compare_device;
         delete merged.help;
       }
       if (next.view !== 'results') {
@@ -728,6 +733,8 @@ function updateHash(next: Record<string, string>) {
     const hasScopedRoute = Boolean(
       merged.provider
       || merged.device
+      || merged.compare_provider
+      || merged.compare_device
       || merged.help
       || merged.results_provider
       || merged.results_device
@@ -759,6 +766,27 @@ function navigateToPlatform(provider: string, device: string) {
     applyHashRouting();
   }
   // Fallback: ensure routing runs even if the hashchange event is suppressed by the browser.
+  setTimeout(() => {
+    if (suppressHashHandler) suppressHashHandler = false;
+    applyHashRouting();
+  }, 0);
+}
+
+function navigateToPlatformComparison(provider: string, device: string, compareProvider: string, compareDevice: string) {
+  suppressHashHandler = false;
+  const params = new URLSearchParams({
+    view: 'platforms',
+    provider,
+    device,
+    compare_provider: compareProvider,
+    compare_device: compareDevice,
+  });
+  const newHash = '#' + params.toString();
+  if (location.hash !== newHash) {
+    location.hash = newHash;
+  } else {
+    applyHashRouting();
+  }
   setTimeout(() => {
     if (suppressHashHandler) suppressHashHandler = false;
     applyHashRouting();
@@ -855,6 +883,10 @@ async function applyHashRouting() {
   if (view === 'platforms') {
     if (String((h as any).help || '') === 'metriq-score') {
       renderMetriqScoreHelp();
+      return;
+    }
+    if (h.provider && h.device && h.compare_provider && h.compare_device) {
+      await showPlatformComparisonPage(h.provider, h.device, h.compare_provider, h.compare_device);
       return;
     }
     if (h.provider && h.device) {
@@ -1042,23 +1074,254 @@ function formatPlatformComponentRawValue(value: any) {
   return num.toLocaleString(undefined, { maximumSignificantDigits: 6 });
 }
 
+async function loadPlatformDetail(provider: string, device: string) {
+  if (!platformDetailCache) platformDetailCache = new Map();
+  const key = getDeviceKey(provider, device);
+  if (platformDetailCache.has(key)) return platformDetailCache.get(key);
+
+  const config = await loadAppConfig();
+  const indexUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
+  const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
+  const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
+  const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const json = await resp.json();
+  platformDetailCache.set(key, json);
+
+  const score = json?.metriq_score?.value;
+  if (Number.isFinite(Number(score))) {
+    if (!platformScoresCache) platformScoresCache = new Map();
+    platformScoresCache.set(key, Number(score));
+  }
+  const qubits = extractPlatformNumQubits(json);
+  if (qubits !== null && Number.isFinite(qubits)) {
+    if (!platformQubitsCache) platformQubitsCache = new Map();
+    platformQubitsCache.set(key, qubits);
+  }
+  const coverage = extractPlatformCoverage(json);
+  if (coverage) {
+    if (!platformCoverageCache) platformCoverageCache = new Map();
+    platformCoverageCache.set(key, coverage);
+  }
+
+  return json;
+}
+
 async function showPlatformDetailPage(provider: string, device: string) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
   container.innerHTML = '<div class="meta">Loading platform…</div>';
   try {
-    const config = await loadAppConfig();
-    const indexUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
-    const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
-    const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
-    const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const json = await resp.json();
+    const json = await loadPlatformDetail(provider, device);
     renderPlatformDetailPage(json);
   } catch (err) {
     console.error('[platforms] detail load failed:', err);
     renderPlatformDetailPage({ provider, device, error: String(err) });
   }
+}
+
+function getPlatformComparisonApi() {
+  const api = (globalThis as any).MetriqPlatformCompare;
+  if (!api || typeof api.buildPlatformComparison !== 'function') {
+    throw new Error('Platform comparison module is not loaded.');
+  }
+  return api;
+}
+
+function renderComparisonDeviceLink(provider: string, device: string, label: string) {
+  const href = `#view=platforms&provider=${encodeURIComponent(provider)}&device=${encodeURIComponent(device)}`;
+  return `<a href="${href}" style="color:#2563eb;text-decoration:none;font-weight:600;">${escapeHtml(label)}</a>`;
+}
+
+function renderComparisonOverviewRows(rows: any[]) {
+  return rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.label)}</td>
+      <td>${escapeHtml(row.left)}</td>
+      <td>${escapeHtml(row.right)}</td>
+      <td class="num">${escapeHtml(row.delta || '—')}</td>
+    </tr>
+  `).join('');
+}
+
+function renderComparisonComponentRows(rows: any[]) {
+  return rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.name)}</td>
+      <td class="num">${escapeHtml(row.weight)}</td>
+      <td class="num">${escapeHtml(row.leftRaw)}</td>
+      <td class="num">${escapeHtml(row.rightRaw)}</td>
+      <td class="num">${escapeHtml(row.leftNormalized)}</td>
+      <td class="num">${escapeHtml(row.rightNormalized)}</td>
+      <td class="num">${escapeHtml(row.normalizedDelta)}</td>
+      <td class="num">${escapeHtml(row.leftTimestamp)}</td>
+      <td class="num">${escapeHtml(row.rightTimestamp)}</td>
+    </tr>
+  `).join('');
+}
+
+function renderComparisonMetadataRows(rows: any[]) {
+  return rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(row.label)}</td>
+      <td>${escapeHtml(row.left)}</td>
+      <td>${escapeHtml(row.right)}</td>
+    </tr>
+  `).join('');
+}
+
+function bindPlatformsBackLink() {
+  const backLink = document.getElementById('platform-back');
+  if (!backLink) return;
+  backLink.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    location.hash = '#view=platforms';
+    applyHashRouting();
+  });
+}
+
+function renderSameProviderComparisonNotice(provider: string, device: string, compareProvider: string, compareDevice: string) {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="detail-page" style="display:flex;flex-direction:column;gap:18px;padding-top:4px;">
+      <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">Back to Platforms</a></div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <h3 style="margin:0;">Compare devices</h3>
+        <div class="meta">Device comparison currently supports devices from the same provider.</div>
+      </div>
+      <div class="platform-comparison-empty">
+        ${escapeHtml(provider)} / ${escapeHtml(device)} cannot be compared with ${escapeHtml(compareProvider)} / ${escapeHtml(compareDevice)} in this view.
+      </div>
+    </div>
+  `.trim();
+  bindPlatformsBackLink();
+}
+
+async function showPlatformComparisonPage(provider: string, device: string, compareProvider: string, compareDevice: string) {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  if (String(provider).trim().toLowerCase() !== String(compareProvider).trim().toLowerCase()) {
+    renderSameProviderComparisonNotice(provider, device, compareProvider, compareDevice);
+    return;
+  }
+  container.innerHTML = '<div class="meta">Loading platform comparison...</div>';
+  try {
+    const [left, right] = await Promise.all([
+      loadPlatformDetail(provider, device),
+      loadPlatformDetail(compareProvider, compareDevice),
+    ]);
+    renderPlatformComparisonPage(left, right);
+  } catch (err) {
+    console.error('[platforms] comparison load failed:', err);
+    container.innerHTML = `
+      <div class="detail-page" style="display:flex;flex-direction:column;gap:18px;padding-top:4px;">
+        <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">Back to Platforms</a></div>
+        <h3 style="margin:0;">Compare devices</h3>
+        <div class="meta" style="color:#f43f5e;">${escapeHtml(String(err))}</div>
+      </div>
+    `.trim();
+    bindPlatformsBackLink();
+  }
+}
+
+function renderPlatformComparisonPage(leftDetail: any, rightDetail: any) {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  const comparison = getPlatformComparisonApi().buildPlatformComparison(leftDetail, rightDetail);
+  const left = comparison.left || {};
+  const right = comparison.right || {};
+  const leftLink = renderComparisonDeviceLink(left.provider, left.device, left.label);
+  const rightLink = renderComparisonDeviceLink(right.provider, right.device, right.label);
+  const overviewRows = renderComparisonOverviewRows(comparison.overviewRows || []);
+  const componentRows = renderComparisonComponentRows(comparison.componentRows || []);
+  const metadataRows = renderComparisonMetadataRows((comparison.metadataRows || []).slice(0, 24));
+
+  container.innerHTML = `
+    <div class="detail-page platform-comparison-page" style="display:flex;flex-direction:column;gap:20px;padding-top:4px;">
+      <div class="detail-header" style="display:flex;flex-direction:column;gap:8px;">
+        <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">Back to Platforms</a></div>
+        <div class="platform-comparison-titlebar">
+          <div>
+            <h3 style="margin:0;">Compare devices</h3>
+            <div class="meta" style="margin-top:4px;">${leftLink} with ${rightLink}</div>
+          </div>
+          <button type="button" class="btn-mini platform-compare-change" id="platform-compare-change">
+            <i class="fa-solid fa-code-compare" aria-hidden="true"></i>
+            Compare with
+          </button>
+        </div>
+        <div class="meta">Same-provider comparison for score inputs, coverage, and metadata differences.</div>
+      </div>
+
+      <section class="detail-section">
+        <h5>Overview</h5>
+        <div class="platform-comparison-table">
+          <table class="smart-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>${escapeHtml(left.device)}</th>
+                <th>${escapeHtml(right.device)}</th>
+                <th class="num">Delta</th>
+              </tr>
+            </thead>
+            <tbody>${overviewRows}</tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="detail-section">
+        <h5>Score components</h5>
+        ${componentRows ? `
+          <div class="platform-comparison-table">
+            <table class="smart-table" style="min-width:940px;">
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th class="num">Weight</th>
+                  <th class="num">${escapeHtml(left.device)} raw</th>
+                  <th class="num">${escapeHtml(right.device)} raw</th>
+                  <th class="num">${escapeHtml(left.device)} norm.</th>
+                  <th class="num">${escapeHtml(right.device)} norm.</th>
+                  <th class="num">Norm. delta</th>
+                  <th class="num">${escapeHtml(left.device)} date</th>
+                  <th class="num">${escapeHtml(right.device)} date</th>
+                </tr>
+              </thead>
+              <tbody>${componentRows}</tbody>
+            </table>
+          </div>
+        ` : '<div class="platform-comparison-empty">No score components available.</div>'}
+      </section>
+
+      <section class="detail-section">
+        <h5>Metadata fields</h5>
+        ${metadataRows ? `
+          <div class="platform-comparison-table">
+            <table class="smart-table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>${escapeHtml(left.device)}</th>
+                  <th>${escapeHtml(right.device)}</th>
+                </tr>
+              </thead>
+              <tbody>${metadataRows}</tbody>
+            </table>
+          </div>
+        ` : '<div class="platform-comparison-empty">No comparable scalar metadata fields available.</div>'}
+      </section>
+    </div>
+  `.trim();
+
+  bindPlatformsBackLink();
+  const changeButton = document.getElementById('platform-compare-change') as HTMLButtonElement | null;
+  changeButton?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void showPlatformComparePopover(changeButton, left.provider, left.device);
+  });
 }
 
 function renderPlatformDetailPage(detail: any) {
@@ -1151,6 +1414,12 @@ function renderPlatformDetailPage(detail: any) {
         <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
       </div>
+      <div class="platform-detail-actions">
+        <button type="button" class="btn-mini platform-detail-compare-btn" id="platform-detail-compare-btn">
+          <i class="fa-solid fa-code-compare" aria-hidden="true"></i>
+          Compare with
+        </button>
+      </div>
       ${lifecycleNote}
       ${error}
       <div class="detail-grid" style="display:flex;flex-direction:column;gap:24px;">
@@ -1178,6 +1447,12 @@ function renderPlatformDetailPage(detail: any) {
       applyHashRouting();
     });
   }
+  const detailCompareButton = document.getElementById('platform-detail-compare-btn') as HTMLButtonElement | null;
+  detailCompareButton?.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    void showPlatformComparePopover(detailCompareButton, String(provider), String(device));
+  });
   container.querySelectorAll<HTMLTableRowElement>('#platform-detail-table tbody tr[data-results-href]').forEach((row) => {
     const href = row.getAttribute('data-results-href') || '';
     if (!href) return;
@@ -1487,6 +1762,71 @@ function ensurePlatformsProviderFilterBound(table: HTMLTableElement) {
   }
 }
 
+async function ensurePlatformsIndexForCompare() {
+  if (Array.isArray(platformsIndexCache) && platformsIndexCache.length) return platformsIndexCache;
+  const data = await loadPlatformsIndex();
+  const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
+  setPlatformsIndexCache(platforms);
+  return platformsIndexCache || [];
+}
+
+function getComparablePlatforms(provider: string, device: string) {
+  const baseProvider = String(provider || '').trim().toLowerCase();
+  const baseDevice = String(device || '').trim().toLowerCase();
+  return (Array.isArray(platformsIndexCache) ? platformsIndexCache : [])
+    .filter((platform: any) => String(platform?.provider || '').trim().toLowerCase() === baseProvider)
+    .filter((platform: any) => String(platform?.device || '').trim().toLowerCase() !== baseDevice)
+    .sort((a: any, b: any) => String(a?.device || '').localeCompare(String(b?.device || '')));
+}
+
+function makePlatformCompareAnchorId(provider: string, device: string) {
+  return `platform-compare-${encodeURIComponent(`${provider}:${device}`).replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+}
+
+async function showPlatformComparePopover(anchorEl: HTMLElement, provider: string, device: string) {
+  await ensurePlatformsIndexForCompare();
+  if (!anchorEl.id) anchorEl.id = makePlatformCompareAnchorId(provider, device);
+  const existing = document.getElementById('global-popover') as HTMLDivElement | null;
+  if (existing && !existing.hidden && existing.dataset.anchorId === anchorEl.id) {
+    closeGlobalPopover();
+    return;
+  }
+
+  const options = getComparablePlatforms(provider, device);
+  const optionHtml = options.map((platform: any) => {
+    const compareProvider = String(platform?.provider || '');
+    const compareDevice = String(platform?.device || '');
+    return `
+      <button type="button" class="popover-option platform-compare-option" data-compare-provider="${escapeAttr(compareProvider)}" data-compare-device="${escapeAttr(compareDevice)}">
+        ${renderDeviceLabelHtml(compareProvider, compareDevice, platform)}
+      </button>
+    `.trim();
+  }).join('');
+
+  showGlobalPopover(anchorEl, `
+    <div class="popover-title">Compare with</div>
+    ${options.length ? `
+      <div class="popover-options">${optionHtml}</div>
+      <div class="popover-hint">Showing other devices from ${escapeHtml(provider)}.</div>
+    ` : `
+      <div class="platform-comparison-empty">No other devices from ${escapeHtml(provider)} are available.</div>
+    `}
+  `.trim());
+
+  const pop = document.getElementById('global-popover') as HTMLDivElement | null;
+  if (pop) pop.dataset.anchorId = anchorEl.id;
+  globalPopoverCloseFn = () => { closeGlobalPopover(); };
+  pop?.querySelectorAll<HTMLButtonElement>('button.platform-compare-option').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const compareProvider = btn.getAttribute('data-compare-provider') || '';
+      const compareDevice = btn.getAttribute('data-compare-device') || '';
+      closeGlobalPopover();
+      navigateToPlatformComparison(provider, device, compareProvider, compareDevice);
+    });
+  });
+}
+
 function renderPlatformsTable() {
   const container = document.getElementById('platforms-container');
   if (!container) return;
@@ -1508,6 +1848,7 @@ function renderPlatformsTable() {
 		    table.innerHTML = `
 		      <colgroup>
 		        <col style="width: 205px;" />
+		        <col style="width: 90px;" />
 		        <col style="width: 70px;" />
 		        <col style="width: 140px;" />
 		        <col style="width: 210px;" />
@@ -1518,6 +1859,7 @@ function renderPlatformsTable() {
 		      <thead>
 		        <tr>
 		          <th data-col="device" data-label="Device" class="sortable">Device</th>
+		          <th data-label="Compare" class="compare-col">Compare</th>
 		          <th data-col="num_qubits" data-label="Qubits" class="sortable">Qubits</th>
 		          <th data-col="provider" data-label="Provider" class="sortable">${renderPlatformsProviderHeaderHtml()}</th>
 		          <th data-col="score" data-label="Metriq Score" class="sortable num">
@@ -1646,6 +1988,12 @@ function renderPlatformsTable() {
     rows.push(`
       <tr${isRetired ? ' class="platform-row--retired"' : ''}>
         <td><a href="${href}">${deviceLabel}</a></td>
+        <td class="compare-col">
+          <button type="button" class="btn-mini platform-compare-btn" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="Compare with another ${escapeAttr(provider)} device" aria-label="Compare ${escapeAttr(device)} with another ${escapeAttr(provider)} device">
+            <i class="fa-solid fa-code-compare" aria-hidden="true"></i>
+            Compare
+          </button>
+        </td>
         <td>${numQubits !== undefined && numQubits !== null ? escapeHtml(String(numQubits)) : '—'}</td>
         <td title="${escapeAttr(provider)}">${escapeHtml(provider)}</td>
         <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
@@ -1668,6 +2016,19 @@ function renderPlatformsTable() {
         }
       });
       dataTable.dataset.scoreClickBound = '1';
+    }
+    if (!dataTable.dataset.compareClickBound) {
+      table.addEventListener('click', (event: MouseEvent) => {
+        const target = event.target as HTMLElement | null;
+        const button = target && target.closest ? target.closest('button.platform-compare-btn') as HTMLButtonElement | null : null;
+        if (!button) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const prov = button.getAttribute('data-provider') || '';
+        const dev = button.getAttribute('data-device') || '';
+        void showPlatformComparePopover(button, prov, dev);
+      });
+      dataTable.dataset.compareClickBound = '1';
     }
   }
 

@@ -14,6 +14,7 @@
     "rootDir": "."
   },
   "include": [
+    "platformCompare.ts",
     "main.ts",
     "tour.ts"
   ],

@@ -8,5 +8,7 @@ build/
 main.js
 main.js.map
 feed.xml
+platformCompare.js
+platformCompare.js.map
 tour.js
 tour.js.map
