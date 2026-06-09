@@ -1388,7 +1388,7 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
     <div class="compare-section">
       <div class="compare-section__head"><h4>Benchmark Components</h4></div>
       <div class="compare-table-wrap">
-        <table class="compare-table">
+        <table class="compare-table compare-table--components">
           <thead>
             <tr>
               <th>Component</th>
