@@ -1101,7 +1101,7 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
     return `<li>${escapeHtml(f)} → ${escapeHtml(l)} · <strong>${r}</strong> run${r===1?'':'s'}</li>`;
   }).join('') : '<li>No metadata history</li>';
 
-  const metaRowsHtml = renderMetaRowsHtml(currentMeta);
+  const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<div class="meta">No current device metadata.</div>';
 
   // Build "Compare with" dropdown
   const compareDeviceKey = compareDetail ? getDeviceKey(String(compareDetail.provider || ''), String(compareDetail.device || '')) : '';
@@ -1144,13 +1144,13 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       </tr>`;
     }).join('');
     scoreHtml = `
-      <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+      <div class="meta" style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;">
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
-      </div>
-      <div class="compare-with" style="margin-top:12px;">
-        <h5 style="margin:0 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Compare with</h5>
-        <select id="compare-device-select">${compareDropdownHtml}</select>
+        <div class="compare-with" style="margin-left:auto;">
+          <h5 style="margin:0 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Compare with</h5>
+          <select id="compare-device-select">${compareDropdownHtml}</select>
+        </div>
       </div>
       ${!compareDetail && components.length ? `
         <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
@@ -1191,10 +1191,10 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
           <h5 style="margin:0 0 12px;">Metriq score</h5>
           ${scoreHtml}
         </section>
-        <section class="detail-section" style="padding:8px 0;">
+        ${!compareDetail ? `<section class="detail-section" style="padding:8px 0;">
           <h5 style="margin:0 0 12px;">Current device metadata</h5>
-          ${metaRowsHtml}
-        </section>
+          ${metaHtml}
+        </section>` : ''}
         <section class="detail-section" style="padding:8px 0;">
           <h5 style="margin:0 0 12px;">Metadata history</h5>
           <ul style="margin-top:4px;">${historyHtml}</ul>
@@ -1254,31 +1254,6 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       open();
     });
   });
-}
-
-function renderMetaRowsHtml(meta: any): string {
-  if (!meta || typeof meta !== 'object') return '<div class="meta">No current device metadata.</div>';
-  const entries = Object.entries(meta).filter(([_, v]) => v === null || v === undefined || typeof v !== 'object' || !(v as any).constructor?.name || ['string', 'number', 'boolean'].includes(typeof v));
-  const nested = Object.entries(meta).filter(([_, v]) => v !== null && v !== undefined && typeof v === 'object');
-  if (!entries.length && !nested.length) return '<div class="meta">No current device metadata.</div>';
-  const flatRows = entries.map(([k, v]) => {
-    const disp = v === null || v === undefined ? '<span class="num-empty">&mdash;</span>' : escapeHtml(String(v));
-    return `<tr><td>${escapeHtml(k)}</td><td>${disp}</td></tr>`;
-  }).join('');
-  const nestedHtml = nested.length ? nested.map(([k, v]) => {
-    const jsonStr = escapeHtml(JSON.stringify(v, null, 2));
-    return `<tr><td>${escapeHtml(k)}</td><td><details style="font-size:12px;"><summary style="cursor:pointer;color:var(--accent);font-weight:600;">${escapeHtml(Array.isArray(v) ? 'Array (' + v.length + ')' : 'Object')}</summary><pre style="margin:6px 0 0;white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:8px;border-radius:6px;font-size:11px;">${jsonStr}</pre></details></td></tr>`;
-  }).join('') : '';
-  return `
-    <div style="overflow-x:auto;">
-      <table class="compare-meta-table" style="width:100%;">
-        <thead>
-          <tr><th>Property</th><th>Value</th></tr>
-        </thead>
-        <tbody>${flatRows}${nestedHtml}</tbody>
-      </table>
-    </div>
-  `;
 }
 
 function renderCompareDropdownHtml(currentProvider: string, currentDevice: string, selectedKey: string): string {
@@ -1404,8 +1379,11 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
           </tbody>
         </table>
       </div>
-      ${compRows.length ? `
-      <div class="compare-table-wrap" style="border-top:1px solid rgba(15,23,42,.08);margin-top:0;">
+    </div>
+    ${compRows.length ? `
+    <div class="compare-section">
+      <div class="compare-section__head"><h4>Benchmark Components</h4></div>
+      <div class="compare-table-wrap">
         <table class="compare-table">
           <thead>
             <tr>
@@ -1421,8 +1399,8 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
           </thead>
           <tbody>${compRows}</tbody>
         </table>
-      </div>` : ''}
-    </div>`;
+      </div>
+    </div>` : ''}`;
 }
 
 function escapeHtml(s: string) {
