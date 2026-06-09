@@ -1144,13 +1144,18 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       </tr>`;
     }).join('');
     scoreHtml = `
-      <div class="meta" style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;">
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
-        <div class="compare-with" style="margin-left:auto;">
-          <h5 style="margin:0 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Compare with</h5>
-          <select id="compare-device-select">${compareDropdownHtml}</select>
+      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+        <div>
+          <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Metriq score</h5>
+          <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+            <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+          </div>
         </div>
+        <div class="compare-with">
+          <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Compare with</h5>
+          <select id="compare-device-select">${compareDropdownHtml}</select>
+      </div>
       </div>
       ${!compareDetail && components.length ? `
         <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
@@ -1188,7 +1193,6 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       ${error}
       <div class="detail-grid" style="display:flex;flex-direction:column;gap:24px;">
         <section class="detail-section" style="padding:8px 0;">
-          <h5 style="margin:0 0 12px;">Metriq score</h5>
           ${scoreHtml}
         </section>
         ${!compareDetail ? `<section class="detail-section" style="padding:8px 0;">
