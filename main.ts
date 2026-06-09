@@ -1147,12 +1147,12 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
-        <span class="compare-with">
-          <label for="compare-device-select">Compare with</label>
-          <select id="compare-device-select">${compareDropdownHtml}</select>
-        </span>
       </div>
-      ${components.length ? `
+      <div class="compare-with" style="margin-top:12px;">
+        <h5 style="margin:0 0 6px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Compare with</h5>
+        <select id="compare-device-select">${compareDropdownHtml}</select>
+      </div>
+      ${!compareDetail && components.length ? `
         <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
         <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
           <table class="smart-table" style="width:100%;min-width:660px;">
@@ -1168,7 +1168,7 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
             <tbody>${rows}</tbody>
           </table>
         </div>
-      ` : '<div class="meta">No components</div>'}
+      ` : !compareDetail && !components.length ? '<div class="meta">No components</div>' : ''}
     `.trim();
   }
 
@@ -1360,6 +1360,8 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
     </tr>`;
   }).filter(Boolean).join('');
 
+  const overviewMetaRows = metaRows.length ? `<tr class="compare-row--spacer" style="background:#f0f7ff;"><td colspan="3" style="padding:6px 14px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#1f2b3c;border-top:2px solid #dbeafe;">Device Metadata</td></tr>${metaRows}` : '';
+
   return `
     <div class="compare-section" style="margin-top:8px;">
       <div class="compare-section__head"><h4>Comparison: ${escapeHtml(dev1)} vs ${escapeHtml(dev2)}</h4></div>
@@ -1398,11 +1400,12 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
               <td>${escapeHtml(status1)}</td>
               <td>${escapeHtml(status2)}</td>
             </tr>
+            ${overviewMetaRows}
           </tbody>
         </table>
       </div>
       ${compRows.length ? `
-      <div class="compare-table-wrap" style="border-top:1px solid rgba(15,23,42,.08);">
+      <div class="compare-table-wrap" style="border-top:1px solid rgba(15,23,42,.08);margin-top:0;">
         <table class="compare-table">
           <thead>
             <tr>
@@ -1417,19 +1420,6 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
             </tr>
           </thead>
           <tbody>${compRows}</tbody>
-        </table>
-      </div>` : ''}
-      ${metaRows.length ? `
-      <div class="compare-table-wrap" style="border-top:1px solid rgba(15,23,42,.08);">
-        <table class="compare-table">
-          <thead>
-            <tr>
-              <th>Metadata</th>
-              <th>${escapeHtml(dev1)}</th>
-              <th>${escapeHtml(dev2)}</th>
-            </tr>
-          </thead>
-          <tbody>${metaRows}</tbody>
         </table>
       </div>` : ''}
     </div>`;
