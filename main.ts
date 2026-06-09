@@ -28,9 +28,6 @@ const viewBenchmarks = document.getElementById('view-benchmarks') as HTMLElement
 const heroResultsLead = document.getElementById('hero-results-lead') as HTMLElement | null;
 const heroPlatformsLead = document.getElementById('hero-platforms-lead') as HTMLElement | null;
 const heroBenchmarksLead = document.getElementById('hero-benchmarks-lead') as HTMLElement | null;
-const heroCompareLead = document.getElementById('hero-compare-lead') as HTMLElement | null;
-const viewCompareBtn = document.getElementById('view-compare-btn') as HTMLButtonElement | null;
-const viewCompare = document.getElementById('view-compare') as HTMLElement | null;
 const benchmarksDocsIframe = document.getElementById('benchmarks-docs') as HTMLIFrameElement | null;
 
 // No extra filters for Platforms
@@ -81,12 +78,6 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', 
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
 // Optional: baseline device name from config (highlighted in chart/table)
 let baselineDevice: string | null = null;
-
-// Compare view state
-let compareDevice1: { provider: string; device: string } | null = null;
-let compareDevice2: { provider: string; device: string } | null = null;
-let compareDetail1: any = null;
-let compareDetail2: any = null;
 
 function normalizePlatformLifecycle(value: any) {
   if (!value || typeof value !== 'object') return null;
@@ -462,33 +453,25 @@ async function initBenchmarksDocsView() {
   }
 }
 
-function activateView(which: 'results'|'platforms'|'benchmarks'|'compare', skipHashUpdate = false) {
+function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate = false) {
   const isResults = which === 'results';
   const isPlatforms = which === 'platforms';
   const isBenchmarks = which === 'benchmarks';
-  const isCompare = which === 'compare';
   viewResultsBtn?.classList.toggle('is-active', isResults);
   viewResultsBtn?.setAttribute('aria-selected', String(isResults));
   viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
   viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
   viewBenchmarksBtn?.classList.toggle('is-active', isBenchmarks);
   viewBenchmarksBtn?.setAttribute('aria-selected', String(isBenchmarks));
-  viewCompareBtn?.classList.toggle('is-active', isCompare);
-  viewCompareBtn?.setAttribute('aria-selected', String(isCompare));
   if (heroResultsLead) heroResultsLead.hidden = !isResults;
   if (heroPlatformsLead) heroPlatformsLead.hidden = !isPlatforms;
   if (heroBenchmarksLead) heroBenchmarksLead.hidden = !isBenchmarks;
-  if (heroCompareLead) heroCompareLead.hidden = !isCompare;
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
   if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
-  if (viewCompare) viewCompare.hidden = !isCompare;
-  // When hash routing is driving view changes, it will load the relevant sub-view
-  // (platform list vs platform detail vs help page). Avoid racing those renders here.
   if (!skipHashUpdate) {
     if (isPlatforms) initPlatformsView(true);
     if (isBenchmarks) void initBenchmarksDocsView();
-    if (isCompare) initCompareView();
   }
   if (!skipHashUpdate) updateHash({ view: which });
 }
@@ -496,7 +479,6 @@ function activateView(which: 'results'|'platforms'|'benchmarks'|'compare', skipH
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
 viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
 viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
-viewCompareBtn?.addEventListener('click', () => activateView('compare'));
 
 let benchmarkPages = [];
 
@@ -722,10 +704,12 @@ function updateHash(next: Record<string, string>) {
         delete merged.provider;
         delete merged.device;
         delete merged.help;
-      } else if (!('provider' in next) && !('device' in next) && !('help' in next)) {
+        delete merged.device2;
+      } else if (!('provider' in next) && !('device' in next) && !('help' in next) && !('device2' in next)) {
         delete merged.provider;
         delete merged.device;
         delete merged.help;
+        delete merged.device2;
       }
       if (next.view !== 'results') {
         delete merged.results_provider;
@@ -740,17 +724,6 @@ function updateHash(next: Record<string, string>) {
         if (!('results_timestamp' in next)) delete merged.results_timestamp;
         if (!('results_tab' in next)) delete merged.results_tab;
       }
-      if (next.view !== 'compare') {
-        delete merged.compare_d1p;
-        delete merged.compare_d1d;
-        delete merged.compare_d2p;
-        delete merged.compare_d2d;
-      } else {
-        if (!('compare_d1p' in next)) delete merged.compare_d1p;
-        if (!('compare_d1d' in next)) delete merged.compare_d1d;
-        if (!('compare_d2p' in next)) delete merged.compare_d2p;
-        if (!('compare_d2d' in next)) delete merged.compare_d2d;
-      }
     }
     const hasScopedRoute = Boolean(
       merged.provider
@@ -761,10 +734,7 @@ function updateHash(next: Record<string, string>) {
       || merged.results_benchmark
       || merged.results_timestamp
       || merged.results_tab
-      || merged.compare_d1p
-      || merged.compare_d1d
-      || merged.compare_d2p
-      || merged.compare_d2d
+      || merged.device2
     );
     if (hasScopedRoute || ('view' in next && next.view !== 'platforms')) {
       delete merged.update;
@@ -879,9 +849,9 @@ async function applyHashRouting() {
   if (suppressHashHandler) return;
   const h = parseHash();
   const viewParam = String(h.view || 'platforms');
-  const view = (viewParam === 'platforms')
+  const view = (viewParam === 'platforms' || viewParam === 'compare')
     ? 'platforms'
-    : (viewParam === 'benchmarks' ? 'benchmarks' : (viewParam === 'compare' ? 'compare' : 'results'));
+    : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
   activateView(view, true);
   if (view === 'platforms') {
     if (String((h as any).help || '') === 'metriq-score') {
@@ -889,7 +859,8 @@ async function applyHashRouting() {
       return;
     }
     if (h.provider && h.device) {
-      await showPlatformDetailPage(h.provider, h.device);
+      const device2 = String(h.device2 || '').trim();
+      await showPlatformDetailPage(h.provider, h.device, device2 || undefined);
       return;
     }
     await initPlatformsView(true);
@@ -904,18 +875,6 @@ async function applyHashRouting() {
   }
   if (view === 'benchmarks') {
     await initBenchmarksDocsView();
-  }
-  if (view === 'compare') {
-    const d1p = String(h.compare_d1p || '').trim();
-    const d1d = String(h.compare_d1d || '').trim();
-    const d2p = String(h.compare_d2p || '').trim();
-    const d2d = String(h.compare_d2d || '').trim();
-    if (d1p && d1d && d2p && d2d) {
-      compareDevice1 = { provider: d1p, device: d1d };
-      compareDevice2 = { provider: d2p, device: d2d };
-    }
-    initCompareView();
-    return;
   }
 }
 
@@ -1085,7 +1044,7 @@ function formatPlatformComponentRawValue(value: any) {
   return num.toLocaleString(undefined, { maximumSignificantDigits: 6 });
 }
 
-async function showPlatformDetailPage(provider: string, device: string) {
+async function showPlatformDetailPage(provider: string, device: string, device2Key?: string) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
   container.innerHTML = '<div class="meta">Loading platform…</div>';
@@ -1097,14 +1056,31 @@ async function showPlatformDetailPage(provider: string, device: string) {
     const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
-    renderPlatformDetailPage(json);
+
+    let compareDetail: any = null;
+    if (device2Key) {
+      const sep = device2Key.indexOf('::');
+      if (sep !== -1) {
+        const d2p = device2Key.slice(0, sep);
+        const d2d = device2Key.slice(sep + 2);
+        try {
+          const d2Url = `${base}/${encodeURIComponent(d2p)}/${encodeURIComponent(d2d)}.json`;
+          const d2resp = await fetch(appendCacheBust(d2Url), { cache: 'no-store' });
+          if (d2resp.ok) {
+            compareDetail = await d2resp.json();
+          }
+        } catch {}
+      }
+    }
+
+    renderPlatformDetailPage(json, compareDetail);
   } catch (err) {
     console.error('[platforms] detail load failed:', err);
     renderPlatformDetailPage({ provider, device, error: String(err) });
   }
 }
 
-function renderPlatformDetailPage(detail: any) {
+function renderPlatformDetailPage(detail: any, compareDetail?: any) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
   const provider = detail?.provider || 'Unknown';
@@ -1118,13 +1094,18 @@ function renderPlatformDetailPage(detail: any) {
   const lifecycleNote = renderLifecycleNoteHtml(String(provider), String(device), detail);
   const error = detail?.error ? `<div class="meta" style="color:#f43f5e;">${escapeHtml(String(detail.error))}</div>` : '';
 
-  const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<div class="meta">No current device metadata.</div>';
   const historyHtml = history.length ? history.map((h: any) => {
     const f = h?.first_seen || '';
     const l = h?.last_seen || '';
     const r = h?.runs ?? 0;
     return `<li>${escapeHtml(f)} → ${escapeHtml(l)} · <strong>${r}</strong> run${r===1?'':'s'}</li>`;
   }).join('') : '<li>No metadata history</li>';
+
+  const metaRowsHtml = renderMetaRowsHtml(currentMeta);
+
+  // Build "Compare with" dropdown
+  const compareDeviceKey = compareDetail ? getDeviceKey(String(compareDetail.provider || ''), String(compareDetail.device || '')) : '';
+  const compareDropdownHtml = renderCompareDropdownHtml(provider, device, compareDeviceKey);
 
   let scoreHtml = '<div class="meta">No Metriq score available.</div>';
   if (metriqScore && typeof metriqScore === 'object') {
@@ -1166,6 +1147,10 @@ function renderPlatformDetailPage(detail: any) {
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+        <span class="compare-with">
+          <label for="compare-device-select">Compare with</label>
+          <select id="compare-device-select">${compareDropdownHtml}</select>
+        </span>
       </div>
       ${components.length ? `
         <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
@@ -1187,6 +1172,11 @@ function renderPlatformDetailPage(detail: any) {
     `.trim();
   }
 
+  let compareSectionHtml = '';
+  if (compareDetail && compareDetail.provider && compareDetail.device) {
+    compareSectionHtml = renderCompareSectionHtml(detail, compareDetail);
+  }
+
   container.innerHTML = `
     <div class="detail-page" style="display:flex;flex-direction:column;gap:20px;padding-top:4px;">
       <div class="detail-header" style="display:flex;flex-direction:column;gap:6px;">
@@ -1203,24 +1193,50 @@ function renderPlatformDetailPage(detail: any) {
         </section>
         <section class="detail-section" style="padding:8px 0;">
           <h5 style="margin:0 0 12px;">Current device metadata</h5>
-          ${metaHtml}
+          ${metaRowsHtml}
         </section>
         <section class="detail-section" style="padding:8px 0;">
           <h5 style="margin:0 0 12px;">Metadata history</h5>
           <ul style="margin-top:4px;">${historyHtml}</ul>
         </section>
       </div>
+      ${compareSectionHtml}
     </div>
   `;
+
   const backLink = document.getElementById('platform-back');
   if (backLink) {
     backLink.addEventListener('click', (ev) => {
       ev.preventDefault();
       location.hash = '#view=platforms';
-      // Route immediately so the list is shown even if hashchange is coalesced.
       applyHashRouting();
     });
   }
+
+  const compareSelect = document.getElementById('compare-device-select') as HTMLSelectElement | null;
+  if (compareSelect) {
+    compareSelect.addEventListener('change', () => {
+      const val = String(compareSelect.value || '').trim();
+      if (val) {
+        const newHash = `#view=platforms&provider=${encodeURIComponent(provider)}&device=${encodeURIComponent(device)}&device2=${encodeURIComponent(val)}`;
+        suppressHashHandler = false;
+        if (location.hash !== newHash) {
+          location.hash = newHash;
+        } else {
+          applyHashRouting();
+        }
+      } else {
+        const newHash = `#view=platforms&provider=${encodeURIComponent(provider)}&device=${encodeURIComponent(device)}`;
+        suppressHashHandler = false;
+        if (location.hash !== newHash) {
+          location.hash = newHash;
+        } else {
+          applyHashRouting();
+        }
+      }
+    });
+  }
+
   container.querySelectorAll<HTMLTableRowElement>('#platform-detail-table tbody tr[data-results-href]').forEach((row) => {
     const href = row.getAttribute('data-results-href') || '';
     if (!href) return;
@@ -1238,6 +1254,185 @@ function renderPlatformDetailPage(detail: any) {
       open();
     });
   });
+}
+
+function renderMetaRowsHtml(meta: any): string {
+  if (!meta || typeof meta !== 'object') return '<div class="meta">No current device metadata.</div>';
+  const entries = Object.entries(meta).filter(([_, v]) => v === null || v === undefined || typeof v !== 'object' || !(v as any).constructor?.name || ['string', 'number', 'boolean'].includes(typeof v));
+  const nested = Object.entries(meta).filter(([_, v]) => v !== null && v !== undefined && typeof v === 'object');
+  if (!entries.length && !nested.length) return '<div class="meta">No current device metadata.</div>';
+  const flatRows = entries.map(([k, v]) => {
+    const disp = v === null || v === undefined ? '<span class="num-empty">&mdash;</span>' : escapeHtml(String(v));
+    return `<tr><td>${escapeHtml(k)}</td><td>${disp}</td></tr>`;
+  }).join('');
+  const nestedHtml = nested.length ? nested.map(([k, v]) => {
+    const jsonStr = escapeHtml(JSON.stringify(v, null, 2));
+    return `<tr><td>${escapeHtml(k)}</td><td><details style="font-size:12px;"><summary style="cursor:pointer;color:var(--accent);font-weight:600;">${escapeHtml(Array.isArray(v) ? 'Array (' + v.length + ')' : 'Object')}</summary><pre style="margin:6px 0 0;white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:8px;border-radius:6px;font-size:11px;">${jsonStr}</pre></details></td></tr>`;
+  }).join('') : '';
+  return `
+    <div style="overflow-x:auto;">
+      <table class="compare-meta-table" style="width:100%;">
+        <thead>
+          <tr><th>Property</th><th>Value</th></tr>
+        </thead>
+        <tbody>${flatRows}${nestedHtml}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderCompareDropdownHtml(currentProvider: string, currentDevice: string, selectedKey: string): string {
+  const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache : [];
+  const options = platforms
+    .filter((p: any) => String(p.provider || '') === currentProvider && String(p.device || '') !== currentDevice)
+    .map((p: any) => {
+      const key = getDeviceKey(String(p.provider || ''), String(p.device || ''));
+      return `<option value="${escapeAttr(key)}"${key === selectedKey ? ' selected' : ''}>${escapeHtml(String(p.device || ''))}</option>`;
+    })
+    .sort();
+  return `<option value="">Off</option>${options.join('')}`;
+}
+
+function renderCompareSectionHtml(detail: any, compareDetail: any): string {
+  const p1 = String(detail?.provider || '');
+  const p2 = String(compareDetail?.provider || '');
+  const dev1 = String(detail?.device || '');
+  const dev2 = String(compareDetail?.device || '');
+  if (!p1 || !dev1 || !p2 || !dev2) return '';
+
+  const ms1 = detail?.metriq_score || null;
+  const ms2 = compareDetail?.metriq_score || null;
+  const score1 = ms1 && typeof ms1.value === 'number' ? Number(ms1.value) : null;
+  const score2 = ms2 && typeof ms2.value === 'number' ? Number(ms2.value) : null;
+  const scoreBadge = renderCompareScoreBadge(score1, score2);
+
+  const key1 = getDeviceKey(p1, dev1);
+  const key2 = getDeviceKey(p2, dev2);
+  const nq1 = platformQubitsCache?.get(key1);
+  const nq2 = platformQubitsCache?.get(key2);
+  const cov1 = platformCoverageCache?.get(key1);
+  const cov2 = platformCoverageCache?.get(key2);
+  const lifecycle1 = getPlatformLifecycle(p1, dev1, detail);
+  const lifecycle2 = getPlatformLifecycle(p2, dev2, compareDetail);
+  const status1 = lifecycle1 ? titleCaseStatus(lifecycle1.status) : 'Active';
+  const status2 = lifecycle2 ? titleCaseStatus(lifecycle2.status) : 'Active';
+
+  const devLabel1 = renderDeviceLabelHtml(p1, dev1, detail);
+  const devLabel2 = renderDeviceLabelHtml(p2, dev2, compareDetail);
+
+  // Component breakdown
+  const comps1 = ms1?.components && typeof ms1.components === 'object' ? ms1.components : {};
+  const comps2 = ms2?.components && typeof ms2.components === 'object' ? ms2.components : {};
+  const allBenchmarks = Array.from(new Set([...Object.keys(comps1), ...Object.keys(comps2)])).sort();
+
+  const compRows = allBenchmarks.map((name) => {
+    const c1 = comps1[name] || {};
+    const c2 = comps2[name] || {};
+    return `<tr>
+      <td>${escapeHtml(name)}</td>
+      <td>${formatCompareValue(c1?.weight)}</td>
+      <td>${formatCompareValue(c1?.raw)}</td>
+      <td>${c1?.normalized !== null && c1?.normalized !== undefined && Number.isFinite(Number(c1.normalized)) ? Number(c1.normalized).toFixed(3) : '<span class="num-empty">&mdash;</span>'}</td>
+      <td>${c1?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c1.timestamp))) : ''}</td>
+      <td>${formatCompareValue(c2?.weight)}</td>
+      <td>${formatCompareValue(c2?.raw)}</td>
+      <td>${c2?.normalized !== null && c2?.normalized !== undefined && Number.isFinite(Number(c2.normalized)) ? Number(c2.normalized).toFixed(3) : '<span class="num-empty">&mdash;</span>'}</td>
+      <td>${c2?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c2.timestamp))) : ''}</td>
+    </tr>`;
+  }).join('');
+
+  const meta1 = detail?.current?.device_metadata || null;
+  const meta2 = compareDetail?.current?.device_metadata || null;
+  const allMetaKeys = Array.from(new Set([
+    ...(meta1 && typeof meta1 === 'object' ? Object.keys(meta1) : []),
+    ...(meta2 && typeof meta2 === 'object' ? Object.keys(meta2) : []),
+  ])).sort();
+  const metaRows = allMetaKeys.map((k) => {
+    const v1 = meta1 && typeof meta1 === 'object' ? (meta1 as any)[k] : undefined;
+    const v2 = meta2 && typeof meta2 === 'object' ? (meta2 as any)[k] : undefined;
+    const isNested1 = v1 !== null && v1 !== undefined && typeof v1 === 'object';
+    const isNested2 = v2 !== null && v2 !== undefined && typeof v2 === 'object';
+    if (isNested1 || isNested2) return '';
+    return `<tr>
+      <td>${escapeHtml(k)}</td>
+      <td>${v1 === null || v1 === undefined ? '<span class="num-empty">&mdash;</span>' : escapeHtml(String(v1))}</td>
+      <td>${v2 === null || v2 === undefined ? '<span class="num-empty">&mdash;</span>' : escapeHtml(String(v2))}</td>
+    </tr>`;
+  }).filter(Boolean).join('');
+
+  return `
+    <div class="compare-section" style="margin-top:8px;">
+      <div class="compare-section__head"><h4>Comparison: ${escapeHtml(dev1)} vs ${escapeHtml(dev2)}</h4></div>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>${escapeHtml(dev1)} ${scoreBadge}</th>
+              <th>${escapeHtml(dev2)} ${renderCompareScoreBadge(score2, score1)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Provider</td>
+              <td>${escapeHtml(p1)}</td>
+              <td>${escapeHtml(p2)}</td>
+            </tr>
+            <tr>
+              <td>Metriq Score</td>
+              <td>${score1 !== null && Number.isFinite(score1) ? score1.toFixed(2) : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${score2 !== null && Number.isFinite(score2) ? score2.toFixed(2) : '<span class="num-empty">&mdash;</span>'}</td>
+            </tr>
+            <tr>
+              <td>Qubits</td>
+              <td>${nq1 !== undefined && nq1 !== null ? escapeHtml(String(nq1)) : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${nq2 !== undefined && nq2 !== null ? escapeHtml(String(nq2)) : '<span class="num-empty">&mdash;</span>'}</td>
+            </tr>
+            <tr>
+              <td>Coverage</td>
+              <td>${cov1 ? `${cov1.covered}/${cov1.total}` : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${cov2 ? `${cov2.covered}/${cov2.total}` : '<span class="num-empty">&mdash;</span>'}</td>
+            </tr>
+            <tr>
+              <td>Status</td>
+              <td>${escapeHtml(status1)}</td>
+              <td>${escapeHtml(status2)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      ${compRows.length ? `
+      <div class="compare-table-wrap" style="border-top:1px solid rgba(15,23,42,.08);">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th colspan="4" style="text-align:center;">${escapeHtml(dev1)}</th>
+              <th colspan="4" style="text-align:center;">${escapeHtml(dev2)}</th>
+            </tr>
+            <tr>
+              <th></th>
+              <th>Weight</th><th>Raw</th><th>Norm.</th><th>Date</th>
+              <th>Weight</th><th>Raw</th><th>Norm.</th><th>Date</th>
+            </tr>
+          </thead>
+          <tbody>${compRows}</tbody>
+        </table>
+      </div>` : ''}
+      ${metaRows.length ? `
+      <div class="compare-table-wrap" style="border-top:1px solid rgba(15,23,42,.08);">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Metadata</th>
+              <th>${escapeHtml(dev1)}</th>
+              <th>${escapeHtml(dev2)}</th>
+            </tr>
+          </thead>
+          <tbody>${metaRows}</tbody>
+        </table>
+      </div>` : ''}
+    </div>`;
 }
 
 function escapeHtml(s: string) {
@@ -2912,11 +3107,6 @@ async function initBenchmarksView() {
 
 initBenchmarksView();
 
-// ---- Compare View ----
-function getCompareDeviceKey(v: { provider: string; device: string }): string {
-  return `${v.provider}::${v.device}`;
-}
-
 function formatCompareValue(v: any): string {
   if (v === null || v === undefined) return '<span class="num-empty">&mdash;</span>';
   const num = Number(v);
@@ -2940,295 +3130,6 @@ function renderCompareScoreBadge(val1: number | null, val2: number | null): stri
   else if (diff > 0) { cls = 'compare-score-badge--higher'; label = `${diff > 0 ? '+' : ''}${diff.toFixed(2)}`; }
   else { cls = 'compare-score-badge--lower'; label = `${diff.toFixed(2)}`; }
   return `<span class="compare-score-badge ${cls}">${escapeHtml(label)}</span>`;
-}
-
-async function loadComparePlatformDetail(provider: string, device: string): Promise<any> {
-  try {
-    const config = await loadAppConfig();
-    const indexUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
-    const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
-    const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
-    const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    return await resp.json();
-  } catch {
-    return { provider, device, error: 'Failed to load platform detail.' };
-  }
-}
-
-function getCompareDeviceOptions(): { provider: string; device: string; label: string }[] {
-  const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache : [];
-  return platforms
-    .map((p: any) => ({
-      provider: String(p.provider || '').trim(),
-      device: String(p.device || '').trim(),
-      label: `${String(p.provider || '')} \u00b7 ${String(p.device || '')}`,
-    }))
-    .filter((o) => o.provider && o.device)
-    .sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-}
-
-function populateCompareSelect(selId: string, selected: { provider: string; device: string } | null) {
-  const sel = document.getElementById(selId) as HTMLSelectElement | null;
-  if (!sel) return;
-  const opts = getCompareDeviceOptions();
-  const selectedKey = selected ? getCompareDeviceKey(selected) : '';
-  sel.innerHTML = `<option value="">Select a device\u2026</option>` + opts.map((o) => {
-    const key = getCompareDeviceKey(o);
-    return `<option value="${escapeAttr(key)}"${key === selectedKey ? ' selected' : ''}>${escapeHtml(o.label)}</option>`;
-  }).join('');
-}
-
-function parseCompareSelectValue(val: string): { provider: string; device: string } | null {
-  if (!val) return null;
-  const idx = val.indexOf('::');
-  if (idx === -1) return null;
-  return { provider: val.slice(0, idx), device: val.slice(idx + 2) };
-}
-
-async function initCompareView() {
-  const container = document.getElementById('compare-output');
-  if (!container) return;
-  await loadPlatformsIndex();
-  populateCompareSelect('compare-device-1', compareDevice1);
-  populateCompareSelect('compare-device-2', compareDevice2);
-
-  const sel1 = document.getElementById('compare-device-1') as HTMLSelectElement | null;
-  const sel2 = document.getElementById('compare-device-2') as HTMLSelectElement | null;
-
-  const onChange = async () => {
-    const d1 = sel1 ? parseCompareSelectValue(sel1.value) : null;
-    const d2 = sel2 ? parseCompareSelectValue(sel2.value) : null;
-    compareDevice1 = d1;
-    compareDevice2 = d2;
-    if (d1 && d2) {
-      const hashParams: Record<string, string> = { view: 'compare' };
-      hashParams.compare_d1p = d1.provider;
-      hashParams.compare_d1d = d1.device;
-      hashParams.compare_d2p = d2.provider;
-      hashParams.compare_d2d = d2.device;
-      suppressHashHandler = false;
-      updateHash(hashParams);
-      container.innerHTML = '<div class="compare-loading">Loading comparison\u2026</div>';
-      const [detail1, detail2] = await Promise.all([
-        loadComparePlatformDetail(d1.provider, d1.device),
-        loadComparePlatformDetail(d2.provider, d2.device),
-      ]);
-      compareDetail1 = detail1;
-      compareDetail2 = detail2;
-      renderCompareView(detail1, detail2);
-    } else {
-      container.innerHTML = '<div class="compare-empty">Select two devices to see a side-by-side comparison.</div>';
-    }
-  };
-
-  if (sel1) {
-    sel1.onchange = onChange;
-    if (compareDevice1 && sel1.value) {
-      sel1.value = getCompareDeviceKey(compareDevice1);
-    }
-  }
-  if (sel2) {
-    sel2.onchange = onChange;
-    if (compareDevice2 && sel2.value) {
-      sel2.value = getCompareDeviceKey(compareDevice2);
-    }
-  }
-
-  if (compareDevice1 && compareDevice2) {
-    await onChange();
-  } else {
-    container.innerHTML = '<div class="compare-empty">Select two devices to see a side-by-side comparison.</div>';
-  }
-}
-
-function renderCompareView(d1: any, d2: any) {
-  const container = document.getElementById('compare-output');
-  if (!container) return;
-
-  const p1 = String(d1?.provider || '');
-  const p2 = String(d2?.provider || '');
-  const dev1 = String(d1?.device || '');
-  const dev2 = String(d2?.device || '');
-
-  if (d1?.error || d2?.error) {
-    const errs: string[] = [];
-    if (d1?.error) errs.push(`${escapeHtml(p1)} \u00b7 ${escapeHtml(dev1)}: ${escapeHtml(String(d1.error))}`);
-    if (d2?.error) errs.push(`${escapeHtml(p2)} \u00b7 ${escapeHtml(dev2)}: ${escapeHtml(String(d2.error))}`);
-    container.innerHTML = `<div style="padding:20px;color:#f43f5e;">${errs.join('<br>')}</div>`;
-    return;
-  }
-
-  const ms1 = d1?.metriq_score || null;
-  const ms2 = d2?.metriq_score || null;
-  const score1 = ms1 && typeof ms1.value === 'number' ? Number(ms1.value) : null;
-  const score2 = ms2 && typeof ms2.value === 'number' ? Number(ms2.value) : null;
-  const scoreBadge = renderCompareScoreBadge(score1, score2);
-
-  const meta1 = d1?.current?.device_metadata || null;
-  const meta2 = d2?.current?.device_metadata || null;
-
-  const runs1 = d1?.runs ?? 0;
-  const runs2 = d2?.runs ?? 0;
-  const first1 = d1?.first_seen || '';
-  const first2 = d2?.first_seen || '';
-  const last1 = d1?.last_seen || '';
-  const last2 = d2?.last_seen || '';
-
-  const lifecycle1 = getPlatformLifecycle(p1, dev1, d1);
-  const lifecycle2 = getPlatformLifecycle(p2, dev2, d2);
-  const status1 = lifecycle1 ? titleCaseStatus(lifecycle1.status) : 'Active';
-  const status2 = lifecycle2 ? titleCaseStatus(lifecycle2.status) : 'Active';
-
-  const key1 = getDeviceKey(p1, dev1);
-  const key2 = getDeviceKey(p2, dev2);
-  const nq1 = platformQubitsCache?.get(key1);
-  const nq2 = platformQubitsCache?.get(key2);
-  const cov1 = platformCoverageCache?.get(key1);
-  const cov2 = platformCoverageCache?.get(key2);
-
-  const devLabel1 = renderDeviceLabelHtml(p1, dev1, d1);
-  const devLabel2 = renderDeviceLabelHtml(p2, dev2, d2);
-
-  // Build component comparison rows
-  const comps1 = ms1?.components && typeof ms1.components === 'object' ? ms1.components : {};
-  const comps2 = ms2?.components && typeof ms2.components === 'object' ? ms2.components : {};
-  const allBenchmarks = Array.from(new Set([...Object.keys(comps1), ...Object.keys(comps2)])).sort();
-
-  const compRows = allBenchmarks.map((name) => {
-    const c1 = comps1[name] || {};
-    const c2 = comps2[name] || {};
-    const w1 = c1?.weight;
-    const w2 = c2?.weight;
-    const raw1 = c1?.raw;
-    const raw2 = c2?.raw;
-    const n1 = c1?.normalized;
-    const n2 = c2?.normalized;
-    const ts1 = c1?.timestamp ? dateOnlyFormatter.format(new Date(c1.timestamp)) : '';
-    const ts2 = c2?.timestamp ? dateOnlyFormatter.format(new Date(c2.timestamp)) : '';
-    const group1 = typeof c1?.group === 'string' ? String(c1.group).trim() : '';
-    const group2 = typeof c2?.group === 'string' ? String(c2.group).trim() : '';
-    const group = group1 || group2 || '';
-    const groupCell = group ? `<span style="font-size:11px;color:var(--muted);display:block;">${escapeHtml(group)}</span>` : '';
-    return `<tr>
-      <td>${escapeHtml(name)}${groupCell}</td>
-      <td>${formatCompareValue(w1)}</td>
-      <td>${formatCompareValue(raw1)}</td>
-      <td>${n1 !== null && n1 !== undefined && Number.isFinite(Number(n1)) ? Number(n1).toFixed(3) : '<span class="num-empty">&mdash;</span>'}</td>
-      <td>${escapeHtml(ts1 || '')}</td>
-      <td>${formatCompareValue(w2)}</td>
-      <td>${formatCompareValue(raw2)}</td>
-      <td>${n2 !== null && n2 !== undefined && Number.isFinite(Number(n2)) ? Number(n2).toFixed(3) : '<span class="num-empty">&mdash;</span>'}</td>
-      <td>${escapeHtml(ts2 || '')}</td>
-    </tr>`;
-  }).join('');
-
-  const metaHtml = meta1 || meta2 ? `
-    <div class="compare-section">
-      <div class="compare-section__head"><h4>Device Metadata</h4></div>
-      <div class="compare-meta-json">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-          <div>
-            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:#1f2b3c;margin-bottom:6px;">${escapeHtml(dev1)}</div>
-            <pre>${meta1 ? escapeHtml(JSON.stringify(meta1, null, 2)) : '<span class="num-empty">No metadata</span>'}</pre>
-          </div>
-          <div>
-            <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:#1f2b3c;margin-bottom:6px;">${escapeHtml(dev2)}</div>
-            <pre>${meta2 ? escapeHtml(JSON.stringify(meta2, null, 2)) : '<span class="num-empty">No metadata</span>'}</pre>
-          </div>
-        </div>
-      </div>
-    </div>` : '';
-
-  container.innerHTML = `
-    <div class="compare-results">
-      <div class="compare-section">
-        <div class="compare-section__head">
-          <h4>Overview</h4>
-        </div>
-        <div class="compare-table-wrap">
-          <table class="compare-table">
-            <thead>
-              <tr>
-                <th></th>
-                <th>${escapeHtml(dev1)} ${scoreBadge}</th>
-                <th>${escapeHtml(dev2)} ${renderCompareScoreBadge(score2, score1)}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Provider</td>
-                <td>${escapeHtml(p1)}</td>
-                <td>${escapeHtml(p2)}</td>
-              </tr>
-              <tr>
-                <td>Device</td>
-                <td>${devLabel1}</td>
-                <td>${devLabel2}</td>
-              </tr>
-              <tr>
-                <td>Metriq Score</td>
-                <td>${score1 !== null && Number.isFinite(score1) ? score1.toFixed(2) : '<span class="num-empty">&mdash;</span>'}</td>
-                <td>${score2 !== null && Number.isFinite(score2) ? score2.toFixed(2) : '<span class="num-empty">&mdash;</span>'}</td>
-              </tr>
-              <tr>
-                <td>Qubits</td>
-                <td>${nq1 !== undefined && nq1 !== null ? escapeHtml(String(nq1)) : '<span class="num-empty">&mdash;</span>'}</td>
-                <td>${nq2 !== undefined && nq2 !== null ? escapeHtml(String(nq2)) : '<span class="num-empty">&mdash;</span>'}</td>
-              </tr>
-              <tr>
-                <td>Coverage</td>
-                <td>${cov1 ? `${cov1.covered}/${cov1.total}` : '<span class="num-empty">&mdash;</span>'}</td>
-                <td>${cov2 ? `${cov2.covered}/${cov2.total}` : '<span class="num-empty">&mdash;</span>'}</td>
-              </tr>
-              <tr>
-                <td>Status</td>
-                <td>${escapeHtml(status1)}</td>
-                <td>${escapeHtml(status2)}</td>
-              </tr>
-              <tr>
-                <td>Total Runs</td>
-                <td>${runs1}</td>
-                <td>${runs2}</td>
-              </tr>
-              <tr>
-                <td>First Seen</td>
-                <td>${first1 ? formatDateOnly(first1) : '<span class="num-empty">&mdash;</span>'}</td>
-                <td>${first2 ? formatDateOnly(first2) : '<span class="num-empty">&mdash;</span>'}</td>
-              </tr>
-              <tr>
-                <td>Last Seen</td>
-                <td>${last1 ? formatDateOnly(last1) : '<span class="num-empty">&mdash;</span>'}</td>
-                <td>${last2 ? formatDateOnly(last2) : '<span class="num-empty">&mdash;</span>'}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      ${compRows.length ? `
-      <div class="compare-section">
-        <div class="compare-section__head"><h4>Benchmark Components</h4></div>
-        <div class="compare-table-wrap">
-          <table class="compare-table">
-            <thead>
-              <tr>
-                <th>Component</th>
-                <th style="text-align:center" colspan="4">${escapeHtml(dev1)}</th>
-                <th style="text-align:center" colspan="4">${escapeHtml(dev2)}</th>
-              </tr>
-              <tr>
-                <th></th>
-                <th>Weight</th><th>Raw</th><th>Norm.</th><th>Date</th>
-                <th>Weight</th><th>Raw</th><th>Norm.</th><th>Date</th>
-              </tr>
-            </thead>
-            <tbody>${compRows}</tbody>
-          </table>
-        </div>
-      </div>` : ''}
-      ${metaHtml}
-    </div>
-  `;
 }
 
 async function injectFooter() {
