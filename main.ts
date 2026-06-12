@@ -65,6 +65,7 @@ let platformsIndexByKeyCache: Map<string, any> | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformQubitsCache: Map<string, number> | null = null;
 let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
+let platformDetailsCache: Map<string, any> | null = null;
 let platformSortKey: 'score' | 'coverage' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
 let platformSortDir: 'asc' | 'desc' = 'desc';
 let platformProviderFilter = '';
@@ -706,10 +707,18 @@ function updateHash(next: Record<string, string>) {
         delete merged.provider;
         delete merged.device;
         delete merged.help;
-      } else if (!('provider' in next) && !('device' in next) && !('help' in next)) {
+        delete merged.compare_provider_a;
+        delete merged.compare_device_a;
+        delete merged.compare_provider_b;
+        delete merged.compare_device_b;
+      } else if (!('provider' in next) && !('device' in next) && !('help' in next) && !('compare_provider_a' in next) && !('compare_device_a' in next) && !('compare_provider_b' in next) && !('compare_device_b' in next)) {
         delete merged.provider;
         delete merged.device;
         delete merged.help;
+        delete merged.compare_provider_a;
+        delete merged.compare_device_a;
+        delete merged.compare_provider_b;
+        delete merged.compare_device_b;
       }
       if (next.view !== 'results') {
         delete merged.results_provider;
@@ -729,6 +738,10 @@ function updateHash(next: Record<string, string>) {
       merged.provider
       || merged.device
       || merged.help
+      || merged.compare_provider_a
+      || merged.compare_device_a
+      || merged.compare_provider_b
+      || merged.compare_device_b
       || merged.results_provider
       || merged.results_device
       || merged.results_benchmark
@@ -855,6 +868,10 @@ async function applyHashRouting() {
   if (view === 'platforms') {
     if (String((h as any).help || '') === 'metriq-score') {
       renderMetriqScoreHelp();
+      return;
+    }
+    if (h.compare_provider_a && h.compare_device_a && h.compare_provider_b && h.compare_device_b) {
+      await showPlatformComparePage(h.compare_provider_a, h.compare_device_a, h.compare_provider_b, h.compare_device_b);
       return;
     }
     if (h.provider && h.device) {
@@ -996,6 +1013,8 @@ async function loadPlatformScores() {
       const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
       if (!resp.ok) return;
       const json = await resp.json();
+      if (!platformDetailsCache) platformDetailsCache = new Map();
+      platformDetailsCache.set(key, json);
       const ms = json && json.metriq_score;
       const val = ms && typeof ms.value === 'number' ? Number(ms.value) : null;
       if (val !== null && Number.isFinite(val)) {
@@ -1042,22 +1061,435 @@ function formatPlatformComponentRawValue(value: any) {
   return num.toLocaleString(undefined, { maximumSignificantDigits: 6 });
 }
 
+
+function buildPlatformDetailUrl(provider: string, device: string, indexUrl: string) {
+  const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
+  return `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
+}
+
+async function loadPlatformDetail(provider: string, device: string) {
+  if (!platformDetailsCache) platformDetailsCache = new Map();
+  const key = getDeviceKey(provider, device);
+  const cached = platformDetailsCache.get(key);
+  if (cached) return cached;
+  const config = await loadAppConfig();
+  const indexUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
+  const detailUrl = buildPlatformDetailUrl(provider, device, indexUrl);
+  const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const json = await resp.json();
+  platformDetailsCache.set(key, json);
+  return json;
+}
+
+function buildPlatformDetailHash(provider: string, device: string) {
+  const params = new URLSearchParams({ view: 'platforms', provider, device });
+  return '#' + params.toString();
+}
+
+function buildCompareHash(providerA: string, deviceA: string, providerB: string, deviceB: string) {
+  const params = new URLSearchParams({
+    view: 'platforms',
+    compare_provider_a: providerA,
+    compare_device_a: deviceA,
+    compare_provider_b: providerB,
+    compare_device_b: deviceB,
+  });
+  return '#' + params.toString();
+}
+
+function scrollToPlatformsLead() {
+  heroPlatformsLead?.scrollIntoView({ block: 'start', behavior: 'auto' });
+}
+
+function renderPlatformOptionLabel(platform: any) {
+  const provider = String(platform?.provider || '');
+  const device = String(platform?.device || '');
+  return `${device} · ${provider}`;
+}
+
+function sortPlatformsForComparison(platforms: any[]) {
+  return platforms
+    .map((p: any) => {
+      const provider = String(p.provider || '');
+      const device = String(p.device || '');
+      const score = platformScoresCache?.get(getDeviceKey(provider, device));
+      return { ...p, provider, device, score: Number(score) };
+    })
+    .filter((p: any) => p.provider && p.device)
+    .sort((a: any, b: any) => {
+      const as = Number.isFinite(a.score) ? a.score : Number.NEGATIVE_INFINITY;
+      const bs = Number.isFinite(b.score) ? b.score : Number.NEGATIVE_INFINITY;
+      if (bs !== as) return bs - as;
+      return `${a.provider} ${a.device}`.localeCompare(`${b.provider} ${b.device}`);
+    });
+}
+
+function findDefaultComparePair(platforms: any[], _preferredProvider = '') {
+  const sorted = sortPlatformsForComparison(platforms);
+  return [sorted[0] || null, sorted[1] || null];
+}
+
+function findDefaultComparePeer(provider: string, device: string) {
+  const currentProvider = String(provider || '');
+  const currentDevice = String(device || '');
+  return sortPlatformsForComparison(platformsIndexCache || [])
+    .find((p: any) => p.provider !== currentProvider || p.device !== currentDevice) || null;
+}
+
+function normalizeCompareSelection(provider: string, device: string, fallback: any) {
+  const exact = (platformsIndexCache || []).find((p: any) => String(p.provider || '') === provider && String(p.device || '') === device);
+  return exact || fallback || null;
+}
+
+function extractDeviceMetadataRows(details: any[]) {
+  const fields = [
+    ['num_qubits', 'Qubits'],
+    ['quantum_volume', 'Quantum volume'],
+    ['processor_type', 'Processor type'],
+    ['basis_gates', 'Basis gates'],
+    ['coupling_map', 'Coupling map'],
+  ];
+  return fields.map(([key, label]) => {
+    const values = details.map((detail: any) => {
+      const md = detail?.current?.device_metadata ?? detail?.device_metadata ?? {};
+      const value = md?.[key];
+      if (Array.isArray(value)) return value.length > 8 ? `${value.length} entries` : value.join(', ');
+      if (value && typeof value === 'object') return `${Object.keys(value).length} entries`;
+      return value === null || value === undefined || value === '' ? '–' : String(value);
+    });
+    return { key, label, values };
+  }).filter((row: any) => row.values.some((v: string) => v !== '–'));
+}
+
+
+function getProviderLogoSrc(provider: string) {
+  const p = String(provider || '').toLowerCase();
+  if (!p || p.includes('local')) return null;
+  if (p.includes('ibm')) return 'public/ibm.png';
+  if (p.includes('aws') || p.includes('amazon') || p.includes('braket')) return 'public/aws.png';
+  if (p.includes('origin')) return 'public/origin.png';
+  if (p.includes('quantinuum')) return 'public/quantinuum.png';
+  return null;
+}
+
+function getProviderCompareTheme(provider: string) {
+  const p = String(provider || '').toLowerCase();
+  if (p.includes('ibm')) return 'ibm';
+  if (p.includes('quantinuum') || p.includes('quantinum')) return 'quantinuum';
+  if (p.includes('aws') || p.includes('amazon') || p.includes('braket')) return 'aws';
+  if (p.includes('origin')) return 'origin';
+  return 'default';
+}
+
+function getProviderCompareOptionStyle(provider: string) {
+  const theme = getProviderCompareTheme(provider);
+  if (theme === 'ibm') return 'background-color:#87ceeb;color:#0f172a;';
+  if (theme === 'quantinuum') return 'background-color:#000;color:#fff;';
+  if (theme === 'aws') return 'background-color:#ff9900;color:#111827;';
+  if (theme === 'origin') return 'background-color:#fff;color:#111827;';
+  return '';
+}
+
+function getProviderInitials(provider: string) {
+  const words = String(provider || '')
+    .replace(/quantum|cloud|computing|services|technologies|technology/ig, ' ')
+    .split(/[^a-z0-9]+/i)
+    .map((w) => w.trim())
+    .filter(Boolean);
+  const initials = words.slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('');
+  return initials || 'QC';
+}
+
+function renderProviderLogoHtml(provider: string, accent = false) {
+  const src = getProviderLogoSrc(provider);
+  if (!src && String(provider || '').toLowerCase().includes('local')) return '';
+
+  const label = provider ? `${provider} logo` : 'Provider logo';
+  const classes = `provider-logo${accent ? ' provider-logo--accent' : ''}`;
+  if (src) {
+    return `<span class="${classes}" aria-label="${escapeAttr(label)}" title="${escapeAttr(label)}"><img src="${escapeAttr(src)}" alt="" class="provider-logo__img" /></span>`;
+  }
+  return `<span class="${classes} provider-logo--initials" aria-label="${escapeAttr(label)}" title="${escapeAttr(label)}">${escapeHtml(getProviderInitials(provider))}</span>`;
+}
+
+function renderCompareMetricRow(label: string, aHtml: string, bHtml: string) {
+  return `<tr><th scope="row">${escapeHtml(label)}</th><td>${aHtml}</td><td>${bHtml}</td></tr>`;
+}
+
+function renderCompareDeviceTitleHtml(provider: string, device: string, source?: any) {
+  return `<h4>${renderDeviceLabelHtml(provider, device, source)}</h4>`;
+}
+
+function renderCompareDeviceHeaderLink(provider: string, device: string) {
+  const label = `View ${device} device details`;
+  return `<a class="compare-table__device-link" href="${escapeAttr(buildPlatformDetailHash(provider, device))}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${escapeHtml(device)}</a>`;
+}
+
+function hasCompareComponent(components: Record<string, any>, name: string) {
+  return Object.prototype.hasOwnProperty.call(components, name);
+}
+
+function isFiniteCompareComponentNumber(value: any) {
+  if (value === null || value === undefined || value === '') return false;
+  return Number.isFinite(Number(value));
+}
+
+function hasCompareComponentNormalizedValue(components: Record<string, any>, name: string) {
+  if (!hasCompareComponent(components, name)) return false;
+  return isFiniteCompareComponentNumber(components[name]?.normalized);
+}
+
+function getCompareComponentNormalizedAvailability(name: string, leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
+  return (hasCompareComponentNormalizedValue(leftComponents, name) ? 1 : 0) + (hasCompareComponentNormalizedValue(rightComponents, name) ? 1 : 0);
+}
+
+function getCompareComponentDisplayWeight(name: string, leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
+  const weights = [leftComponents[name], rightComponents[name]]
+    .map((component) => Number(component?.weight))
+    .filter((weight) => Number.isFinite(weight));
+  return weights.length ? Math.max(...weights) : null;
+}
+
+function getCompareComponentSortWeight(name: string, leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
+  return getCompareComponentDisplayWeight(name, leftComponents, rightComponents) ?? 0;
+}
+
+function getCompareComponentNormalized(component: any) {
+  const normalized = Number(component?.normalized);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
+function calculateOverlapMetriqScore(components: Record<string, any>, overlapNames: string[], leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
+  const score = overlapNames.reduce((total, name) => {
+    const normalized = getCompareComponentNormalized(components[name]);
+    if (normalized === null) return total;
+    return total + getCompareComponentSortWeight(name, leftComponents, rightComponents) * normalized;
+  }, 0);
+  return Number.isFinite(score) ? score : null;
+}
+
+function renderCompareComponentRow(label: string, weightHtml: string, aHtml: string, bHtml: string) {
+  return `<tr><th scope="row">${escapeHtml(label)}</th><td class="num">${weightHtml}</td><td>${aHtml}</td><td>${bHtml}</td></tr>`;
+}
+
+function sortCompareComponentNames(leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
+  return Array.from(new Set([...Object.keys(leftComponents), ...Object.keys(rightComponents)])).sort((a, b) => {
+    const availabilityDiff = getCompareComponentNormalizedAvailability(b, leftComponents, rightComponents) - getCompareComponentNormalizedAvailability(a, leftComponents, rightComponents);
+    if (availabilityDiff !== 0) return availabilityDiff;
+
+    const weightDiff = getCompareComponentSortWeight(b, leftComponents, rightComponents) - getCompareComponentSortWeight(a, leftComponents, rightComponents);
+    if (weightDiff !== 0) return weightDiff;
+
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
+async function showPlatformComparePage(providerA: string, deviceA: string, providerB: string, deviceB: string) {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  container.innerHTML = '<div class="meta">Loading comparison…</div>';
+  try {
+    const data = await loadPlatformsIndex();
+    const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
+    setPlatformsIndexCache(platforms);
+    try { await loadPlatformScores(); } catch {}
+
+    const defaults = findDefaultComparePair(platforms, providerA);
+    const left = normalizeCompareSelection(providerA, deviceA, defaults[0]);
+    if (!left) {
+      container.innerHTML = '<div class="meta">At least two platforms are needed for comparison.</div>';
+      return;
+    }
+
+    const leftProvider = String(left.provider || '');
+    const leftDevice = String(left.device || '');
+    const requestedRight = normalizeCompareSelection(providerB, deviceB, defaults[1]);
+    const right = requestedRight && (String(requestedRight.provider || '') !== leftProvider || String(requestedRight.device || '') !== leftDevice)
+      ? requestedRight
+      : findDefaultComparePeer(leftProvider, leftDevice);
+    if (!right) {
+      container.innerHTML = '<div class="meta">At least two platforms are needed for comparison.</div>';
+      return;
+    }
+
+    const rightProvider = String(right.provider || '');
+    const rightDevice = String(right.device || '');
+    const [leftDetail, rightDetail] = await Promise.all([
+      loadPlatformDetail(leftProvider, leftDevice).catch((err) => ({ provider: leftProvider, device: leftDevice, error: String(err) })),
+      loadPlatformDetail(rightProvider, rightDevice).catch((err) => ({ provider: rightProvider, device: rightDevice, error: String(err) })),
+    ]);
+    renderPlatformComparePage(leftDetail, rightDetail);
+  } catch (err) {
+    console.error('[platforms] compare load failed:', err);
+    container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load comparison.</div>';
+  }
+}
+
+function renderComparePickerHtml(leftProvider: string, leftDevice: string, rightProvider: string, rightDevice: string) {
+  const platforms = (platformsIndexCache || []).slice().sort((a: any, b: any) => renderPlatformOptionLabel(a).localeCompare(renderPlatformOptionLabel(b)));
+  const optionHtml = (options: any[], selectedProvider: string, selectedDevice: string) => options.map((p: any) => {
+    const provider = String(p.provider || '');
+    const device = String(p.device || '');
+    const selected = provider === selectedProvider && device === selectedDevice ? ' selected' : '';
+    const theme = getProviderCompareTheme(provider);
+    const style = getProviderCompareOptionStyle(provider);
+    return `<option class="compare-picker__option compare-picker__option--${theme}" style="${escapeAttr(style)}" value="${escapeAttr(`${provider}||${device}`)}"${selected}>${escapeHtml(renderPlatformOptionLabel(p))}</option>`;
+  }).join('');
+  return `
+    <form class="compare-picker" id="compare-picker">
+      <label><span>Device A</span><select id="compare-a" class="compare-picker__select">${optionHtml(platforms, leftProvider, leftDevice)}</select></label>
+      <label><span>Compare with</span><select id="compare-b" class="compare-picker__select">${optionHtml(platforms, rightProvider, rightDevice)}</select></label>
+    </form>
+  `.trim();
+}
+
+function bindComparePicker() {
+  const form = document.getElementById('compare-picker') as HTMLFormElement | null;
+  const a = document.getElementById('compare-a') as HTMLSelectElement | null;
+  const b = document.getElementById('compare-b') as HTMLSelectElement | null;
+  if (!form || !a || !b) return;
+  const navigate = () => {
+    const [pa, da] = String(a.value || '').split('||');
+    let [pb, db] = String(b.value || '').split('||');
+    if (!pa || !da) return;
+    if (!pb || !db || (pb === pa && db === da)) {
+      const peer = findDefaultComparePeer(pa, da);
+      if (!peer) return;
+      pb = String(peer.provider || '');
+      db = String(peer.device || '');
+    }
+    const hash = buildCompareHash(pa, da, pb, db);
+    if (location.hash !== hash) location.hash = hash;
+    else applyHashRouting();
+  };
+  a.addEventListener('change', navigate);
+  b.addEventListener('change', navigate);
+  form.addEventListener('submit', (ev) => { ev.preventDefault(); });
+}
+
+function renderPlatformComparePage(left: any, right: any) {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  const leftProvider = String(left?.provider || 'Unknown');
+  const leftDevice = String(left?.device || 'Unknown');
+  const rightProvider = String(right?.provider || 'Unknown');
+  const rightDevice = String(right?.device || 'Unknown');
+  const leftScoreRaw = left?.metriq_score?.value;
+  const rightScoreRaw = right?.metriq_score?.value;
+  const leftScore = leftScoreRaw === null || leftScoreRaw === undefined ? null : Number(leftScoreRaw);
+  const rightScore = rightScoreRaw === null || rightScoreRaw === undefined ? null : Number(rightScoreRaw);
+  const leftCoverage = extractPlatformCoverage(left);
+  const rightCoverage = extractPlatformCoverage(right);
+  const leftComponents = left?.metriq_score?.components && typeof left?.metriq_score?.components === 'object' ? left.metriq_score.components : {};
+  const rightComponents = right?.metriq_score?.components && typeof right?.metriq_score?.components === 'object' ? right.metriq_score.components : {};
+  const componentNames = sortCompareComponentNames(leftComponents, rightComponents);
+  const overlapComponentNames = componentNames.filter((name) => getCompareComponentNormalizedAvailability(name, leftComponents, rightComponents) === 2);
+  const leftOverlapScore = overlapComponentNames.length ? calculateOverlapMetriqScore(leftComponents, overlapComponentNames, leftComponents, rightComponents) : null;
+  const rightOverlapScore = overlapComponentNames.length ? calculateOverlapMetriqScore(rightComponents, overlapComponentNames, leftComponents, rightComponents) : null;
+  const metadataRows = extractDeviceMetadataRows([left, right]);
+  const leftHeaderHtml = renderCompareDeviceHeaderLink(leftProvider, leftDevice);
+  const rightHeaderHtml = renderCompareDeviceHeaderLink(rightProvider, rightDevice);
+  const summaryRows = [
+    renderCompareMetricRow('Metriq Score', leftScore !== null && Number.isFinite(leftScore) ? leftScore.toFixed(2) : '–', rightScore !== null && Number.isFinite(rightScore) ? rightScore.toFixed(2) : '–'),
+    renderCompareMetricRow('Overlap Metriq Score', leftOverlapScore !== null ? leftOverlapScore.toFixed(2) : '–', rightOverlapScore !== null ? rightOverlapScore.toFixed(2) : '–'),
+  ].join('');
+  const dataRows = [
+    renderCompareMetricRow('Benchmark coverage', leftCoverage ? `${leftCoverage.covered}/${leftCoverage.total}` : '–', rightCoverage ? `${rightCoverage.covered}/${rightCoverage.total}` : '–'),
+    renderCompareMetricRow('Runs in suite data', escapeHtml(String(left?.runs ?? '–')), escapeHtml(String(right?.runs ?? '–'))),
+    renderCompareMetricRow('First seen in data', left?.first_seen ? escapeHtml(formatDateOnly(left.first_seen)) : '–', right?.first_seen ? escapeHtml(formatDateOnly(right.first_seen)) : '–'),
+    renderCompareMetricRow('Last seen in data', left?.last_seen ? escapeHtml(formatDateOnly(left.last_seen)) : '–', right?.last_seen ? escapeHtml(formatDateOnly(right.last_seen)) : '–'),
+  ].join('');
+
+  const metadataHtml = metadataRows.length ? metadataRows.map((row: any) => renderCompareMetricRow(row.label, escapeHtml(row.values[0]), escapeHtml(row.values[1]))).join('') : renderCompareMetricRow('Metadata', '–', '–');
+  const componentHtml = componentNames.length ? componentNames.map((name) => {
+    const lc = leftComponents[name] || {};
+    const rc = rightComponents[name] || {};
+    const ln = lc?.normalized === null || lc?.normalized === undefined ? null : Number(lc.normalized);
+    const rn = rc?.normalized === null || rc?.normalized === undefined ? null : Number(rc.normalized);
+    const weight = getCompareComponentDisplayWeight(name, leftComponents, rightComponents);
+    const weightCell = weight !== null ? weight.toFixed(2) : '–';
+    const leftCell = `${ln !== null && Number.isFinite(ln) ? ln.toFixed(3) : '–'}${lc?.raw !== undefined && lc?.raw !== null ? `<div class="compare-subvalue">raw ${escapeHtml(formatPlatformComponentRawValue(lc.raw))}</div>` : ''}`;
+    const rightCell = `${rn !== null && Number.isFinite(rn) ? rn.toFixed(3) : '–'}${rc?.raw !== undefined && rc?.raw !== null ? `<div class="compare-subvalue">raw ${escapeHtml(formatPlatformComponentRawValue(rc.raw))}</div>` : ''}`;
+    return renderCompareComponentRow(name, weightCell, leftCell, rightCell);
+  }).join('') : renderCompareComponentRow('Components', '–', '–', '–');
+
+  container.innerHTML = `
+    <div class="compare-view">
+      <div class="meta"><a id="compare-back" href="#view=platforms">← Back to Platforms</a></div>
+      <div class="compare-head">
+        <div>
+          <h3>Compare devices</h3>
+          <p class="meta">Explore side-by-side differences in metadata and available suite results without ranking devices.</p>
+        </div>
+      </div>
+      ${renderComparePickerHtml(leftProvider, leftDevice, rightProvider, rightDevice)}
+      <div class="compare-cards" aria-label="Selected devices">
+        <article class="compare-card">
+          <div class="compare-card__top">
+            ${renderProviderLogoHtml(leftProvider)}
+            <div class="compare-card__eyebrow">Device A</div>
+          </div>
+          ${renderCompareDeviceTitleHtml(leftProvider, leftDevice, left)}
+          <p>${escapeHtml(leftProvider)}</p>
+        </article>
+        <article class="compare-card compare-card--accent">
+          <div class="compare-card__top">
+            ${renderProviderLogoHtml(rightProvider, true)}
+            <div class="compare-card__eyebrow">Device B</div>
+          </div>
+          ${renderCompareDeviceTitleHtml(rightProvider, rightDevice, right)}
+          <p>${escapeHtml(rightProvider)}</p>
+        </article>
+      </div>
+      <section class="compare-section">
+        <h4>At a glance</h4>
+        <p class="meta">Score values summarize the currently published benchmark suite; overlap scores use only components with numeric values on both devices.</p>
+        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Metric</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${summaryRows}</tbody></table></div>
+      </section>
+      <section class="compare-section">
+        <h4>Data availability</h4>
+        <p class="meta">Coverage, run counts, and dates describe the available Metriq dataset for each device, not intrinsic device capabilities.</p>
+        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Dataset field</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${dataRows}</tbody></table></div>
+      </section>
+      <section class="compare-section">
+        <h4>Device details</h4>
+        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Spec</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${metadataHtml}</tbody></table></div>
+      </section>
+      <section class="compare-section">
+        <h4>Benchmark components</h4>
+        <p class="meta">Component values are included for exploration only; interpretation depends on each benchmark definition, timestamp, and suite coverage.</p>
+        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Component</th><th>Weight</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${componentHtml}</tbody></table></div>
+      </section>
+    </div>
+  `;
+  const back = document.getElementById('compare-back');
+  back?.addEventListener('click', (ev) => {
+    ev.preventDefault();
+    location.hash = '#view=platforms';
+    applyHashRouting();
+  });
+  bindComparePicker();
+}
+
 async function showPlatformDetailPage(provider: string, device: string) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
   container.innerHTML = '<div class="meta">Loading platform…</div>';
   try {
-    const config = await loadAppConfig();
-    const indexUrl = (config && (config as any).platformsIndexUrl) || DEFAULT_PLATFORMS_INDEX_URL;
-    const base = getPlatformsBaseUrl(indexUrl) || 'https://unitaryfoundation.github.io/metriq-data/platforms';
-    const detailUrl = `${base}/${encodeURIComponent(provider)}/${encodeURIComponent(device)}.json`;
-    const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const json = await resp.json();
+    if (!Array.isArray(platformsIndexCache) || platformsIndexCache.length === 0) {
+      const data = await loadPlatformsIndex();
+      const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
+      setPlatformsIndexCache(platforms);
+    }
+    try { await loadPlatformScores(); } catch {}
+    const json = await loadPlatformDetail(provider, device);
     renderPlatformDetailPage(json);
+    scrollToPlatformsLead();
   } catch (err) {
     console.error('[platforms] detail load failed:', err);
     renderPlatformDetailPage({ provider, device, error: String(err) });
+    scrollToPlatformsLead();
   }
 }
 
@@ -1073,6 +1505,10 @@ function renderPlatformDetailPage(detail: any) {
   const history = Array.isArray(detail?.history) ? detail.history : [];
   const metriqScore = detail?.metriq_score || null;
   const lifecycleNote = renderLifecycleNoteHtml(String(provider), String(device), detail);
+  const comparePeer = findDefaultComparePeer(String(provider), String(device));
+  const compareActionHtml = comparePeer
+    ? `<a class="compare-with-link" href="${buildCompareHash(String(provider), String(device), String(comparePeer.provider || ''), String(comparePeer.device || ''))}"><i class="fa-solid fa-code-compare" aria-hidden="true"></i> Compare with another device</a>`
+    : '<span class="compare-with-link compare-with-link--disabled">No comparison device available</span>';
   const error = detail?.error ? `<div class="meta" style="color:#f43f5e;">${escapeHtml(String(detail.error))}</div>` : '';
 
   const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<div class="meta">No current device metadata.</div>';
@@ -1150,6 +1586,7 @@ function renderPlatformDetailPage(detail: any) {
         <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
         <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
+        <div class="detail-actions">${compareActionHtml}</div>
       </div>
       ${lifecycleNote}
       ${error}
@@ -1432,6 +1869,24 @@ function renderPlatformsProviderHeaderHtml() {
   `.trim();
 }
 
+function removeLegacyCompareColumn(table: HTMLTableElement) {
+  let removed = false;
+  while (true) {
+    const headers = Array.from(table.querySelectorAll<HTMLTableCellElement>('thead th'));
+    const compareIndex = headers.findIndex((th) => {
+      const label = (th.getAttribute('data-label') || th.textContent || '').trim();
+      return th.classList.contains('compare-col') || label === 'Compare';
+    });
+    if (compareIndex < 0) break;
+    table.querySelector(`colgroup col:nth-child(${compareIndex + 1})`)?.remove();
+    table.querySelectorAll<HTMLTableRowElement>('tr').forEach((row) => {
+      row.children.item(compareIndex)?.remove();
+    });
+    removed = true;
+  }
+  return removed;
+}
+
 function ensurePlatformsProviderFilterBound(table: HTMLTableElement) {
   const btn = table.querySelector('#platform-provider-filter-btn') as HTMLButtonElement | null;
   if (btn && !(btn as any).dataset.bound) {
@@ -1496,8 +1951,12 @@ function renderPlatformsTable() {
   const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache.slice() : [];
 
   let wrap = document.getElementById('platforms-table-wrap') as HTMLDivElement | null;
-  let table = wrap ? (wrap.querySelector('table') as HTMLTableElement | null) : null;
-  let tbody = table ? (table.querySelector('tbody') as HTMLTableSectionElement | null) : null;
+  if (wrap) {
+    wrap.remove();
+    wrap = null;
+  }
+  let table: HTMLTableElement | null = null;
+  let tbody: HTMLTableSectionElement | null = null;
 
 		  if (!wrap || !table || !tbody) {
 		    container.innerHTML = '';
@@ -1513,6 +1972,7 @@ function renderPlatformsTable() {
 		        <col style="width: 210px;" />
 		        <col style="width: 92px;" />
 		        <col style="width: 118px;" />
+		        <col style="width: 116px;" />
 		        <col />
 		      </colgroup>
 		      <thead>
@@ -1632,7 +2092,7 @@ function renderPlatformsTable() {
     const coverage = platformCoverageCache && platformCoverageCache.get(key);
     const series = (deviceSeriesCache && deviceSeriesCache.get(key)) || [];
     const spark = series.length ? renderSparkline(series) : '';
-    const href = `#view=platforms&provider=${encodeURIComponent(provider)}&device=${encodeURIComponent(device)}`;
+    const href = buildPlatformDetailHash(provider, device);
     const lifecycle = getPlatformLifecycle(provider, device, p);
     const isRetired = lifecycle?.status === 'retired';
     const deviceLabel = renderDeviceLabelHtml(provider, device, p);
@@ -1643,6 +2103,10 @@ function renderPlatformsTable() {
       ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
       : 0;
     const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
+    const comparePeer = findDefaultComparePeer(provider, device);
+    const compareHtml = comparePeer
+      ? `<a class="compare-link" href="${buildCompareHash(provider, device, String(comparePeer.provider || ''), String(comparePeer.device || ''))}">Compare with…</a>`
+      : '<span class="compare-link compare-link--disabled" title="No same-provider comparison device available">Not available</span>';
     rows.push(`
       <tr${isRetired ? ' class="platform-row--retired"' : ''}>
         <td><a href="${href}">${deviceLabel}</a></td>
@@ -1651,10 +2115,14 @@ function renderPlatformsTable() {
         <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
         <td class="num">${escapeHtml(coverageText)}</td>
         <td class="num">${escapeHtml(lastTs || '')}</td>
+        <td class="compare-col">${compareHtml}</td>
         <td class="activity-col">${spark}</td>
       </tr>`);
   });
   tbody.innerHTML = rows.join('');
+  tbody.querySelectorAll<HTMLTableCellElement>('td.compare-col').forEach((cell) => {
+    cell.textContent = '';
+  });
   if (table && (table as any).dataset) {
     const dataTable = table as any;
     if (!dataTable.dataset.scoreClickBound) {

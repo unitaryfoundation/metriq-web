@@ -201,6 +201,7 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #platforms-table-wrap tbody tr.platform-row--retired:nth-child(even){background:#fff7ed}
 #platforms-table-wrap tbody tr.platform-row--retired:hover{background:#ffedd5}
 #platforms-table-wrap th.activity-col,#platforms-table-wrap td.activity-col{text-align:center}
+#platforms-table-wrap th.compare-col,#platforms-table-wrap td.compare-col{text-align:center;white-space:nowrap}
 #platforms-table-wrap td.activity-col svg{display:block;margin:0 auto}
 #platforms-table-wrap tbody tr:hover .scorebar{opacity:1}
 
@@ -214,6 +215,10 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #platforms-table-wrap thead th[data-col="score"]{padding-left:26px}
 
 #platforms-table-wrap tbody td.activity-col{padding:11px 12px}
+.detail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.compare-with-link{display:inline-flex;align-items:center;gap:8px;border-radius:999px;background:rgba(37,99,235,.10);color:#1d4ed8;text-decoration:none;font-weight:700;padding:7px 12px}
+.compare-with-link:hover{background:rgba(37,99,235,.16);text-decoration:none}
+.compare-with-link--disabled{background:rgba(100,116,139,.10);color:#64748b}
 
 /* Platforms table header help affordance */
 #platforms-table-wrap th .th-help{
@@ -623,3 +628,48 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .footer-social a{width:40px;height:40px;border-radius:999px;background:rgba(37,99,235,.12);display:grid;place-items:center;color:var(--accent);transition:transform .2s ease,background .2s ease;font-size:18px}
 .footer-social a:hover{transform:translateY(-2px);background:rgba(37,99,235,.18)}
 .footer-bottom{padding:12px 24px 36px;text-align:center;font-size:13px;color:var(--muted);border-top:1px solid rgba(15,23,42,.08)}
+
+/* Two-device platform comparison */
+.compare-view{display:flex;flex-direction:column;gap:18px;padding-top:4px}
+.compare-view a{color:#2563eb;text-decoration:none}
+.compare-view a:hover{text-decoration:underline}
+.compare-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+.compare-head h3{margin:0 0 4px;font-size:28px;letter-spacing:-.02em}
+.compare-picker{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:end;padding:14px;border:1px solid rgba(15,23,42,.10);border-radius:14px;background:#fff;box-shadow:0 12px 28px rgba(15,23,42,.06)}
+.compare-picker label{display:flex;flex-direction:column;gap:7px;color:var(--muted);font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:.04em}
+.compare-picker select{width:100%;min-height:44px;border:1px solid rgba(15,23,42,.16);border-radius:10px;background:#fff;color:var(--text);font-size:16px;line-height:1.35;padding:9px 38px 9px 11px;text-transform:none;letter-spacing:0;font-weight:500;appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 12px) 50%;background-size:6px 6px,6px 6px;background-repeat:no-repeat}
+.compare-picker option{font-size:16px;background-color:#fff;color:#111827}
+.compare-picker__option--ibm{background-color:#87ceeb;color:#0f172a}
+.compare-picker__option--quantinuum{background-color:#000;color:#fff}
+.compare-picker__option--aws{background-color:#ff9900;color:#111827}
+.compare-picker__option--origin{background-color:#fff;color:#111827}
+.compare-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.compare-card{position:relative;min-height:120px;padding:18px;border:1px solid rgba(15,23,42,.10);border-radius:18px;background:linear-gradient(180deg,#fff 0%,#f8fafc 100%);box-shadow:0 18px 36px rgba(15,23,42,.07);overflow:hidden}
+.compare-card::after{content:"";position:absolute;right:-38px;bottom:-42px;width:130px;height:130px;border-radius:999px;background:rgba(37,99,235,.08)}
+.compare-card--accent::after{background:rgba(20,184,166,.11)}
+.compare-card__top{position:relative;z-index:1;display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.provider-logo{width:50px;height:50px;border-radius:14px;display:inline-grid;place-items:center;flex:0 0 auto;background:#fff;border:1px solid rgba(15,23,42,.10);box-shadow:0 10px 22px rgba(15,23,42,.08);color:#1f2b3c;font-size:27px;font-weight:800;letter-spacing:-.04em;overflow:hidden}
+.provider-logo__img{display:block;max-width:78%;max-height:78%;object-fit:contain}
+.provider-logo--accent{color:#0f766e}
+.provider-logo--initials{font-size:17px;color:#1d4ed8;background:linear-gradient(135deg,#ffffff 0%,#eff6ff 100%)}
+.provider-logo--accent.provider-logo--initials{color:#0f766e;background:linear-gradient(135deg,#ffffff 0%,#ecfeff 100%)}
+.compare-card__eyebrow{color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:0}
+.compare-card h4{position:relative;margin:0;font-size:24px;line-height:1.15;letter-spacing:-.02em;z-index:1}
+.compare-card__device-title{display:inline-block;border:1px solid rgba(15,23,42,.16);border-radius:12px;padding:6px 10px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.compare-card p{position:relative;margin:8px 0 0;color:var(--muted);z-index:1}
+.compare-section{display:flex;flex-direction:column;gap:8px}
+.compare-section h4{margin:0;font-size:18px}
+.compare-table-wrap{overflow:auto;border:1px solid rgba(15,23,42,.10);border-radius:14px;background:#fff;box-shadow:0 14px 30px rgba(15,23,42,.06)}
+.compare-table{width:100%;min-width:680px;border-collapse:separate;border-spacing:0;font-size:15px;line-height:1.35}
+.compare-table thead th{background:#f0f7ff;color:#1f2b3c;font-weight:700;padding:11px 12px;border-bottom:1px solid #dbeafe;text-align:left;white-space:nowrap}
+.compare-view .compare-table__device-link{color:inherit;font-weight:inherit}
+.compare-table thead th:not(:first-child),.compare-table tbody td{text-align:right}
+.compare-table tbody th,.compare-table tbody td{padding:12px;border-top:1px solid rgba(15,23,42,.06);vertical-align:top}
+.compare-table tbody th{font-weight:650;text-align:left;color:#334155;white-space:nowrap}
+.compare-table tbody tr:nth-child(even){background:#fafcff}
+.compare-subvalue{margin-top:3px;color:var(--muted);font-size:12px}
+@media (max-width: 760px){
+  .compare-picker{grid-template-columns:1fr}
+  .compare-cards{grid-template-columns:1fr}
+  .compare-head h3{font-size:24px}
+}
