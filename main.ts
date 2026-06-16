@@ -1156,15 +1156,44 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
         <td class="num">${escapeHtml(ts)}</td>
       </tr>`;
     }).join('');
+    let overlapScore1: number | null = null;
+    let overlapScore2: number | null = null;
+    const mComps = (metriqScore as any).components;
+    if (compareDetail && compareDetail.metriq_score && typeof compareDetail.metriq_score === 'object') {
+      const cComps = (compareDetail.metriq_score as any).components;
+      if (mComps && typeof mComps === 'object' && cComps && typeof cComps === 'object') {
+        const shared = Object.keys(mComps).filter(k => k in cComps);
+        if (shared.length) {
+          let s1 = 0, s2 = 0, w1 = 0, w2 = 0;
+          shared.forEach((k) => {
+            const c1 = mComps[k];
+            const c2 = cComps[k];
+            if (c1 && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized)) && c1.weight !== null && c1.weight !== undefined) {
+              const w = Number(c1.weight);
+              if (Number.isFinite(w)) { s1 += w * Number(c1.normalized); w1 += w; }
+            }
+            if (c2 && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized)) && c2.weight !== null && c2.weight !== undefined) {
+              const w = Number(c2.weight);
+              if (Number.isFinite(w)) { s2 += w * Number(c2.normalized); w2 += w; }
+            }
+          });
+          if (w1 > 0) overlapScore1 = s1;
+          if (w2 > 0) overlapScore2 = s2;
+        }
+      }
+    }
+
     const pillsHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        ${overlapScore1 !== null && Number.isFinite(overlapScore1) ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-weight:600;">O-Score: ${overlapScore1.toFixed(2)}</span>` : ''}
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Score: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
       </div>`.trim();
     const comparePillsHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        ${overlapScore2 !== null && Number.isFinite(overlapScore2) ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-weight:600;">O-Score: ${overlapScore2.toFixed(2)}</span>` : ''}
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Score: ${compareVal !== null && Number.isFinite(compareVal) ? compareVal.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(compareSeries || '')}</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${compareVal !== null && Number.isFinite(compareVal) ? compareVal.toFixed(2) : '–'}</span>
       </div>`.trim();
 
     if (compareDetail) {
@@ -1335,14 +1364,20 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
   const ms2 = compareDetail?.metriq_score || null;
   const score1 = ms1 && typeof ms1.value === 'number' ? Number(ms1.value) : null;
   const score2 = ms2 && typeof ms2.value === 'number' ? Number(ms2.value) : null;
-  const scoreBadge = renderCompareScoreBadge(score1, score2);
+  function oScoreDiffBadge(v1: number | null, v2: number | null, side: 1 | 2): string {
+    if (v1 === null || v2 === null || !Number.isFinite(v1) || !Number.isFinite(v2)) return '';
+    const diff = v1 - v2;
+    if (Math.abs(diff) < 0.001) return '';
+    if ((side === 1 && diff <= 0) || (side === 2 && diff >= 0)) return '';
+    const cls = side === 1 ? 'compare-score-badge--higher' : 'compare-score-badge--lower';
+    const label = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
+    return `<span class="compare-score-badge ${cls}" style="margin-left:6px;">${label}</span>`;
+  }
 
-  const key1 = getDeviceKey(p1, dev1);
-  const key2 = getDeviceKey(p2, dev2);
-  const nq1 = platformQubitsCache?.get(key1);
-  const nq2 = platformQubitsCache?.get(key2);
-  const cov1 = platformCoverageCache?.get(key1);
-  const cov2 = platformCoverageCache?.get(key2);
+  const nq1 = extractPlatformNumQubits(detail);
+  const nq2 = extractPlatformNumQubits(compareDetail);
+  const cov1 = extractPlatformCoverage(detail);
+  const cov2 = extractPlatformCoverage(compareDetail);
   const lifecycle1 = getPlatformLifecycle(p1, dev1, detail);
   const lifecycle2 = getPlatformLifecycle(p2, dev2, compareDetail);
   const status1 = lifecycle1 ? titleCaseStatus(lifecycle1.status) : 'Active';
@@ -1354,6 +1389,27 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
   // Component breakdown
   const comps1 = ms1?.components && typeof ms1.components === 'object' ? ms1.components : {};
   const comps2 = ms2?.components && typeof ms2.components === 'object' ? ms2.components : {};
+  const sharedBenchmarks = Object.keys(comps1).filter(k => k in comps2);
+
+  let overlapScore1: number | null = null;
+  let overlapScore2: number | null = null;
+  if (sharedBenchmarks.length) {
+    let sum1 = 0, sum2 = 0, weightSum1 = 0, weightSum2 = 0;
+    sharedBenchmarks.forEach((k) => {
+      const c1 = comps1[k];
+      const c2 = comps2[k];
+      if (c1 && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized)) && c1.weight !== null && c1.weight !== undefined) {
+        const w = Number(c1.weight);
+        if (Number.isFinite(w)) { sum1 += w * Number(c1.normalized); weightSum1 += w; }
+      }
+      if (c2 && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized)) && c2.weight !== null && c2.weight !== undefined) {
+        const w = Number(c2.weight);
+        if (Number.isFinite(w)) { sum2 += w * Number(c2.normalized); weightSum2 += w; }
+      }
+    });
+    if (weightSum1 > 0) overlapScore1 = sum1;
+    if (weightSum2 > 0) overlapScore2 = sum2;
+  }
   const allBenchmarks = Array.from(new Set([...Object.keys(comps1), ...Object.keys(comps2)])).sort();
 
   const compRows = allBenchmarks.map((name) => {
@@ -1391,6 +1447,26 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
     </tr>`;
   }).filter(Boolean).join('');
 
+  function scCell(val: number | null, maxVal: number | null, badge: string): string {
+    if (val === null || !Number.isFinite(val)) return '<span class="num-empty">&mdash;</span>';
+    const pct = (maxVal !== null && Number.isFinite(maxVal) && maxVal > 0) ? Math.min(100, Math.max(0, (val / maxVal) * 100)) : 0;
+    return `<div class="scorecell" style="justify-content:flex-end;"><span class="scorecell__value">${val.toFixed(2)}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${pct.toFixed(1)}%"></span></span>${badge}</div>`;
+  }
+  function diffBadge(v1: number | null, v2: number | null, higher: 1 | 2): string {
+    if (v1 === null || v2 === null || !Number.isFinite(v1) || !Number.isFinite(v2)) return '';
+    const diff = v1 - v2;
+    if (Math.abs(diff) < 0.001) return '';
+    const isHigher = (higher === 1 && diff > 0) || (higher === 2 && diff < 0);
+    if (!isHigher) return '';
+    const cls = diff > 0 ? 'compare-score-badge--higher' : 'compare-score-badge--lower';
+    const label = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
+    return `<span class="compare-score-badge ${cls}" style="margin-left:6px;padding:2px 6px;font-size:10px;">${label}</span>`;
+  }
+  const scoreMax = (score1 !== null && Number.isFinite(score1)) || (score2 !== null && Number.isFinite(score2))
+    ? Math.max(score1 ?? 0, score2 ?? 0) : null;
+  const overlapMax = (overlapScore1 !== null && Number.isFinite(overlapScore1)) || (overlapScore2 !== null && Number.isFinite(overlapScore2))
+    ? Math.max(overlapScore1 ?? 0, overlapScore2 ?? 0) : null;
+
   const overviewMetaRows = metaRows.length ? `<tr class="compare-row--spacer" style="background:#f0f7ff;"><td colspan="3" style="padding:6px 14px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#1f2b3c;border-top:2px solid #dbeafe;">Device Metadata</td></tr>${metaRows}` : '';
 
   return `
@@ -1401,20 +1477,20 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
           <thead>
             <tr>
               <th></th>
-              <th>${escapeHtml(dev1)} ${scoreBadge}</th>
-              <th>${escapeHtml(dev2)} ${renderCompareScoreBadge(score2, score1)}</th>
+              <th>${escapeHtml(dev1)} ${oScoreDiffBadge(overlapScore1, overlapScore2, 1)}</th>
+              <th>${escapeHtml(dev2)} ${oScoreDiffBadge(overlapScore1, overlapScore2, 2)}</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>Provider</td>
-              <td>${escapeHtml(p1)}</td>
-              <td>${escapeHtml(p2)}</td>
+              <td>Overlap Score <span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(${sharedBenchmarks.length} shared)</span></td>
+              <td>${scCell(overlapScore1, overlapMax, diffBadge(overlapScore1, overlapScore2, 1))}</td>
+              <td>${scCell(overlapScore2, overlapMax, diffBadge(overlapScore1, overlapScore2, 2))}</td>
             </tr>
             <tr>
               <td>Metriq Score</td>
-              <td>${score1 !== null && Number.isFinite(score1) ? score1.toFixed(2) : '<span class="num-empty">&mdash;</span>'}</td>
-              <td>${score2 !== null && Number.isFinite(score2) ? score2.toFixed(2) : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${scCell(score1, scoreMax, diffBadge(score1, score2, 1))}</td>
+              <td>${scCell(score2, scoreMax, diffBadge(score1, score2, 2))}</td>
             </tr>
             <tr>
               <td>Qubits</td>
@@ -1430,6 +1506,11 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
               <td>Status</td>
               <td>${escapeHtml(status1)}</td>
               <td>${escapeHtml(status2)}</td>
+            </tr>
+            <tr>
+              <td>Provider</td>
+              <td>${escapeHtml(p1)}</td>
+              <td>${escapeHtml(p2)}</td>
             </tr>
             ${overviewMetaRows}
           </tbody>
