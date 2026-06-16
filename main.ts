@@ -152,6 +152,10 @@ function renderDeviceBadgesHtml(provider: string, device: string, source?: any) 
   return badges.length ? ` ${badges.join(' ')}` : '';
 }
 
+function unslug(s: string): string {
+  return String(s).split('_').filter(Boolean).map(w => w.toUpperCase()).join(' ');
+}
+
 function renderDeviceLabelHtml(provider: string, device: string, source?: any) {
   return `${escapeHtml(device || '')}${renderDeviceBadgesHtml(provider, device, source)}`;
 }
@@ -1255,24 +1259,26 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
         <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
         ${!compareDetail ? `
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-          <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
+          <h3 style="margin:0;">${escapeHtml(unslug(provider))} · ${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
           ${compareDropdownInlineHtml}
         </div>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
         ` : `
         <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
           <div style="flex:1;min-width:260px;">
-            <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
+            <h3 style="margin:0;">${escapeHtml(unslug(provider))} · ${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
+            <div style="font-size:11px;color:var(--muted);letter-spacing:.02em;">${escapeHtml(device)}</div>
             <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
           </div>
           <div style="flex:1;min-width:260px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-              <h3 style="margin:0;">${escapeHtml(String(compareDetail?.provider || ''))} · ${renderDeviceLabelHtml(String(compareDetail?.provider || ''), String(compareDetail?.device || ''), compareDetail)}</h3>
+              <h3 style="margin:0;">${escapeHtml(unslug(String(compareDetail?.provider || '')))} · ${escapeHtml(unslug(String(compareDetail?.device || '')))}${renderDeviceBadgesHtml(String(compareDetail?.provider || ''), String(compareDetail?.device || ''), compareDetail)}</h3>
               <span id="compare-toggle-wrapper">
                 <button id="compare-toggle-btn" type="button" class="btn" style="padding:4px 10px;font-size:11px;">Compare with other</button>
                 <span id="compare-toggle-target" style="display:none;">${compareDropdownInlineHtml}</span>
               </span>
             </div>
+            <div style="font-size:11px;color:var(--muted);letter-spacing:.02em;">${escapeHtml(String(compareDetail?.device || ''))}</div>
             <div class="meta" style="margin-top:2px;">${compareRuns} runs · ${compareFirstSeen || '–'} → ${compareLastSeen || '–'}</div>
           </div>
         </div>
@@ -1314,6 +1320,7 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
 
   const compTable = document.getElementById('comp-table') as HTMLTableElement | null;
   const compToggle = document.getElementById('comp-toggle') as HTMLElement | null;
+  const compShowPaired = document.getElementById('comp-show-paired') as HTMLInputElement | null;
   if (compTable && compToggle) {
     const setMode = (mode: 'norm' | 'raw') => {
       compTable.classList.toggle('show-norm', mode === 'norm');
@@ -1325,6 +1332,11 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       setMode(cur === 'norm' ? 'raw' : 'norm');
     });
     setMode('norm');
+  }
+  if (compTable && compShowPaired) {
+    compShowPaired.addEventListener('change', () => {
+      compTable.classList.toggle('show-paired-only', compShowPaired.checked);
+    });
   }
 
   const compareSelect = document.getElementById('compare-device-select') as HTMLSelectElement | null;
@@ -1411,9 +1423,6 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
   const lifecycle2 = getPlatformLifecycle(p2, dev2, compareDetail);
   const status1 = lifecycle1 ? titleCaseStatus(lifecycle1.status) : 'Active';
   const status2 = lifecycle2 ? titleCaseStatus(lifecycle2.status) : 'Active';
-
-  const devLabel1 = renderDeviceLabelHtml(p1, dev1, detail);
-  const devLabel2 = renderDeviceLabelHtml(p2, dev2, compareDetail);
 
   // Component breakdown
   const comps1 = ms1?.components && typeof ms1.components === 'object' ? ms1.components : {};
@@ -1515,14 +1524,14 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
 
   return `
     <div class="compare-section" style="margin-top:8px;">
-      <div class="compare-section__head"><h4>Comparison: ${escapeHtml(dev1)} vs ${escapeHtml(dev2)}</h4></div>
+      <div class="compare-section__head"><h4>Comparison: ${escapeHtml(unslug(dev1))} vs ${escapeHtml(unslug(dev2))}</h4></div>
       <div class="compare-table-wrap">
         <table class="compare-table">
           <thead>
             <tr>
               <th></th>
-              <th>${escapeHtml(dev1)} ${oScoreDiffBadge(overlapScore1, overlapScore2, 1)}</th>
-              <th>${escapeHtml(dev2)} ${oScoreDiffBadge(overlapScore1, overlapScore2, 2)}</th>
+              <th>${escapeHtml(unslug(dev1))} ${oScoreDiffBadge(overlapScore1, overlapScore2, 1)}</th>
+              <th>${escapeHtml(unslug(dev2))} ${oScoreDiffBadge(overlapScore1, overlapScore2, 2)}</th>
             </tr>
           </thead>
           <tbody>
@@ -1563,14 +1572,14 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
     </div>
     ${compRows.length ? `
     <div class="compare-section" id="compare-components-section">
-      <div class="compare-section__head" style="display:flex;align-items:center;justify-content:space-between;"><h4>Benchmark Components</h4><span class="comp-toggle" id="comp-toggle"><span class="comp-toggle__label" data-mode="raw">Raw</span><span class="comp-toggle__track"><span class="comp-toggle__dot"></span></span><span class="comp-toggle__label" data-mode="norm">Norm.</span></span></div>
+      <div class="compare-section__head" style="display:flex;align-items:center;justify-content:space-between;"><h4>Benchmark Components</h4><span style="display:inline-flex;align-items:center;gap:20px;"><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;"><input type="checkbox" id="comp-show-paired" style="margin:0;cursor:pointer;"> Show only paired</label><span class="comp-toggle" id="comp-toggle"><span class="comp-toggle__label" data-mode="raw">Raw</span><span class="comp-toggle__track"><span class="comp-toggle__dot"></span></span><span class="comp-toggle__label" data-mode="norm">Norm.</span></span></span></div>
       <div class="compare-table-wrap">
         <table id="comp-table" class="compare-table compare-table--components show-norm">
           <thead>
             <tr>
               <th>Component</th>
-              <th colspan="3" style="text-align:center;">${escapeHtml(dev1)}</th>
-              <th colspan="3" style="text-align:center;">${escapeHtml(dev2)}</th>
+              <th colspan="3" style="text-align:center;">${escapeHtml(unslug(dev1))}</th>
+              <th colspan="3" style="text-align:center;">${escapeHtml(unslug(dev2))}</th>
             </tr>
             <tr>
               <th></th>
