@@ -1183,35 +1183,37 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       }
     }
 
+    const qbit1 = extractPlatformNumQubits(detail);
+    const qbit2 = compareDetail ? extractPlatformNumQubits(compareDetail) : null;
+
     const pillsHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         ${overlapScore1 !== null && Number.isFinite(overlapScore1) ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-weight:600;">O-Score: ${overlapScore1.toFixed(2)}</span>` : ''}
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Score: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
+        ${qbit1 !== null ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;">Qbit: ${qbit1}</span>` : ''}
       </div>`.trim();
     const comparePillsHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         ${overlapScore2 !== null && Number.isFinite(overlapScore2) ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-weight:600;">O-Score: ${overlapScore2.toFixed(2)}</span>` : ''}
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Score: ${compareVal !== null && Number.isFinite(compareVal) ? compareVal.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(compareSeries || '')}</span>
+        ${qbit2 !== null ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;">Qbit: ${qbit2}</span>` : ''}
       </div>`.trim();
 
     if (compareDetail) {
       scoreHtml = `
         <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
           <div style="flex:1;min-width:260px;">
-            <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Metriq score</h5>
             ${pillsHtml}
           </div>
           <div style="flex:1;min-width:260px;">
-            <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Metriq score</h5>
             ${comparePillsHtml}
           </div>
         </div>`;
     } else {
       scoreHtml = `
         <div>
-          <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Metriq score</h5>
           ${pillsHtml}
         </div>
         ${components.length ? `
@@ -1266,7 +1268,10 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
           <div style="flex:1;min-width:260px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
               <h3 style="margin:0;">${escapeHtml(String(compareDetail?.provider || ''))} · ${renderDeviceLabelHtml(String(compareDetail?.provider || ''), String(compareDetail?.device || ''), compareDetail)}</h3>
-              ${compareDropdownInlineHtml}
+              <span id="compare-toggle-wrapper">
+                <button id="compare-toggle-btn" type="button" class="btn" style="padding:4px 10px;font-size:11px;">Compare with other</button>
+                <span id="compare-toggle-target" style="display:none;">${compareDropdownInlineHtml}</span>
+              </span>
             </div>
             <div class="meta" style="margin-top:2px;">${compareRuns} runs · ${compareFirstSeen || '–'} → ${compareLastSeen || '–'}</div>
           </div>
@@ -1295,6 +1300,15 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
       ev.preventDefault();
       location.hash = '#view=platforms';
       applyHashRouting();
+    });
+  }
+
+  const toggleBtn = document.getElementById('compare-toggle-btn') as HTMLButtonElement | null;
+  const toggleTarget = document.getElementById('compare-toggle-target') as HTMLElement | null;
+  if (toggleBtn && toggleTarget) {
+    toggleBtn.addEventListener('click', () => {
+      toggleBtn.style.display = 'none';
+      toggleTarget.style.display = 'inline';
     });
   }
 
