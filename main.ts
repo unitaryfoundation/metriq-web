@@ -1107,6 +1107,19 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
   const compareDeviceKey = compareDetail ? getDeviceKey(String(compareDetail.provider || ''), String(compareDetail.device || '')) : '';
   const compareDropdownHtml = renderCompareDropdownHtml(provider, device, compareDeviceKey);
 
+  const compareMs = compareDetail?.metriq_score || null;
+  const compareValRaw = compareMs ? (compareMs as any).value : null;
+  const compareVal = (compareValRaw === null || compareValRaw === undefined) ? null : Number(compareValRaw);
+  const compareSeries = compareMs ? String((compareMs as any).series || '') : '';
+  const compareRuns = compareDetail?.runs ?? 0;
+  const compareFirstSeen = compareDetail?.first_seen || '';
+  const compareLastSeen = compareDetail?.last_seen || '';
+
+  const compareDropdownInlineHtml = `<span style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap;">
+    <label for="compare-device-select" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;cursor:pointer;">Compare with</label>
+    <select id="compare-device-select" class="compare-with">${compareDropdownHtml}</select>
+  </span>`;
+
   let scoreHtml = '<div class="meta">No Metriq score available.</div>';
   if (metriqScore && typeof metriqScore === 'object') {
     const valRaw = (metriqScore as any).value;
@@ -1143,38 +1156,54 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
         <td class="num">${escapeHtml(ts)}</td>
       </tr>`;
     }).join('');
-    scoreHtml = `
-      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+    const pillsHtml = `
+      <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+      </div>`.trim();
+    const comparePillsHtml = `
+      <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(compareSeries || '')}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${compareVal !== null && Number.isFinite(compareVal) ? compareVal.toFixed(2) : '–'}</span>
+      </div>`.trim();
+
+    if (compareDetail) {
+      scoreHtml = `
+        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex:1;min-width:260px;">
+            <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Metriq score</h5>
+            ${pillsHtml}
+          </div>
+          <div style="flex:1;min-width:260px;">
+            <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Metriq score</h5>
+            ${comparePillsHtml}
+          </div>
+        </div>`;
+    } else {
+      scoreHtml = `
         <div>
           <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Metriq score</h5>
-          <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-            <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
-            <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+          ${pillsHtml}
+        </div>
+        ${components.length ? `
+          <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
+          <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
+            <table class="smart-table" style="width:100%;min-width:660px;">
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th class="num">Weight</th>
+                  <th class="num">Raw</th>
+                  <th class="num">Normalized</th>
+                  <th class="num">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
           </div>
-        </div>
-        <div class="compare-with">
-          <h5 style="margin:0 0 12px;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#1f2b3c;">Compare with</h5>
-          <select id="compare-device-select">${compareDropdownHtml}</select>
-      </div>
-      </div>
-      ${!compareDetail && components.length ? `
-        <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
-        <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
-          <table class="smart-table" style="width:100%;min-width:660px;">
-            <thead>
-              <tr>
-                <th>Component</th>
-                <th class="num">Weight</th>
-                <th class="num">Raw</th>
-                <th class="num">Normalized</th>
-                <th class="num">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      ` : !compareDetail && !components.length ? '<div class="meta">No components</div>' : ''}
-    `.trim();
+        ` : '<div class="meta">No components</div>'}
+      `.trim();
+    }
   }
 
   let compareSectionHtml = '';
@@ -1182,12 +1211,38 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
     compareSectionHtml = renderCompareSectionHtml(detail, compareDetail);
   }
 
+  const historySectionHtml = (compareSectionHtml !== "") ? '' : `
+    <section class="detail-section" style="padding:8px 0;">
+      <h5 style="margin:0 0 12px;">Metadata history</h5>
+      <ul style="margin-top:4px;">${historyHtml}</ul>
+    </section>
+  `;
+
   container.innerHTML = `
     <div class="detail-page" style="display:flex;flex-direction:column;gap:20px;padding-top:4px;">
       <div class="detail-header" style="display:flex;flex-direction:column;gap:6px;">
         <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
-        <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
+        ${!compareDetail ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
+          ${compareDropdownInlineHtml}
+        </div>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
+        ` : `
+        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex:1;min-width:260px;">
+            <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
+            <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
+          </div>
+          <div style="flex:1;min-width:260px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+              <h3 style="margin:0;">${escapeHtml(String(compareDetail?.provider || ''))} · ${renderDeviceLabelHtml(String(compareDetail?.provider || ''), String(compareDetail?.device || ''), compareDetail)}</h3>
+              ${compareDropdownInlineHtml}
+            </div>
+            <div class="meta" style="margin-top:2px;">${compareRuns} runs · ${compareFirstSeen || '–'} → ${compareLastSeen || '–'}</div>
+          </div>
+        </div>
+        `}
       </div>
       ${lifecycleNote}
       ${error}
@@ -1199,10 +1254,7 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
           <h5 style="margin:0 0 12px;">Current device metadata</h5>
           ${metaHtml}
         </section>` : ''}
-        <section class="detail-section" style="padding:8px 0;">
-          <h5 style="margin:0 0 12px;">Metadata history</h5>
-          <ul style="margin-top:4px;">${historyHtml}</ul>
-        </section>
+        ${historySectionHtml}
       </div>
       ${compareSectionHtml}
     </div>
@@ -2686,7 +2738,7 @@ async function renderChart(values, token, metric) {
       ...topPerformerLayer
     ]
   };
-      
+
   // Baseline device no longer emphasized in the graph; use reference line instead.
 
   try {
@@ -2863,7 +2915,7 @@ function renderStaticTable(values: any[]) {
   // Apply filters and sorting
   const working = applyTableFilters(values.slice());
 	  sortTableRows(working);
-	
+
 	  const table = document.createElement('table');
 	  table.className = 'smart-table';
 	  const sortIcon = (key: SortKey) => (
