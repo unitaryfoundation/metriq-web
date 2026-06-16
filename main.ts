@@ -1458,15 +1458,17 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
     const rv2 = isFin(c2?.raw) ? Number(c2.raw) : null;
     const normHigher = nv1 !== null && nv2 !== null && nv1 !== nv2 ? (nv1 > nv2 ? 1 : 2) : 0;
     const rawHigher = rv1 !== null && rv2 !== null && rv1 !== rv2 ? (rv1 > rv2 ? 1 : 2) : 0;
-    const tick = ' &#10003;';
-    return `<tr>
+    const pairedRaw = rv1 !== null && rv2 !== null ? ' paired-raw' : '';
+    const pairedNorm = nv1 !== null && nv2 !== null ? ' paired-norm' : '';
+    const tick = '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>';
+    return `<tr class="${pairedRaw}${pairedNorm}">
       <td>${escapeHtml(name)}</td>
       <td>${date1}</td>
       <td>${formatCompareValue(c1?.weight)}</td>
-      <td><span class="cell-raw${rawHigher === 1 ? ' is-higher' : ''}">${raw1}${rawHigher === 1 ? tick : ''}</span><span class="cell-norm${normHigher === 1 ? ' is-higher' : ''}">${norm1}${normHigher === 1 ? tick : ''}</span></td>
+      <td><span class="cell-raw${rawHigher === 1 ? ' is-higher' : ''}">${rawHigher === 1 ? tick : ''}${raw1}</span><span class="cell-norm${normHigher === 1 ? ' is-higher' : ''}">${normHigher === 1 ? tick : ''}${norm1}</span></td>
       <td>${date2}</td>
       <td>${formatCompareValue(c2?.weight)}</td>
-      <td><span class="cell-raw${rawHigher === 2 ? ' is-higher' : ''}">${raw2}${rawHigher === 2 ? tick : ''}</span><span class="cell-norm${normHigher === 2 ? ' is-higher' : ''}">${norm2}${normHigher === 2 ? tick : ''}</span></td>
+      <td><span class="cell-raw${rawHigher === 2 ? ' is-higher' : ''}">${rawHigher === 2 ? tick : ''}${raw2}</span><span class="cell-norm${normHigher === 2 ? ' is-higher' : ''}">${normHigher === 2 ? tick : ''}${norm2}</span></td>
     </tr>`;
   }).join('');
 
