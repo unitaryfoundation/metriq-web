@@ -1344,6 +1344,73 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
     updatePaired();
   }
 
+  // Radar chart
+  const radarCanvas = document.getElementById('radar-chart') as HTMLCanvasElement | null;
+  const ChartCtor = (window as any).Chart;
+  if (radarCanvas && compareDetail && typeof ChartCtor !== 'undefined') {
+    const ms1Comp = (metriqScore as any)?.components;
+    const ms2Comp = (compareDetail.metriq_score as any)?.components;
+    if (ms1Comp && ms2Comp && typeof ms1Comp === 'object' && typeof ms2Comp === 'object') {
+      const validPairs = Object.keys(ms1Comp)
+        .filter(k => {
+          if (!(k in ms2Comp)) return false;
+          const c1 = ms1Comp[k], c2 = ms2Comp[k];
+          return c1 && c2
+            && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized))
+            && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized));
+        })
+        .sort();
+      if (validPairs.length >= 3) {
+        const data1 = validPairs.map(k => Number(ms1Comp[k].normalized));
+        const data2 = validPairs.map(k => Number(ms2Comp[k].normalized));
+        const maxVal = Math.max(...data1.concat(data2), 0.01);
+        const ctx = radarCanvas.getContext('2d');
+        if (ctx) {
+          new ChartCtor(ctx, {
+            type: 'radar',
+            data: {
+              labels: validPairs,
+              datasets: [
+                {
+                  label: unslug(device),
+                  data: data1,
+                  fill: true,
+                  backgroundColor: 'rgba(37,99,235,0.15)',
+                  borderColor: '#2563eb',
+                  pointBackgroundColor: '#2563eb',
+                },
+                {
+                  label: unslug(String(compareDetail.device || '')),
+                  data: data2,
+                  fill: true,
+                  backgroundColor: 'rgba(249,115,22,0.15)',
+                  borderColor: '#f97316',
+                  pointBackgroundColor: '#f97316',
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: 'bottom' }
+              },
+              scales: {
+                r: {
+                  angleLines: { display: true },
+                  ticks: { display: false },
+                  grid: { color: 'rgba(0,0,0,0.06)' },
+                  suggestedMin: 0,
+                  suggestedMax: Math.ceil(maxVal * 1.15 * 100) / 100
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+  }
+
   const compareSelect = document.getElementById('compare-device-select') as HTMLSelectElement | null;
   if (compareSelect) {
     compareSelect.addEventListener('change', () => {
@@ -1437,6 +1504,12 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
   const comps1 = ms1?.components && typeof ms1.components === 'object' ? ms1.components : {};
   const comps2 = ms2?.components && typeof ms2.components === 'object' ? ms2.components : {};
   const sharedBenchmarks = Object.keys(comps1).filter(k => k in comps2);
+  const radarPairs = sharedBenchmarks.filter(k => {
+    const c1 = comps1[k], c2 = comps2[k];
+    return c1 && c2
+      && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized))
+      && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized));
+  });
 
   let overlapScore1: number | null = null;
   let overlapScore2: number | null = null;
@@ -1599,7 +1672,14 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
           <tbody>${compRows}</tbody>
         </table>
       </div>
-    </div>` : ''}`;
+    </div>
+    ${radarPairs.length >= 3 ? `
+    <div class="compare-section" id="radar-section" style="margin-top:16px;">
+      <div class="compare-section__head"><h4>Radar: Component comparison</h4></div>
+      <div style="padding:16px;min-height:320px;">
+        <canvas id="radar-chart"></canvas>
+      </div>
+    </div>` : ''}` : ''}`;
 }
 
 function escapeHtml(s: string) {
