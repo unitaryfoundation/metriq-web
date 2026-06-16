@@ -156,6 +156,11 @@ function unslug(s: string): string {
   return String(s).split('_').filter(Boolean).map(w => w.toUpperCase()).join(' ');
 }
 
+function providerLogoHtml(provider: string): string {
+  const src = `public/${encodeURIComponent(provider)}.svg`;
+  return `<img src="${src}" alt="${escapeAttr(provider)}" style="height:14px;width:auto;vertical-align:middle;display:inline-block;margin-right:4px;">`;
+}
+
 function renderDeviceLabelHtml(provider: string, device: string, source?: any) {
   return `${escapeHtml(device || '')}${renderDeviceBadgesHtml(provider, device, source)}`;
 }
@@ -1259,20 +1264,20 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
         <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
         ${!compareDetail ? `
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-          <h3 style="margin:0;">${escapeHtml(unslug(provider))} · ${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
+          <h3 style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${providerLogoHtml(provider)}${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
           ${compareDropdownInlineHtml}
         </div>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
         ` : `
         <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
           <div style="flex:1;min-width:260px;">
-            <h3 style="margin:0;">${escapeHtml(unslug(provider))} · ${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
+            <h3 style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${providerLogoHtml(provider)}${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
             <div style="font-size:11px;color:var(--muted);letter-spacing:.02em;">${escapeHtml(device)}</div>
             <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
           </div>
           <div style="flex:1;min-width:260px;">
             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-              <h3 style="margin:0;">${escapeHtml(unslug(String(compareDetail?.provider || '')))} · ${escapeHtml(unslug(String(compareDetail?.device || '')))}${renderDeviceBadgesHtml(String(compareDetail?.provider || ''), String(compareDetail?.device || ''), compareDetail)}</h3>
+              <h3 style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${providerLogoHtml(String(compareDetail?.provider || ''))}${escapeHtml(unslug(String(compareDetail?.device || '')))}${renderDeviceBadgesHtml(String(compareDetail?.provider || ''), String(compareDetail?.device || ''), compareDetail)}</h3>
               <span id="compare-toggle-wrapper">
                 <button id="compare-toggle-btn" type="button" class="btn" style="padding:4px 10px;font-size:11px;">Compare with other</button>
                 <span id="compare-toggle-target" style="display:none;">${compareDropdownInlineHtml}</span>
@@ -1334,9 +1339,9 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
     setMode('norm');
   }
   if (compTable && compShowPaired) {
-    compShowPaired.addEventListener('change', () => {
-      compTable.classList.toggle('show-paired-only', compShowPaired.checked);
-    });
+    const updatePaired = () => compTable.classList.toggle('show-paired-only', compShowPaired.checked);
+    compShowPaired.addEventListener('change', updatePaired);
+    updatePaired();
   }
 
   const compareSelect = document.getElementById('compare-device-select') as HTMLSelectElement | null;
@@ -1419,6 +1424,10 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
   const nq2 = extractPlatformNumQubits(compareDetail);
   const cov1 = extractPlatformCoverage(detail);
   const cov2 = extractPlatformCoverage(compareDetail);
+  const qHigher = nq1 !== null && nq2 !== null ? (nq1 > nq2 ? 1 : nq2 > nq1 ? 2 : 0) : 0;
+  const cr1 = cov1 && cov1.total > 0 ? cov1.covered / cov1.total : null;
+  const cr2 = cov2 && cov2.total > 0 ? cov2.covered / cov2.total : null;
+  const covHigher = cr1 !== null && cr2 !== null ? (cr1 > cr2 ? 1 : cr2 > cr1 ? 2 : 0) : 0;
   const lifecycle1 = getPlatformLifecycle(p1, dev1, detail);
   const lifecycle2 = getPlatformLifecycle(p2, dev2, compareDetail);
   const status1 = lifecycle1 ? titleCaseStatus(lifecycle1.status) : 'Active';
@@ -1547,13 +1556,13 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
             </tr>
             <tr>
               <td>Qubits</td>
-              <td>${nq1 !== undefined && nq1 !== null ? escapeHtml(String(nq1)) : '<span class="num-empty">&mdash;</span>'}</td>
-              <td>${nq2 !== undefined && nq2 !== null ? escapeHtml(String(nq2)) : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${nq1 !== null ? `<span${qHigher === 1 ? ' class="is-higher"' : ''}>${qHigher === 1 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${escapeHtml(String(nq1))}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${nq2 !== null ? `<span${qHigher === 2 ? ' class="is-higher"' : ''}>${qHigher === 2 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${escapeHtml(String(nq2))}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
             </tr>
             <tr>
               <td>Coverage</td>
-              <td>${cov1 ? `${cov1.covered}/${cov1.total}` : '<span class="num-empty">&mdash;</span>'}</td>
-              <td>${cov2 ? `${cov2.covered}/${cov2.total}` : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${cov1 ? `<span${covHigher === 1 ? ' class="is-higher"' : ''}>${covHigher === 1 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${cov1.covered}/${cov1.total}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${cov2 ? `<span${covHigher === 2 ? ' class="is-higher"' : ''}>${covHigher === 2 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${cov2.covered}/${cov2.total}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
             </tr>
             <tr>
               <td>Status</td>
@@ -1562,8 +1571,8 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
             </tr>
             <tr>
               <td>Provider</td>
-              <td>${escapeHtml(p1)}</td>
-              <td>${escapeHtml(p2)}</td>
+              <td>${providerLogoHtml(p1)}</td>
+              <td>${providerLogoHtml(p2)}</td>
             </tr>
             ${overviewMetaRows}
           </tbody>
@@ -1572,7 +1581,7 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
     </div>
     ${compRows.length ? `
     <div class="compare-section" id="compare-components-section">
-      <div class="compare-section__head" style="display:flex;align-items:center;justify-content:space-between;"><h4>Benchmark Components</h4><span style="display:inline-flex;align-items:center;gap:20px;"><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;"><input type="checkbox" id="comp-show-paired" style="margin:0;cursor:pointer;"> Show only paired</label><span class="comp-toggle" id="comp-toggle"><span class="comp-toggle__label" data-mode="raw">Raw</span><span class="comp-toggle__track"><span class="comp-toggle__dot"></span></span><span class="comp-toggle__label" data-mode="norm">Norm.</span></span></span></div>
+      <div class="compare-section__head" style="display:flex;align-items:center;justify-content:space-between;"><h4>Benchmark Components</h4><span style="display:inline-flex;align-items:center;gap:20px;"><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;"><input type="checkbox" id="comp-show-paired" checked style="margin:0;cursor:pointer;"> Show only paired</label><span class="comp-toggle" id="comp-toggle"><span class="comp-toggle__label" data-mode="raw">Raw</span><span class="comp-toggle__track"><span class="comp-toggle__dot"></span></span><span class="comp-toggle__label" data-mode="norm">Norm.</span></span></span></div>
       <div class="compare-table-wrap">
         <table id="comp-table" class="compare-table compare-table--components show-norm">
           <thead>
