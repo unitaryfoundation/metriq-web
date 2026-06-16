@@ -1312,6 +1312,21 @@ function renderPlatformDetailPage(detail: any, compareDetail?: any) {
     });
   }
 
+  const compTable = document.getElementById('comp-table') as HTMLTableElement | null;
+  const compToggle = document.getElementById('comp-toggle') as HTMLElement | null;
+  if (compTable && compToggle) {
+    const setMode = (mode: 'norm' | 'raw') => {
+      compTable.classList.toggle('show-norm', mode === 'norm');
+      compTable.classList.toggle('show-raw', mode === 'raw');
+      compToggle.dataset.mode = mode;
+    };
+    compToggle.addEventListener('click', () => {
+      const cur = compToggle.dataset.mode || 'norm';
+      setMode(cur === 'norm' ? 'raw' : 'norm');
+    });
+    setMode('norm');
+  }
+
   const compareSelect = document.getElementById('compare-device-select') as HTMLSelectElement | null;
   if (compareSelect) {
     compareSelect.addEventListener('change', () => {
@@ -1426,19 +1441,32 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
   }
   const allBenchmarks = Array.from(new Set([...Object.keys(comps1), ...Object.keys(comps2)])).sort();
 
+  const round5 = (v: any): string => v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(Number(v).toFixed(5)).toString() : '<span class="num-empty">&mdash;</span>';
+  const isFin = (v: any): boolean => v !== null && v !== undefined && Number.isFinite(Number(v));
   const compRows = allBenchmarks.map((name) => {
     const c1 = comps1[name] || {};
     const c2 = comps2[name] || {};
+    const norm1 = round5(c1?.normalized);
+    const norm2 = round5(c2?.normalized);
+    const raw1 = formatCompareValue(c1?.raw);
+    const raw2 = formatCompareValue(c2?.raw);
+    const date1 = c1?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c1.timestamp))) : '';
+    const date2 = c2?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c2.timestamp))) : '';
+    const nv1 = isFin(c1?.normalized) ? Number(c1.normalized) : null;
+    const nv2 = isFin(c2?.normalized) ? Number(c2.normalized) : null;
+    const rv1 = isFin(c1?.raw) ? Number(c1.raw) : null;
+    const rv2 = isFin(c2?.raw) ? Number(c2.raw) : null;
+    const normHigher = nv1 !== null && nv2 !== null && nv1 !== nv2 ? (nv1 > nv2 ? 1 : 2) : 0;
+    const rawHigher = rv1 !== null && rv2 !== null && rv1 !== rv2 ? (rv1 > rv2 ? 1 : 2) : 0;
+    const tick = ' &#10003;';
     return `<tr>
       <td>${escapeHtml(name)}</td>
+      <td>${date1}</td>
       <td>${formatCompareValue(c1?.weight)}</td>
-      <td>${formatCompareValue(c1?.raw)}</td>
-      <td>${c1?.normalized !== null && c1?.normalized !== undefined && Number.isFinite(Number(c1.normalized)) ? Number(c1.normalized).toFixed(3) : '<span class="num-empty">&mdash;</span>'}</td>
-      <td>${c1?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c1.timestamp))) : ''}</td>
+      <td><span class="cell-raw${rawHigher === 1 ? ' is-higher' : ''}">${raw1}${rawHigher === 1 ? tick : ''}</span><span class="cell-norm${normHigher === 1 ? ' is-higher' : ''}">${norm1}${normHigher === 1 ? tick : ''}</span></td>
+      <td>${date2}</td>
       <td>${formatCompareValue(c2?.weight)}</td>
-      <td>${formatCompareValue(c2?.raw)}</td>
-      <td>${c2?.normalized !== null && c2?.normalized !== undefined && Number.isFinite(Number(c2.normalized)) ? Number(c2.normalized).toFixed(3) : '<span class="num-empty">&mdash;</span>'}</td>
-      <td>${c2?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c2.timestamp))) : ''}</td>
+      <td><span class="cell-raw${rawHigher === 2 ? ' is-higher' : ''}">${raw2}${rawHigher === 2 ? tick : ''}</span><span class="cell-norm${normHigher === 2 ? ' is-higher' : ''}">${norm2}${normHigher === 2 ? tick : ''}</span></td>
     </tr>`;
   }).join('');
 
@@ -1532,20 +1560,20 @@ function renderCompareSectionHtml(detail: any, compareDetail: any): string {
       </div>
     </div>
     ${compRows.length ? `
-    <div class="compare-section">
-      <div class="compare-section__head"><h4>Benchmark Components</h4></div>
+    <div class="compare-section" id="compare-components-section">
+      <div class="compare-section__head" style="display:flex;align-items:center;justify-content:space-between;"><h4>Benchmark Components</h4><span class="comp-toggle" id="comp-toggle"><span class="comp-toggle__label" data-mode="raw">Raw</span><span class="comp-toggle__track"><span class="comp-toggle__dot"></span></span><span class="comp-toggle__label" data-mode="norm">Norm.</span></span></div>
       <div class="compare-table-wrap">
-        <table class="compare-table compare-table--components">
+        <table id="comp-table" class="compare-table compare-table--components show-norm">
           <thead>
             <tr>
               <th>Component</th>
-              <th colspan="4" style="text-align:center;">${escapeHtml(dev1)}</th>
-              <th colspan="4" style="text-align:center;">${escapeHtml(dev2)}</th>
+              <th colspan="3" style="text-align:center;">${escapeHtml(dev1)}</th>
+              <th colspan="3" style="text-align:center;">${escapeHtml(dev2)}</th>
             </tr>
             <tr>
               <th></th>
-              <th>Weight</th><th>Raw</th><th>Norm.</th><th>Date</th>
-              <th>Weight</th><th>Raw</th><th>Norm.</th><th>Date</th>
+              <th>Date</th><th>Weight</th><th class="cell-raw">Raw</th><th class="cell-norm">Norm.</th>
+              <th>Date</th><th>Weight</th><th class="cell-raw">Raw</th><th class="cell-norm">Norm.</th>
             </tr>
           </thead>
           <tbody>${compRows}</tbody>
