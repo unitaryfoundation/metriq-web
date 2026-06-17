@@ -152,6 +152,15 @@ function renderDeviceBadgesHtml(provider: string, device: string, source?: any) 
   return badges.length ? ` ${badges.join(' ')}` : '';
 }
 
+function unslug(s: string): string {
+  return String(s).split('_').filter(Boolean).map(w => w.toUpperCase()).join(' ');
+}
+
+function providerLogoHtml(provider: string): string {
+  const src = `public/${encodeURIComponent(provider)}.svg`;
+  return `<img src="${src}" alt="${escapeAttr(provider)}" style="height:14px;width:auto;vertical-align:middle;display:inline-block;margin-right:4px;">`;
+}
+
 function renderDeviceLabelHtml(provider: string, device: string, source?: any) {
   return `${escapeHtml(device || '')}${renderDeviceBadgesHtml(provider, device, source)}`;
 }
@@ -469,8 +478,6 @@ function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate 
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
   if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
-  // When hash routing is driving view changes, it will load the relevant sub-view
-  // (platform list vs platform detail vs help page). Avoid racing those renders here.
   if (!skipHashUpdate) {
     if (isPlatforms) initPlatformsView(true);
     if (isBenchmarks) void initBenchmarksDocsView();
@@ -706,10 +713,12 @@ function updateHash(next: Record<string, string>) {
         delete merged.provider;
         delete merged.device;
         delete merged.help;
-      } else if (!('provider' in next) && !('device' in next) && !('help' in next)) {
+        delete merged.device2;
+      } else if (!('provider' in next) && !('device' in next) && !('help' in next) && !('device2' in next)) {
         delete merged.provider;
         delete merged.device;
         delete merged.help;
+        delete merged.device2;
       }
       if (next.view !== 'results') {
         delete merged.results_provider;
@@ -734,6 +743,7 @@ function updateHash(next: Record<string, string>) {
       || merged.results_benchmark
       || merged.results_timestamp
       || merged.results_tab
+      || merged.device2
     );
     if (hasScopedRoute || ('view' in next && next.view !== 'platforms')) {
       delete merged.update;
@@ -848,7 +858,7 @@ async function applyHashRouting() {
   if (suppressHashHandler) return;
   const h = parseHash();
   const viewParam = String(h.view || 'platforms');
-  const view = (viewParam === 'platforms')
+  const view = (viewParam === 'platforms' || viewParam === 'compare')
     ? 'platforms'
     : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
   activateView(view, true);
@@ -858,7 +868,8 @@ async function applyHashRouting() {
       return;
     }
     if (h.provider && h.device) {
-      await showPlatformDetailPage(h.provider, h.device);
+      const device2 = String(h.device2 || '').trim();
+      await showPlatformDetailPage(h.provider, h.device, device2 || undefined);
       return;
     }
     await initPlatformsView(true);
@@ -1042,7 +1053,7 @@ function formatPlatformComponentRawValue(value: any) {
   return num.toLocaleString(undefined, { maximumSignificantDigits: 6 });
 }
 
-async function showPlatformDetailPage(provider: string, device: string) {
+async function showPlatformDetailPage(provider: string, device: string, device2Key?: string) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
   container.innerHTML = '<div class="meta">Loading platform…</div>';
@@ -1054,14 +1065,31 @@ async function showPlatformDetailPage(provider: string, device: string) {
     const resp = await fetch(appendCacheBust(detailUrl), { cache: 'no-store' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const json = await resp.json();
-    renderPlatformDetailPage(json);
+
+    let compareDetail: any = null;
+    if (device2Key) {
+      const sep = device2Key.indexOf('::');
+      if (sep !== -1) {
+        const d2p = device2Key.slice(0, sep);
+        const d2d = device2Key.slice(sep + 2);
+        try {
+          const d2Url = `${base}/${encodeURIComponent(d2p)}/${encodeURIComponent(d2d)}.json`;
+          const d2resp = await fetch(appendCacheBust(d2Url), { cache: 'no-store' });
+          if (d2resp.ok) {
+            compareDetail = await d2resp.json();
+          }
+        } catch {}
+      }
+    }
+
+    renderPlatformDetailPage(json, compareDetail);
   } catch (err) {
     console.error('[platforms] detail load failed:', err);
     renderPlatformDetailPage({ provider, device, error: String(err) });
   }
 }
 
-function renderPlatformDetailPage(detail: any) {
+function renderPlatformDetailPage(detail: any, compareDetail?: any) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
   const provider = detail?.provider || 'Unknown';
@@ -1075,13 +1103,31 @@ function renderPlatformDetailPage(detail: any) {
   const lifecycleNote = renderLifecycleNoteHtml(String(provider), String(device), detail);
   const error = detail?.error ? `<div class="meta" style="color:#f43f5e;">${escapeHtml(String(detail.error))}</div>` : '';
 
-  const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<div class="meta">No current device metadata.</div>';
   const historyHtml = history.length ? history.map((h: any) => {
     const f = h?.first_seen || '';
     const l = h?.last_seen || '';
     const r = h?.runs ?? 0;
     return `<li>${escapeHtml(f)} → ${escapeHtml(l)} · <strong>${r}</strong> run${r===1?'':'s'}</li>`;
   }).join('') : '<li>No metadata history</li>';
+
+  const metaHtml = currentMeta ? `<pre style="white-space:pre-wrap;word-break:break-word;background:#f8fafc;border:1px solid rgba(0,0,0,.08);padding:10px;border-radius:8px">${escapeHtml(JSON.stringify(currentMeta, null, 2))}</pre>` : '<div class="meta">No current device metadata.</div>';
+
+  // Build "Compare with" dropdown
+  const compareDeviceKey = compareDetail ? getDeviceKey(String(compareDetail.provider || ''), String(compareDetail.device || '')) : '';
+  const compareDropdownHtml = renderCompareDropdownHtml(provider, device, compareDeviceKey);
+
+  const compareMs = compareDetail?.metriq_score || null;
+  const compareValRaw = compareMs ? (compareMs as any).value : null;
+  const compareVal = (compareValRaw === null || compareValRaw === undefined) ? null : Number(compareValRaw);
+  const compareSeries = compareMs ? String((compareMs as any).series || '') : '';
+  const compareRuns = compareDetail?.runs ?? 0;
+  const compareFirstSeen = compareDetail?.first_seen || '';
+  const compareLastSeen = compareDetail?.last_seen || '';
+
+  const compareDropdownInlineHtml = `<span style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap;">
+    <label for="compare-device-select" style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;cursor:pointer;">Compare with</label>
+    <select id="compare-device-select" class="compare-with">${compareDropdownHtml}</select>
+  </span>`;
 
   let scoreHtml = '<div class="meta">No Metriq score available.</div>';
   if (metriqScore && typeof metriqScore === 'object') {
@@ -1119,65 +1165,276 @@ function renderPlatformDetailPage(detail: any) {
         <td class="num">${escapeHtml(ts)}</td>
       </tr>`;
     }).join('');
-    scoreHtml = `
+    let overlapScore1: number | null = null;
+    let overlapScore2: number | null = null;
+    const mComps = (metriqScore as any).components;
+    if (compareDetail && compareDetail.metriq_score && typeof compareDetail.metriq_score === 'object') {
+      const cComps = (compareDetail.metriq_score as any).components;
+      if (mComps && typeof mComps === 'object' && cComps && typeof cComps === 'object') {
+        const shared = Object.keys(mComps).filter(k => k in cComps);
+        if (shared.length) {
+          let s1 = 0, s2 = 0, w1 = 0, w2 = 0;
+          shared.forEach((k) => {
+            const c1 = mComps[k];
+            const c2 = cComps[k];
+            if (c1 && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized)) && c1.weight !== null && c1.weight !== undefined) {
+              const w = Number(c1.weight);
+              if (Number.isFinite(w)) { s1 += w * Number(c1.normalized); w1 += w; }
+            }
+            if (c2 && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized)) && c2.weight !== null && c2.weight !== undefined) {
+              const w = Number(c2.weight);
+              if (Number.isFinite(w)) { s2 += w * Number(c2.normalized); w2 += w; }
+            }
+          });
+          if (w1 > 0) overlapScore1 = s1;
+          if (w2 > 0) overlapScore2 = s2;
+        }
+      }
+    }
+
+    const qbit1 = extractPlatformNumQubits(detail);
+    const qbit2 = compareDetail ? extractPlatformNumQubits(compareDetail) : null;
+
+    const pillsHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        ${overlapScore1 !== null && Number.isFinite(overlapScore1) ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-weight:600;">O-Score: ${overlapScore1.toFixed(2)}</span>` : ''}
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Score: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
-      </div>
-      ${components.length ? `
-        <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
-        <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
-          <table class="smart-table" style="width:100%;min-width:660px;">
-            <thead>
-              <tr>
-                <th>Component</th>
-                <th class="num">Weight</th>
-                <th class="num">Raw</th>
-                <th class="num">Normalized</th>
-                <th class="num">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+        ${qbit1 !== null ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;">Qbit: ${qbit1}</span>` : ''}
+      </div>`.trim();
+    const comparePillsHtml = `
+      <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        ${overlapScore2 !== null && Number.isFinite(overlapScore2) ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:4px 10px;border-radius:999px;font-weight:600;">O-Score: ${overlapScore2.toFixed(2)}</span>` : ''}
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Score: ${compareVal !== null && Number.isFinite(compareVal) ? compareVal.toFixed(2) : '–'}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(compareSeries || '')}</span>
+        ${qbit2 !== null ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;">Qbit: ${qbit2}</span>` : ''}
+      </div>`.trim();
+
+    if (compareDetail) {
+      scoreHtml = `
+        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex:1;min-width:260px;">
+            ${pillsHtml}
+          </div>
+          <div style="flex:1;min-width:260px;">
+            ${comparePillsHtml}
+          </div>
+        </div>`;
+    } else {
+      scoreHtml = `
+        <div>
+          ${pillsHtml}
         </div>
-      ` : '<div class="meta">No components</div>'}
-    `.trim();
+        ${components.length ? `
+          <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
+          <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
+            <table class="smart-table" style="width:100%;min-width:660px;">
+              <thead>
+                <tr>
+                  <th>Component</th>
+                  <th class="num">Weight</th>
+                  <th class="num">Raw</th>
+                  <th class="num">Normalized</th>
+                  <th class="num">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        ` : '<div class="meta">No components</div>'}
+      `.trim();
+    }
   }
+
+  let compareSectionHtml = '';
+  if (compareDetail && compareDetail.provider && compareDetail.device) {
+    compareSectionHtml = renderCompareSectionHtml(detail, compareDetail);
+  }
+
+  const historySectionHtml = (compareSectionHtml !== "") ? '' : `
+    <section class="detail-section" style="padding:8px 0;">
+      <h5 style="margin:0 0 12px;">Metadata history</h5>
+      <ul style="margin-top:4px;">${historyHtml}</ul>
+    </section>
+  `;
 
   container.innerHTML = `
     <div class="detail-page" style="display:flex;flex-direction:column;gap:20px;padding-top:4px;">
       <div class="detail-header" style="display:flex;flex-direction:column;gap:6px;">
         <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
-        <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
+        ${!compareDetail ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <h3 style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${providerLogoHtml(provider)}${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
+          ${compareDropdownInlineHtml}
+        </div>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
+        ` : `
+        <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+          <div style="flex:1;min-width:260px;">
+            <h3 style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${providerLogoHtml(provider)}${escapeHtml(unslug(device))}${renderDeviceBadgesHtml(String(provider), String(device), detail)}</h3>
+            <div style="font-size:11px;color:var(--muted);letter-spacing:.02em;">${escapeHtml(device)}</div>
+            <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
+          </div>
+          <div style="flex:1;min-width:260px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+              <h3 style="margin:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${providerLogoHtml(String(compareDetail?.provider || ''))}${escapeHtml(unslug(String(compareDetail?.device || '')))}${renderDeviceBadgesHtml(String(compareDetail?.provider || ''), String(compareDetail?.device || ''), compareDetail)}</h3>
+              <span id="compare-toggle-wrapper">
+                <button id="compare-toggle-btn" type="button" class="btn" style="padding:4px 10px;font-size:11px;">Compare with other</button>
+                <span id="compare-toggle-target" style="display:none;">${compareDropdownInlineHtml}</span>
+              </span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);letter-spacing:.02em;">${escapeHtml(String(compareDetail?.device || ''))}</div>
+            <div class="meta" style="margin-top:2px;">${compareRuns} runs · ${compareFirstSeen || '–'} → ${compareLastSeen || '–'}</div>
+          </div>
+        </div>
+        `}
       </div>
       ${lifecycleNote}
       ${error}
       <div class="detail-grid" style="display:flex;flex-direction:column;gap:24px;">
         <section class="detail-section" style="padding:8px 0;">
-          <h5 style="margin:0 0 12px;">Metriq score</h5>
           ${scoreHtml}
         </section>
-        <section class="detail-section" style="padding:8px 0;">
+        ${!compareDetail ? `<section class="detail-section" style="padding:8px 0;">
           <h5 style="margin:0 0 12px;">Current device metadata</h5>
           ${metaHtml}
-        </section>
-        <section class="detail-section" style="padding:8px 0;">
-          <h5 style="margin:0 0 12px;">Metadata history</h5>
-          <ul style="margin-top:4px;">${historyHtml}</ul>
-        </section>
+        </section>` : ''}
+        ${historySectionHtml}
       </div>
+      ${compareSectionHtml}
     </div>
   `;
+
   const backLink = document.getElementById('platform-back');
   if (backLink) {
     backLink.addEventListener('click', (ev) => {
       ev.preventDefault();
       location.hash = '#view=platforms';
-      // Route immediately so the list is shown even if hashchange is coalesced.
       applyHashRouting();
     });
   }
+
+  const toggleBtn = document.getElementById('compare-toggle-btn') as HTMLButtonElement | null;
+  const toggleTarget = document.getElementById('compare-toggle-target') as HTMLElement | null;
+  if (toggleBtn && toggleTarget) {
+    toggleBtn.addEventListener('click', () => {
+      toggleBtn.style.display = 'none';
+      toggleTarget.style.display = 'inline';
+    });
+  }
+
+  const compTable = document.getElementById('comp-table') as HTMLTableElement | null;
+  const compToggle = document.getElementById('comp-toggle') as HTMLElement | null;
+  const compShowPaired = document.getElementById('comp-show-paired') as HTMLInputElement | null;
+  if (compTable && compToggle) {
+    const setMode = (mode: 'norm' | 'raw') => {
+      compTable.classList.toggle('show-norm', mode === 'norm');
+      compTable.classList.toggle('show-raw', mode === 'raw');
+      compToggle.dataset.mode = mode;
+    };
+    compToggle.addEventListener('click', () => {
+      const cur = compToggle.dataset.mode || 'norm';
+      setMode(cur === 'norm' ? 'raw' : 'norm');
+    });
+    setMode('norm');
+  }
+  if (compTable && compShowPaired) {
+    const updatePaired = () => compTable.classList.toggle('show-paired-only', compShowPaired.checked);
+    compShowPaired.addEventListener('change', updatePaired);
+    updatePaired();
+  }
+
+  // Radar chart
+  const radarCanvas = document.getElementById('radar-chart') as HTMLCanvasElement | null;
+  const ChartCtor = (window as any).Chart;
+  if (radarCanvas && compareDetail && typeof ChartCtor !== 'undefined') {
+    const ms1Comp = (metriqScore as any)?.components;
+    const ms2Comp = (compareDetail.metriq_score as any)?.components;
+    if (ms1Comp && ms2Comp && typeof ms1Comp === 'object' && typeof ms2Comp === 'object') {
+      const validPairs = Object.keys(ms1Comp)
+        .filter(k => {
+          if (!(k in ms2Comp)) return false;
+          const c1 = ms1Comp[k], c2 = ms2Comp[k];
+          return c1 && c2
+            && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized))
+            && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized));
+        })
+        .sort();
+      if (validPairs.length >= 3) {
+        const data1 = validPairs.map(k => Number(ms1Comp[k].normalized));
+        const data2 = validPairs.map(k => Number(ms2Comp[k].normalized));
+        const maxVal = Math.max(...data1.concat(data2), 0.01);
+        const ctx = radarCanvas.getContext('2d');
+        if (ctx) {
+          new ChartCtor(ctx, {
+            type: 'radar',
+            data: {
+              labels: validPairs,
+              datasets: [
+                {
+                  label: unslug(device),
+                  data: data1,
+                  fill: true,
+                  backgroundColor: 'rgba(37,99,235,0.15)',
+                  borderColor: '#2563eb',
+                  pointBackgroundColor: '#2563eb',
+                },
+                {
+                  label: unslug(String(compareDetail.device || '')),
+                  data: data2,
+                  fill: true,
+                  backgroundColor: 'rgba(249,115,22,0.15)',
+                  borderColor: '#f97316',
+                  pointBackgroundColor: '#f97316',
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { position: 'bottom' }
+              },
+              scales: {
+                r: {
+                  angleLines: { display: true },
+                  ticks: { display: false },
+                  grid: { color: 'rgba(0,0,0,0.06)' },
+                  suggestedMin: 0,
+                  suggestedMax: Math.ceil(maxVal * 1.15 * 100) / 100
+                }
+              }
+            }
+          });
+        }
+      }
+    }
+  }
+
+  const compareSelect = document.getElementById('compare-device-select') as HTMLSelectElement | null;
+  if (compareSelect) {
+    compareSelect.addEventListener('change', () => {
+      const val = String(compareSelect.value || '').trim();
+      if (val) {
+        const newHash = `#view=platforms&provider=${encodeURIComponent(provider)}&device=${encodeURIComponent(device)}&device2=${encodeURIComponent(val)}`;
+        suppressHashHandler = false;
+        if (location.hash !== newHash) {
+          location.hash = newHash;
+        } else {
+          applyHashRouting();
+        }
+      } else {
+        const newHash = `#view=platforms&provider=${encodeURIComponent(provider)}&device=${encodeURIComponent(device)}`;
+        suppressHashHandler = false;
+        if (location.hash !== newHash) {
+          location.hash = newHash;
+        } else {
+          applyHashRouting();
+        }
+      }
+    });
+  }
+
   container.querySelectorAll<HTMLTableRowElement>('#platform-detail-table tbody tr[data-results-href]').forEach((row) => {
     const href = row.getAttribute('data-results-href') || '';
     if (!href) return;
@@ -1195,6 +1452,234 @@ function renderPlatformDetailPage(detail: any) {
       open();
     });
   });
+}
+
+function renderCompareDropdownHtml(currentProvider: string, currentDevice: string, selectedKey: string): string {
+  const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache : [];
+  const options = platforms
+    .filter((p: any) => String(p.provider || '') === currentProvider && String(p.device || '') !== currentDevice)
+    .map((p: any) => {
+      const key = getDeviceKey(String(p.provider || ''), String(p.device || ''));
+      return `<option value="${escapeAttr(key)}"${key === selectedKey ? ' selected' : ''}>${escapeHtml(String(p.device || ''))}</option>`;
+    })
+    .sort();
+  return `<option value="">Off</option>${options.join('')}`;
+}
+
+function renderCompareSectionHtml(detail: any, compareDetail: any): string {
+  const p1 = String(detail?.provider || '');
+  const p2 = String(compareDetail?.provider || '');
+  const dev1 = String(detail?.device || '');
+  const dev2 = String(compareDetail?.device || '');
+  if (!p1 || !dev1 || !p2 || !dev2) return '';
+
+  const ms1 = detail?.metriq_score || null;
+  const ms2 = compareDetail?.metriq_score || null;
+  const score1 = ms1 && typeof ms1.value === 'number' ? Number(ms1.value) : null;
+  const score2 = ms2 && typeof ms2.value === 'number' ? Number(ms2.value) : null;
+  function oScoreDiffBadge(v1: number | null, v2: number | null, side: 1 | 2): string {
+    if (v1 === null || v2 === null || !Number.isFinite(v1) || !Number.isFinite(v2)) return '';
+    const diff = v1 - v2;
+    if (Math.abs(diff) < 0.001) return '';
+    if ((side === 1 && diff <= 0) || (side === 2 && diff >= 0)) return '';
+    const cls = side === 1 ? 'compare-score-badge--higher' : 'compare-score-badge--lower';
+    const label = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
+    return `<span class="compare-score-badge ${cls}" style="margin-left:6px;">${label}</span>`;
+  }
+
+  const nq1 = extractPlatformNumQubits(detail);
+  const nq2 = extractPlatformNumQubits(compareDetail);
+  const cov1 = extractPlatformCoverage(detail);
+  const cov2 = extractPlatformCoverage(compareDetail);
+  const qHigher = nq1 !== null && nq2 !== null ? (nq1 > nq2 ? 1 : nq2 > nq1 ? 2 : 0) : 0;
+  const cr1 = cov1 && cov1.total > 0 ? cov1.covered / cov1.total : null;
+  const cr2 = cov2 && cov2.total > 0 ? cov2.covered / cov2.total : null;
+  const covHigher = cr1 !== null && cr2 !== null ? (cr1 > cr2 ? 1 : cr2 > cr1 ? 2 : 0) : 0;
+  const lifecycle1 = getPlatformLifecycle(p1, dev1, detail);
+  const lifecycle2 = getPlatformLifecycle(p2, dev2, compareDetail);
+  const status1 = lifecycle1 ? titleCaseStatus(lifecycle1.status) : 'Active';
+  const status2 = lifecycle2 ? titleCaseStatus(lifecycle2.status) : 'Active';
+
+  // Component breakdown
+  const comps1 = ms1?.components && typeof ms1.components === 'object' ? ms1.components : {};
+  const comps2 = ms2?.components && typeof ms2.components === 'object' ? ms2.components : {};
+  const sharedBenchmarks = Object.keys(comps1).filter(k => k in comps2);
+  const radarPairs = sharedBenchmarks.filter(k => {
+    const c1 = comps1[k], c2 = comps2[k];
+    return c1 && c2
+      && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized))
+      && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized));
+  });
+
+  let overlapScore1: number | null = null;
+  let overlapScore2: number | null = null;
+  if (sharedBenchmarks.length) {
+    let sum1 = 0, sum2 = 0, weightSum1 = 0, weightSum2 = 0;
+    sharedBenchmarks.forEach((k) => {
+      const c1 = comps1[k];
+      const c2 = comps2[k];
+      if (c1 && c1.normalized !== null && c1.normalized !== undefined && Number.isFinite(Number(c1.normalized)) && c1.weight !== null && c1.weight !== undefined) {
+        const w = Number(c1.weight);
+        if (Number.isFinite(w)) { sum1 += w * Number(c1.normalized); weightSum1 += w; }
+      }
+      if (c2 && c2.normalized !== null && c2.normalized !== undefined && Number.isFinite(Number(c2.normalized)) && c2.weight !== null && c2.weight !== undefined) {
+        const w = Number(c2.weight);
+        if (Number.isFinite(w)) { sum2 += w * Number(c2.normalized); weightSum2 += w; }
+      }
+    });
+    if (weightSum1 > 0) overlapScore1 = sum1;
+    if (weightSum2 > 0) overlapScore2 = sum2;
+  }
+  const allBenchmarks = Array.from(new Set([...Object.keys(comps1), ...Object.keys(comps2)])).sort();
+
+  const round5 = (v: any): string => v !== null && v !== undefined && Number.isFinite(Number(v)) ? Number(Number(v).toFixed(5)).toString() : '<span class="num-empty">&mdash;</span>';
+  const isFin = (v: any): boolean => v !== null && v !== undefined && Number.isFinite(Number(v));
+  const compRows = allBenchmarks.map((name) => {
+    const c1 = comps1[name] || {};
+    const c2 = comps2[name] || {};
+    const norm1 = round5(c1?.normalized);
+    const norm2 = round5(c2?.normalized);
+    const raw1 = formatCompareValue(c1?.raw);
+    const raw2 = formatCompareValue(c2?.raw);
+    const date1 = c1?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c1.timestamp))) : '';
+    const date2 = c2?.timestamp ? escapeHtml(dateOnlyFormatter.format(new Date(c2.timestamp))) : '';
+    const nv1 = isFin(c1?.normalized) ? Number(c1.normalized) : null;
+    const nv2 = isFin(c2?.normalized) ? Number(c2.normalized) : null;
+    const rv1 = isFin(c1?.raw) ? Number(c1.raw) : null;
+    const rv2 = isFin(c2?.raw) ? Number(c2.raw) : null;
+    const normHigher = nv1 !== null && nv2 !== null && nv1 !== nv2 ? (nv1 > nv2 ? 1 : 2) : 0;
+    const rawHigher = rv1 !== null && rv2 !== null && rv1 !== rv2 ? (rv1 > rv2 ? 1 : 2) : 0;
+    const pairedRaw = rv1 !== null && rv2 !== null ? ' paired-raw' : '';
+    const pairedNorm = nv1 !== null && nv2 !== null ? ' paired-norm' : '';
+    const tick = '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>';
+    return `<tr class="${pairedRaw}${pairedNorm}">
+      <td>${escapeHtml(name)}</td>
+      <td>${date1}</td>
+      <td>${formatCompareValue(c1?.weight)}</td>
+      <td><span class="cell-raw${rawHigher === 1 ? ' is-higher' : ''}">${rawHigher === 1 ? tick : ''}${raw1}</span><span class="cell-norm${normHigher === 1 ? ' is-higher' : ''}">${normHigher === 1 ? tick : ''}${norm1}</span></td>
+      <td>${date2}</td>
+      <td>${formatCompareValue(c2?.weight)}</td>
+      <td><span class="cell-raw${rawHigher === 2 ? ' is-higher' : ''}">${rawHigher === 2 ? tick : ''}${raw2}</span><span class="cell-norm${normHigher === 2 ? ' is-higher' : ''}">${normHigher === 2 ? tick : ''}${norm2}</span></td>
+    </tr>`;
+  }).join('');
+
+  const meta1 = detail?.current?.device_metadata || null;
+  const meta2 = compareDetail?.current?.device_metadata || null;
+  const allMetaKeys = Array.from(new Set([
+    ...(meta1 && typeof meta1 === 'object' ? Object.keys(meta1) : []),
+    ...(meta2 && typeof meta2 === 'object' ? Object.keys(meta2) : []),
+  ])).sort();
+  const metaRows = allMetaKeys.map((k) => {
+    const v1 = meta1 && typeof meta1 === 'object' ? (meta1 as any)[k] : undefined;
+    const v2 = meta2 && typeof meta2 === 'object' ? (meta2 as any)[k] : undefined;
+    const isNested1 = v1 !== null && v1 !== undefined && typeof v1 === 'object';
+    const isNested2 = v2 !== null && v2 !== undefined && typeof v2 === 'object';
+    if (isNested1 || isNested2) return '';
+    return `<tr>
+      <td>${escapeHtml(k)}</td>
+      <td>${v1 === null || v1 === undefined ? '<span class="num-empty">&mdash;</span>' : escapeHtml(String(v1))}</td>
+      <td>${v2 === null || v2 === undefined ? '<span class="num-empty">&mdash;</span>' : escapeHtml(String(v2))}</td>
+    </tr>`;
+  }).filter(Boolean).join('');
+
+  function scCell(val: number | null, maxVal: number | null, badge: string): string {
+    if (val === null || !Number.isFinite(val)) return '<span class="num-empty">&mdash;</span>';
+    const pct = (maxVal !== null && Number.isFinite(maxVal) && maxVal > 0) ? Math.min(100, Math.max(0, (val / maxVal) * 100)) : 0;
+    return `<div class="scorecell" style="justify-content:flex-end;"><span class="scorecell__value">${val.toFixed(2)}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${pct.toFixed(1)}%"></span></span>${badge}</div>`;
+  }
+  function diffBadge(v1: number | null, v2: number | null, higher: 1 | 2): string {
+    if (v1 === null || v2 === null || !Number.isFinite(v1) || !Number.isFinite(v2)) return '';
+    const diff = v1 - v2;
+    if (Math.abs(diff) < 0.001) return '';
+    const isHigher = (higher === 1 && diff > 0) || (higher === 2 && diff < 0);
+    if (!isHigher) return '';
+    const cls = diff > 0 ? 'compare-score-badge--higher' : 'compare-score-badge--lower';
+    const label = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
+    return `<span class="compare-score-badge ${cls}" style="margin-left:6px;padding:2px 6px;font-size:10px;">${label}</span>`;
+  }
+  const scoreMax = (score1 !== null && Number.isFinite(score1)) || (score2 !== null && Number.isFinite(score2))
+    ? Math.max(score1 ?? 0, score2 ?? 0) : null;
+  const overlapMax = (overlapScore1 !== null && Number.isFinite(overlapScore1)) || (overlapScore2 !== null && Number.isFinite(overlapScore2))
+    ? Math.max(overlapScore1 ?? 0, overlapScore2 ?? 0) : null;
+
+  const overviewMetaRows = metaRows.length ? `<tr class="compare-row--spacer" style="background:#f0f7ff;"><td colspan="3" style="padding:6px 14px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:#1f2b3c;border-top:2px solid #dbeafe;">Device Metadata</td></tr>${metaRows}` : '';
+
+  return `
+    <div class="compare-section" style="margin-top:8px;">
+      <div class="compare-section__head"><h4>Comparison: ${escapeHtml(unslug(dev1))} vs ${escapeHtml(unslug(dev2))}</h4></div>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>${escapeHtml(unslug(dev1))} ${oScoreDiffBadge(overlapScore1, overlapScore2, 1)}</th>
+              <th>${escapeHtml(unslug(dev2))} ${oScoreDiffBadge(overlapScore1, overlapScore2, 2)}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Overlap Score <span style="font-size:11px;color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;">(${sharedBenchmarks.length} shared)</span></td>
+              <td>${scCell(overlapScore1, overlapMax, diffBadge(overlapScore1, overlapScore2, 1))}</td>
+              <td>${scCell(overlapScore2, overlapMax, diffBadge(overlapScore1, overlapScore2, 2))}</td>
+            </tr>
+            <tr>
+              <td>Metriq Score</td>
+              <td>${scCell(score1, scoreMax, diffBadge(score1, score2, 1))}</td>
+              <td>${scCell(score2, scoreMax, diffBadge(score1, score2, 2))}</td>
+            </tr>
+            <tr>
+              <td>Qubits</td>
+              <td>${nq1 !== null ? `<span${qHigher === 1 ? ' class="is-higher"' : ''}>${qHigher === 1 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${escapeHtml(String(nq1))}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${nq2 !== null ? `<span${qHigher === 2 ? ' class="is-higher"' : ''}>${qHigher === 2 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${escapeHtml(String(nq2))}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
+            </tr>
+            <tr>
+              <td>Coverage</td>
+              <td>${cov1 ? `<span${covHigher === 1 ? ' class="is-higher"' : ''}>${covHigher === 1 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${cov1.covered}/${cov1.total}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
+              <td>${cov2 ? `<span${covHigher === 2 ? ' class="is-higher"' : ''}>${covHigher === 2 ? '<span style="color:#16a34a;font-size:11px;margin-right:3px;">&#10003;</span>' : ''}${cov2.covered}/${cov2.total}</span>` : '<span class="num-empty">&mdash;</span>'}</td>
+            </tr>
+            <tr>
+              <td>Status</td>
+              <td>${escapeHtml(status1)}</td>
+              <td>${escapeHtml(status2)}</td>
+            </tr>
+            <tr>
+              <td>Provider</td>
+              <td>${providerLogoHtml(p1)}</td>
+              <td>${providerLogoHtml(p2)}</td>
+            </tr>
+            ${overviewMetaRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    ${compRows.length ? `
+    <div class="compare-section" id="compare-components-section">
+      <div class="compare-section__head" style="display:flex;align-items:center;justify-content:space-between;"><h4>Benchmark Components</h4><span style="display:inline-flex;align-items:center;gap:20px;"><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;"><input type="checkbox" id="comp-show-paired" checked style="margin:0;cursor:pointer;"> Show only paired</label><span class="comp-toggle" id="comp-toggle"><span class="comp-toggle__label" data-mode="raw">Raw</span><span class="comp-toggle__track"><span class="comp-toggle__dot"></span></span><span class="comp-toggle__label" data-mode="norm">Norm.</span></span></span></div>
+      <div class="compare-table-wrap">
+        <table id="comp-table" class="compare-table compare-table--components show-norm">
+          <thead>
+            <tr>
+              <th>Component</th>
+              <th colspan="3" style="text-align:center;">${escapeHtml(unslug(dev1))}</th>
+              <th colspan="3" style="text-align:center;">${escapeHtml(unslug(dev2))}</th>
+            </tr>
+            <tr>
+              <th></th>
+              <th>Date</th><th>Weight</th><th class="cell-raw">Raw</th><th class="cell-norm">Norm.</th>
+              <th>Date</th><th>Weight</th><th class="cell-raw">Raw</th><th class="cell-norm">Norm.</th>
+            </tr>
+          </thead>
+          <tbody>${compRows}</tbody>
+        </table>
+      </div>
+    </div>
+    ${radarPairs.length >= 3 ? `
+    <div class="compare-section" id="radar-section" style="margin-top:16px;">
+      <div class="compare-section__head"><h4>Radar: Component comparison</h4></div>
+      <div style="padding:16px;min-height:320px;">
+        <canvas id="radar-chart"></canvas>
+      </div>
+    </div>` : ''}` : ''}`;
 }
 
 function escapeHtml(s: string) {
@@ -2476,7 +2961,7 @@ async function renderChart(values, token, metric) {
       ...topPerformerLayer
     ]
   };
-      
+
   // Baseline device no longer emphasized in the graph; use reference line instead.
 
   try {
@@ -2653,7 +3138,7 @@ function renderStaticTable(values: any[]) {
   // Apply filters and sorting
   const working = applyTableFilters(values.slice());
 	  sortTableRows(working);
-	
+
 	  const table = document.createElement('table');
 	  table.className = 'smart-table';
 	  const sortIcon = (key: SortKey) => (
@@ -2868,6 +3353,31 @@ async function initBenchmarksView() {
 }
 
 initBenchmarksView();
+
+function formatCompareValue(v: any): string {
+  if (v === null || v === undefined) return '<span class="num-empty">&mdash;</span>';
+  const num = Number(v);
+  if (Number.isFinite(num)) {
+    if (num === 0) return '0';
+    const abs = Math.abs(num);
+    if (abs >= 1000) return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    if (abs >= 1) return num.toLocaleString(undefined, { maximumFractionDigits: 4 });
+    if (abs < 1e-4) return num.toExponential(3);
+    return num.toLocaleString(undefined, { maximumSignificantDigits: 6 });
+  }
+  return escapeHtml(String(v));
+}
+
+function renderCompareScoreBadge(val1: number | null, val2: number | null): string {
+  if (val1 === null || val2 === null || !Number.isFinite(val1) || !Number.isFinite(val2)) return '';
+  const diff = val1 - val2;
+  const absDiff = Math.abs(diff);
+  let cls: string, label: string;
+  if (absDiff < 0.001) { cls = 'compare-score-badge--equal'; label = 'Equal'; }
+  else if (diff > 0) { cls = 'compare-score-badge--higher'; label = `${diff > 0 ? '+' : ''}${diff.toFixed(2)}`; }
+  else { cls = 'compare-score-badge--lower'; label = `${diff.toFixed(2)}`; }
+  return `<span class="compare-score-badge ${cls}">${escapeHtml(label)}</span>`;
+}
 
 async function injectFooter() {
   const slot = document.getElementById('footer-slot');
