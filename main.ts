@@ -793,8 +793,11 @@ function buildResultsHash(
     results_tab: tab,
   });
   if (timestamp) params.set('results_timestamp', timestamp);
+  if (tab === 'table') params.set('results_anchor', 'table');
   return '#' + params.toString();
 }
+
+let pendingResultsTableCenterScroll = false;
 
 function applyResultsRoute(route: Record<string, string>) {
   const provider = String(route.results_provider || '').trim();
@@ -820,7 +823,31 @@ function applyResultsRoute(route: Record<string, string>) {
     tableState.sortDir = 'desc';
   }
 
+  pendingResultsTableCenterScroll = tab === 'table' && route.results_anchor === 'table';
   activateTab(tab);
+}
+
+function scrollHelpPanelIntoView(container: HTMLElement) {
+  requestAnimationFrame(() => {
+    const panel = container.querySelector<HTMLElement>('.detail-page');
+    (panel || container).scrollIntoView({ block: 'center', behavior: 'auto' });
+  });
+}
+
+function renderInlineMath(tex: string) {
+  const renderer = (window as any).katex;
+  if (renderer && typeof renderer.renderToString === 'function') {
+    return renderer.renderToString(tex, { throwOnError: false, displayMode: false });
+  }
+  return `<code>${escapeHtml(tex)}</code>`;
+}
+
+function renderDisplayMath(tex: string) {
+  const renderer = (window as any).katex;
+  if (renderer && typeof renderer.renderToString === 'function') {
+    return renderer.renderToString(tex, { throwOnError: false, displayMode: true });
+  }
+  return `<pre style="white-space:pre-wrap;margin:8px 0;background:#f8fafc;border:1px solid #eef2ff;border-radius:8px;padding:10px;overflow:auto;">$$\n${escapeHtml(tex)}\n$$</pre>`;
 }
 
 function renderMetriqScoreHelp() {
@@ -857,6 +884,49 @@ function renderMetriqScoreHelp() {
   `.trim();
 }
 
+function renderOverlapMetriqScoreHelp() {
+  const container = document.getElementById('platforms-container');
+  if (!container) return;
+  const backHash = buildCompareHashFromRoute(parseHash()) || '#view=platforms';
+  const backLabel = backHash === '#view=platforms' ? 'Back to Platforms' : 'Back to comparison';
+  const metriqScoreLink = `<a href="#view=platforms&help=metriq-score" style="color:#2563eb;text-decoration:none;font-weight:600;">Metriq Score</a>`;
+  const metriqFormula = renderDisplayMath('\\mathrm{MS}(d,s) = \\sum_{b \\in B} w_b\\mathrm{BS}_b(d,s)');
+  const overlapFormula = renderDisplayMath('\\mathrm{OMS}(d_1, d_2, s_1, s_2) = \\sum_{c \\in C} w_c\\mathrm{BS}_c(d_1, d_2, s_1, s_2)');
+  const sharedSetFormula = renderInlineMath('C = B_1 \\cap B_2');
+  const deviceOne = renderInlineMath('d_1');
+  const deviceTwo = renderInlineMath('d_2');
+  container.innerHTML = `
+    <div class="detail-page" style="display:flex;flex-direction:column;gap:18px;padding-top:4px;">
+      <div class="meta"><a href="${escapeAttr(backHash)}" style="color:#2563eb;text-decoration:none;">← ${escapeHtml(backLabel)}</a></div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <h3 style="margin:0;">Overlap Score</h3>
+        <div class="meta">What the "Overlap Score" comparison value means</div>
+      </div>
+      <div style="background:#fff;border:1px solid #dbeafe;border-radius:14px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06);">
+        <p style="margin:0 0 10px;line-height:1.55;">
+          Overlap Score is an aggregate score computed from benchmark results that exist in both of the two devices. It is intended as a single number that compare two devices' performance.
+        </p>
+        <p style="margin:0 0 10px;line-height:1.55;">
+          The standard ${metriqScoreLink} is a weighted composite over the full benchmark suite, where each benchmark subscore is normalized and weighted:
+        </p>
+        ${metriqFormula}
+        <p style="margin:0 0 10px;line-height:1.55;">
+          In a pairwise comparison, that full-suite score can include benchmark components that only one of the two devices has.
+        </p>
+        ${metriqFormula}
+        <p style="margin:0 0 10px;line-height:1.55;">
+          The Overlap Score restricts the calculation to the shared benchmark set, ${sharedSetFormula}. For compared devices ${deviceOne} and ${deviceTwo}, it sums only the weighted normalized subscores for components present on both devices:
+        </p>
+        ${overlapFormula}
+        <p style="margin:0;line-height:1.55;">
+          This makes the side-by-side result more apples-to-apples: the regular score remains useful as a full-suite reference, while the overlap score better answers which device looks stronger on the directly comparable subset.
+        </p>
+      </div>
+    </div>
+  `.trim();
+  scrollHelpPanelIntoView(container);
+}
+
 async function applyHashRouting() {
   if (suppressHashHandler) return;
   const h = parseHash();
@@ -866,8 +936,13 @@ async function applyHashRouting() {
     : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
   activateView(view, true);
   if (view === 'platforms') {
-    if (String((h as any).help || '') === 'metriq-score') {
+    const helpTopic = String((h as any).help || '');
+    if (helpTopic === 'metriq-score') {
       renderMetriqScoreHelp();
+      return;
+    }
+    if (helpTopic === 'overlap-metriq-score') {
+      renderOverlapMetriqScoreHelp();
       return;
     }
     if (h.compare_provider_a && h.compare_device_a && h.compare_provider_b && h.compare_device_b) {
@@ -1098,6 +1173,27 @@ function buildCompareHash(providerA: string, deviceA: string, providerB: string,
   return '#' + params.toString();
 }
 
+function buildCompareHashFromRoute(route: Record<string, string>) {
+  const providerA = String(route.compare_provider_a || '');
+  const deviceA = String(route.compare_device_a || '');
+  const providerB = String(route.compare_provider_b || '');
+  const deviceB = String(route.compare_device_b || '');
+  if (!providerA || !deviceA || !providerB || !deviceB) return '';
+  return buildCompareHash(providerA, deviceA, providerB, deviceB);
+}
+
+function buildOverlapScoreHelpHashFromRoute(route: Record<string, string>) {
+  const params = new URLSearchParams({
+    view: 'platforms',
+    help: 'overlap-metriq-score',
+  });
+  ['compare_provider_a', 'compare_device_a', 'compare_provider_b', 'compare_device_b'].forEach((key) => {
+    const value = String(route[key] || '');
+    if (value) params.set(key, value);
+  });
+  return '#' + params.toString();
+}
+
 function scrollToPlatformsLead() {
   heroPlatformsLead?.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
@@ -1214,7 +1310,21 @@ function renderProviderLogoHtml(provider: string, accent = false) {
 }
 
 function renderCompareMetricRow(label: string, aHtml: string, bHtml: string) {
-  return `<tr><th scope="row">${escapeHtml(label)}</th><td>${aHtml}</td><td>${bHtml}</td></tr>`;
+  return renderCompareMetricRowHtml(escapeHtml(label), aHtml, bHtml);
+}
+
+function renderCompareMetricRowHtml(labelHtml: string, aHtml: string, bHtml: string) {
+  return `<tr><th scope="row">${labelHtml}</th><td>${aHtml}</td><td>${bHtml}</td></tr>`;
+}
+
+function renderCompareMaybeBetterNumber(value: number | null, otherValue: number | null, digits: number) {
+  const valueHtml = value !== null && Number.isFinite(value) ? value.toFixed(digits) : '–';
+  const isBetter = value !== null && otherValue !== null && Number.isFinite(value) && Number.isFinite(otherValue) && value > otherValue;
+  return isBetter ? `<strong class="compare-better-value">${escapeHtml(valueHtml)}</strong>` : escapeHtml(valueHtml);
+}
+
+function renderCompareOverlapScoreLabelHtml() {
+  return `<span class="compare-score-help" tabindex="0" data-tip="compare-overlap-score">Overlap Score</span>`;
 }
 
 function renderCompareDeviceTitleHtml(provider: string, device: string, source?: any) {
@@ -1224,6 +1334,14 @@ function renderCompareDeviceTitleHtml(provider: string, device: string, source?:
 function renderCompareDeviceHeaderLink(provider: string, device: string) {
   const label = `View ${device} device details`;
   return `<a class="compare-table__device-link" href="${escapeAttr(buildPlatformDetailHash(provider, device))}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">${escapeHtml(device)}</a>`;
+}
+
+function renderCompareThreeColumnColgroup() {
+  return '<colgroup><col style="width:34%" /><col style="width:33%" /><col style="width:33%" /></colgroup>';
+}
+
+function renderCompareComponentColgroup() {
+  return '<colgroup><col style="width:28.5%" /><col style="width:5.5%" /><col style="width:31%" /><col style="width:31%" /></colgroup>';
 }
 
 function hasCompareComponent(components: Record<string, any>, name: string) {
@@ -1269,8 +1387,65 @@ function calculateOverlapMetriqScore(components: Record<string, any>, overlapNam
   return Number.isFinite(score) ? score : null;
 }
 
-function renderCompareComponentRow(label: string, weightHtml: string, aHtml: string, bHtml: string) {
-  return `<tr><th scope="row">${escapeHtml(label)}</th><td class="num">${weightHtml}</td><td>${aHtml}</td><td>${bHtml}</td></tr>`;
+function renderCompareComponentValueCellHtml(valueHtml: string, resultsHref: string) {
+  const classes = `compare-component-value-cell${resultsHref ? ' compare-component-result-cell' : ''}`;
+  const attrs = resultsHref
+    ? ` class="${classes}" data-results-href="${escapeAttr(resultsHref)}" tabindex="0" role="link" title="Open matching results"`
+    : ` class="${classes}"`;
+  return `<td${attrs}>${valueHtml}</td>`;
+}
+
+function renderCompareComponentRow(label: string, weightHtml: string, aHtml: string, bHtml: string, aHref = '', bHref = '') {
+  return `<tr><th scope="row">${escapeHtml(label)}</th><td class="num">${weightHtml}</td>${renderCompareComponentValueCellHtml(aHtml, aHref)}${renderCompareComponentValueCellHtml(bHtml, bHref)}</tr>`;
+}
+
+function renderCompareComponentRatioHtml(leftValue: number | null, rightValue: number | null, includeRatioLabel = false) {
+  if (leftValue === null || rightValue === null || !Number.isFinite(leftValue) || !Number.isFinite(rightValue) || rightValue === 0) return '–';
+  const ratio = (leftValue / rightValue) * 100;
+  if (!Number.isFinite(ratio)) return '–';
+  const roundedRatio = Number(ratio.toFixed(1));
+  const ratioLabel = roundedRatio.toFixed(1);
+  let symbol = '=';
+  let tone = 'equal';
+  if (roundedRatio < 50) { symbol = '&lt;&lt;&lt;'; tone = 'low'; }
+  else if (roundedRatio < 75) { symbol = '&lt;&lt;'; tone = 'low'; }
+  else if (roundedRatio < 100) { symbol = '&lt;'; tone = 'low'; }
+  else if (roundedRatio === 100) { symbol = '='; tone = 'equal'; }
+  else if (roundedRatio < 150) { symbol = '&gt;'; tone = 'high'; }
+  else if (roundedRatio < 200) { symbol = '&gt;&gt;'; tone = 'high'; }
+  else { symbol = '&gt;&gt;&gt;'; tone = 'high'; }
+  const labelHtml = includeRatioLabel ? `<span class="compare-ratio-value">${escapeHtml(ratioLabel)}%</span>` : '';
+  return `<span class="compare-ratio-wrap"><span class="compare-ratio compare-ratio--${tone}" title="Normalized ratio: ${escapeAttr(ratioLabel)}%" aria-label="Normalized ratio ${escapeAttr(ratioLabel)} percent">${symbol}</span>${labelHtml}</span>`;
+}
+
+function getCompareComponentRawNumber(component: any) {
+  if (component?.raw === null || component?.raw === undefined || component?.raw === '') return null;
+  const raw = Number(component.raw);
+  return Number.isFinite(raw) ? raw : null;
+}
+
+function isLowerRawBetterCompareComponent(name: string) {
+  return new Set(['EPLG-10', 'EPLG-20', 'EPLG-50', 'EPLG-100']).has(String(name || '').trim().toUpperCase());
+}
+
+function buildCompareComponentResultsHash(provider: string, device: string, componentName: string, component: any) {
+  const benchmark = typeof component?.group === 'string' && component.group.trim()
+    ? String(component.group).trim()
+    : String(componentName || '').trim();
+  if (!provider || !device || !benchmark) return '';
+  return buildResultsHash(provider, device, benchmark, String(component?.timestamp || ''), 'table');
+}
+
+function renderCompareComponentValueHtml(value: number | null, component: any, isBetter: boolean, rawIsBetter = false) {
+  const hasValue = value !== null && Number.isFinite(value);
+  const valueHtml = hasValue ? escapeHtml(value.toFixed(3)) : '–';
+  const emphasizedValueHtml = isBetter ? `<strong class="compare-better-value">${valueHtml}</strong>` : valueHtml;
+  const rawValueHtml = component?.raw !== undefined && component?.raw !== null
+    ? escapeHtml(formatPlatformComponentRawValue(component.raw))
+    : '';
+  const emphasizedRawValueHtml = rawIsBetter ? `<strong class="compare-better-value">${rawValueHtml}</strong>` : rawValueHtml;
+  const rawHtml = rawValueHtml ? `<div class="compare-subvalue">raw ${emphasizedRawValueHtml}</div>` : '';
+  return `${emphasizedValueHtml}${rawHtml}`;
 }
 
 function sortCompareComponentNames(leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
@@ -1368,6 +1543,141 @@ function bindComparePicker() {
   form.addEventListener('submit', (ev) => { ev.preventDefault(); });
 }
 
+
+
+function formatCompareGraphNumber(value: number | null, digits = 3) {
+  return value !== null && Number.isFinite(value) ? value.toFixed(digits) : '–';
+}
+
+const COMPARE_GRAPH_LOG_SCALE = 100;
+const COMPARE_GRAPH_FULL_SCALE = 8000;
+const COMPARE_GRAPH_BASELINE = 100;
+const COMPARE_GRAPH_BASELINE_WIDTH = 50;
+const COMPARE_GRAPH_MIN_WIDTH = 4;
+const COMPARE_GRAPH_MAX_WIDTH = 95;
+const COMPARE_GRAPH_MIN_ROW_MAX_WIDTH = 62;
+
+function getCompareGraphRowMaxWidth(scaleValue: number) {
+  const scaleRatio = Math.max(1, scaleValue / COMPARE_GRAPH_BASELINE);
+  const maxRatio = Math.max(1, COMPARE_GRAPH_FULL_SCALE / COMPARE_GRAPH_BASELINE);
+  const progress = maxRatio > 1 ? Math.log(scaleRatio) / Math.log(maxRatio) : 1;
+  const width = COMPARE_GRAPH_MIN_ROW_MAX_WIDTH + (COMPARE_GRAPH_MAX_WIDTH - COMPARE_GRAPH_MIN_ROW_MAX_WIDTH) * progress;
+  return Math.max(COMPARE_GRAPH_MIN_ROW_MAX_WIDTH, Math.min(COMPARE_GRAPH_MAX_WIDTH, width));
+}
+
+function getCompareGraphLogWidth(value: number | null, scaleValue = COMPARE_GRAPH_LOG_SCALE) {
+  if (value === null || !Number.isFinite(value) || value <= 0) return 0;
+  const scale = Number.isFinite(scaleValue) && scaleValue > 0
+    ? Math.max(scaleValue, value, COMPARE_GRAPH_BASELINE)
+    : Math.max(value, COMPARE_GRAPH_BASELINE);
+  if (value === COMPARE_GRAPH_BASELINE) return COMPARE_GRAPH_BASELINE_WIDTH;
+
+  let width = COMPARE_GRAPH_BASELINE_WIDTH;
+  if (value > COMPARE_GRAPH_BASELINE) {
+    const rowMaxWidth = getCompareGraphRowMaxWidth(scale);
+    const valueRatio = value / COMPARE_GRAPH_BASELINE;
+    const scaleRatio = scale / COMPARE_GRAPH_BASELINE;
+    const progress = scaleRatio > 1 ? Math.log(valueRatio) / Math.log(scaleRatio) : 1;
+    width = COMPARE_GRAPH_BASELINE_WIDTH + (rowMaxWidth - COMPARE_GRAPH_BASELINE_WIDTH) * progress;
+  } else {
+    const progress = Math.log1p(value) / Math.log1p(COMPARE_GRAPH_BASELINE);
+    width = COMPARE_GRAPH_BASELINE_WIDTH * progress;
+  }
+  return Math.max(COMPARE_GRAPH_MIN_WIDTH, Math.min(100, width));
+}
+
+function renderCompareGraphBars(leftLabel: string, rightLabel: string, leftValue: number | null, rightValue: number | null, scaleValue?: number) {
+  const finiteValues = [leftValue, rightValue].filter((value): value is number => value !== null && Number.isFinite(value) && value > 0);
+  const rowScale = scaleValue !== undefined && Number.isFinite(scaleValue) && scaleValue > 0
+    ? scaleValue
+    : Math.max(COMPARE_GRAPH_LOG_SCALE, ...finiteValues);
+  const leftWidth = getCompareGraphLogWidth(leftValue, rowScale);
+  const rightWidth = getCompareGraphLogWidth(rightValue, rowScale);
+  return `
+    <div class="compare-graph-bars" aria-hidden="true">
+      <div class="compare-graph-bar-row"><span>${escapeHtml(leftLabel)}</span><i class="compare-graph-bar compare-graph-bar--left" style="width:${leftWidth.toFixed(1)}%"></i></div>
+      <div class="compare-graph-bar-row"><span>${escapeHtml(rightLabel)}</span><i class="compare-graph-bar compare-graph-bar--right" style="width:${rightWidth.toFixed(1)}%"></i></div>
+    </div>
+  `.trim();
+}
+
+function renderCompareGraphValueCell(valueHtml: string, resultsHref = '', isBetter = false) {
+  const classes = `compare-graph-value${isBetter ? ' compare-graph-value--better' : ''}${resultsHref ? ' compare-component-result-cell' : ''}`;
+  const attrs = resultsHref
+    ? ` class="${classes}" data-results-href="${escapeAttr(resultsHref)}" tabindex="0" role="link" title="Open matching results"`
+    : ` class="${classes}"`;
+  return `<td${attrs}>${valueHtml}</td>`;
+}
+
+function renderCompareGraphRow(label: string, leftValue: number | null, rightValue: number | null, leftLabel: string, rightLabel: string, differenceHtml: string, digits = 3, leftHref = '', rightHref = '', scaleValue?: number) {
+  const leftFinite = leftValue !== null && Number.isFinite(leftValue);
+  const rightFinite = rightValue !== null && Number.isFinite(rightValue);
+  const leftIsBetter = leftFinite && rightFinite && leftValue > rightValue;
+  const rightIsBetter = leftFinite && rightFinite && rightValue > leftValue;
+  return `<tr><th scope="row"><strong>${escapeHtml(label)}</strong>${renderCompareGraphBars(leftLabel, rightLabel, leftValue, rightValue, scaleValue)}</th>${renderCompareGraphValueCell(escapeHtml(formatCompareGraphNumber(leftValue, digits)), leftHref, leftIsBetter)}${renderCompareGraphValueCell(escapeHtml(formatCompareGraphNumber(rightValue, digits)), rightHref, rightIsBetter)}<td class="compare-graph-difference">${differenceHtml}</td></tr>`;
+}
+
+function bindCompareComponentResultCells(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>('.compare-component-result-cell[data-results-href]').forEach((cell) => {
+    const href = cell.getAttribute('data-results-href') || '';
+    if (!href) return;
+    const open = () => {
+      const graphTable = cell.closest<HTMLElement>('.compare-graph-wrap');
+      const componentSection = cell.closest<HTMLElement>('#compare-benchmark-components');
+      (graphTable || componentSection)?.scrollIntoView({ block: 'start', behavior: 'auto' });
+      const current = parseHash();
+      if (current.view === 'platforms' && current.compare_provider_a && current.compare_device_a && current.compare_provider_b && current.compare_device_b) {
+        current.compare_anchor = graphTable ? 'graph' : 'components';
+        history.replaceState(null, '', '#' + new URLSearchParams(current).toString());
+      }
+      if (location.hash !== href) location.hash = href;
+      else applyHashRouting();
+    };
+    cell.addEventListener('click', open);
+    cell.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      open();
+    });
+  });
+}
+
+
+function bindCompareGraphNavigationAnchors(root: HTMLElement) {
+  root.querySelectorAll<HTMLAnchorElement>('.compare-graph-wrap a[href]').forEach((link) => {
+    link.addEventListener('click', () => {
+      const current = parseHash();
+      if (current.view === 'platforms' && current.compare_provider_a && current.compare_device_a && current.compare_provider_b && current.compare_device_b) {
+        current.compare_anchor = 'graph';
+        history.replaceState(null, '', '#' + new URLSearchParams(current).toString());
+      }
+    });
+  });
+}
+
+function bindCompareHelpTooltips(root: HTMLElement) {
+  const tipHtmlFor = (which: string) => {
+    if (which === 'compare-overlap-score') {
+      return `A comparison score calculated only from benchmark components both devices share. <a href="${escapeAttr(buildOverlapScoreHelpHashFromRoute(parseHash()))}">Learn more</a>`;
+    }
+    return '';
+  };
+
+  root.querySelectorAll<HTMLElement>('.compare-help[data-tip], .compare-score-help[data-tip]').forEach((el) => {
+    if ((el as any).dataset.tipBound === '1') return;
+    const html = tipHtmlFor(el.getAttribute('data-tip') || '');
+    if (!html) return;
+    const show = () => showGlobalTooltip(el, html);
+    const hide = () => hideGlobalTooltipSoon();
+    el.addEventListener('mouseenter', show);
+    el.addEventListener('mouseleave', hide);
+    el.addEventListener('mousemove', cancelHideGlobalTooltip);
+    el.addEventListener('focus', show);
+    el.addEventListener('blur', hide);
+    (el as any).dataset.tipBound = '1';
+  });
+}
+
 function renderPlatformComparePage(left: any, right: any) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
@@ -1392,7 +1702,7 @@ function renderPlatformComparePage(left: any, right: any) {
   const rightHeaderHtml = renderCompareDeviceHeaderLink(rightProvider, rightDevice);
   const summaryRows = [
     renderCompareMetricRow('Metriq Score', leftScore !== null && Number.isFinite(leftScore) ? leftScore.toFixed(2) : '–', rightScore !== null && Number.isFinite(rightScore) ? rightScore.toFixed(2) : '–'),
-    renderCompareMetricRow('Overlap Metriq Score', leftOverlapScore !== null ? leftOverlapScore.toFixed(2) : '–', rightOverlapScore !== null ? rightOverlapScore.toFixed(2) : '–'),
+    renderCompareMetricRowHtml(renderCompareOverlapScoreLabelHtml(), renderCompareMaybeBetterNumber(leftOverlapScore, rightOverlapScore, 2), renderCompareMaybeBetterNumber(rightOverlapScore, leftOverlapScore, 2)),
   ].join('');
   const dataRows = [
     renderCompareMetricRow('Benchmark coverage', leftCoverage ? `${leftCoverage.covered}/${leftCoverage.total}` : '–', rightCoverage ? `${rightCoverage.covered}/${rightCoverage.total}` : '–'),
@@ -1409,10 +1719,36 @@ function renderPlatformComparePage(left: any, right: any) {
     const rn = rc?.normalized === null || rc?.normalized === undefined ? null : Number(rc.normalized);
     const weight = getCompareComponentDisplayWeight(name, leftComponents, rightComponents);
     const weightCell = weight !== null ? weight.toFixed(2) : '–';
-    const leftCell = `${ln !== null && Number.isFinite(ln) ? ln.toFixed(3) : '–'}${lc?.raw !== undefined && lc?.raw !== null ? `<div class="compare-subvalue">raw ${escapeHtml(formatPlatformComponentRawValue(lc.raw))}</div>` : ''}`;
-    const rightCell = `${rn !== null && Number.isFinite(rn) ? rn.toFixed(3) : '–'}${rc?.raw !== undefined && rc?.raw !== null ? `<div class="compare-subvalue">raw ${escapeHtml(formatPlatformComponentRawValue(rc.raw))}</div>` : ''}`;
-    return renderCompareComponentRow(name, weightCell, leftCell, rightCell);
+    const leftHasNumericValue = ln !== null && Number.isFinite(ln);
+    const rightHasNumericValue = rn !== null && Number.isFinite(rn);
+    const leftRaw = getCompareComponentRawNumber(lc);
+    const rightRaw = getCompareComponentRawNumber(rc);
+    const hasComparableRawValues = leftHasNumericValue && rightHasNumericValue && leftRaw !== null && rightRaw !== null && leftRaw !== rightRaw;
+    const lowerRawIsBetter = isLowerRawBetterCompareComponent(name);
+    const leftRawIsBetter = hasComparableRawValues && (lowerRawIsBetter ? leftRaw < rightRaw : leftRaw > rightRaw);
+    const rightRawIsBetter = hasComparableRawValues && (lowerRawIsBetter ? rightRaw < leftRaw : rightRaw > leftRaw);
+    const leftResultsHref = buildCompareComponentResultsHash(leftProvider, leftDevice, name, lc);
+    const rightResultsHref = buildCompareComponentResultsHash(rightProvider, rightDevice, name, rc);
+    const leftCell = renderCompareComponentValueHtml(ln, lc, leftHasNumericValue && rightHasNumericValue && ln > rn, leftRawIsBetter);
+    const rightCell = renderCompareComponentValueHtml(rn, rc, leftHasNumericValue && rightHasNumericValue && rn > ln, rightRawIsBetter);
+    return renderCompareComponentRow(name, weightCell, leftCell, rightCell, leftHasNumericValue ? leftResultsHref : '', rightHasNumericValue ? rightResultsHref : '');
   }).join('') : renderCompareComponentRow('Components', '–', '–', '–');
+
+
+  const compareGraphRows = [
+    renderCompareGraphRow('Overlap Score', leftOverlapScore, rightOverlapScore, leftDevice, rightDevice, renderCompareComponentRatioHtml(leftOverlapScore, rightOverlapScore, true), 2),
+    ...componentNames.map((name) => {
+      const lc = leftComponents[name] || {};
+      const rc = rightComponents[name] || {};
+      const ln = lc?.normalized === null || lc?.normalized === undefined ? null : Number(lc.normalized);
+      const rn = rc?.normalized === null || rc?.normalized === undefined ? null : Number(rc.normalized);
+      const leftHasNumericValue = ln !== null && Number.isFinite(ln);
+      const rightHasNumericValue = rn !== null && Number.isFinite(rn);
+      const leftHref = buildCompareComponentResultsHash(leftProvider, leftDevice, name, lc);
+      const rightHref = buildCompareComponentResultsHash(rightProvider, rightDevice, name, rc);
+      return renderCompareGraphRow(name, ln, rn, leftDevice, rightDevice, renderCompareComponentRatioHtml(ln, rn, true), 3, leftHasNumericValue ? leftHref : '', rightHasNumericValue ? rightHref : '');
+    }),
+  ].join('');
 
   container.innerHTML = `
     <div class="compare-view">
@@ -1427,7 +1763,6 @@ function renderPlatformComparePage(left: any, right: any) {
       <div class="compare-cards" aria-label="Selected devices">
         <article class="compare-card">
           <div class="compare-card__top">
-            ${renderProviderLogoHtml(leftProvider)}
             <div class="compare-card__eyebrow">Device A</div>
           </div>
           ${renderCompareDeviceTitleHtml(leftProvider, leftDevice, left)}
@@ -1435,7 +1770,6 @@ function renderPlatformComparePage(left: any, right: any) {
         </article>
         <article class="compare-card compare-card--accent">
           <div class="compare-card__top">
-            ${renderProviderLogoHtml(rightProvider, true)}
             <div class="compare-card__eyebrow">Device B</div>
           </div>
           ${renderCompareDeviceTitleHtml(rightProvider, rightDevice, right)}
@@ -1443,26 +1777,39 @@ function renderPlatformComparePage(left: any, right: any) {
         </article>
       </div>
       <section class="compare-section">
-        <h4>At a glance</h4>
-        <p class="meta">Score values summarize the currently published benchmark suite; overlap scores use only components with numeric values on both devices.</p>
-        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Metric</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${summaryRows}</tbody></table></div>
-      </section>
-      <section class="compare-section">
         <h4>Data availability</h4>
         <p class="meta">Coverage, run counts, and dates describe the available Metriq dataset for each device, not intrinsic device capabilities.</p>
-        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Dataset field</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${dataRows}</tbody></table></div>
+        <div class="compare-table-wrap"><table class="compare-table">${renderCompareThreeColumnColgroup()}<thead><tr><th>Dataset field</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${dataRows}</tbody></table></div>
+      </section>
+      <section class="compare-section">
+        <h4>At a glance</h4>
+        <p class="meta">Score values summarize the currently published benchmark suite.</p>
+        <div class="compare-table-wrap"><table class="compare-table">${renderCompareThreeColumnColgroup()}<thead><tr><th>Metric</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${summaryRows}</tbody></table></div>
       </section>
       <section class="compare-section">
         <h4>Device details</h4>
-        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Spec</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${metadataHtml}</tbody></table></div>
+        <div class="compare-table-wrap"><table class="compare-table">${renderCompareThreeColumnColgroup()}<thead><tr><th>Spec</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${metadataHtml}</tbody></table></div>
       </section>
-      <section class="compare-section">
+      <section class="compare-section" id="compare-benchmark-components">
         <h4>Benchmark components</h4>
         <p class="meta">Component values are included for exploration only; interpretation depends on each benchmark definition, timestamp, and suite coverage.</p>
-        <div class="compare-table-wrap"><table class="compare-table"><thead><tr><th>Component</th><th>Weight</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${componentHtml}</tbody></table></div>
+        <div class="compare-table-wrap"><table class="compare-table">${renderCompareComponentColgroup()}<thead><tr><th>Component</th><th>Weight</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${componentHtml}</tbody></table></div>
+        <div class="compare-table-wrap compare-graph-wrap"><table class="compare-table compare-graph-table"><colgroup><col style="width:34%" /><col style="width:22%" /><col style="width:22%" /><col style="width:22%" /></colgroup><thead><tr><th aria-label="Comparison graph"></th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th><th>Difference</th></tr></thead><tbody>${compareGraphRows}</tbody></table></div>
       </section>
     </div>
   `;
+  bindCompareHelpTooltips(container);
+  bindCompareComponentResultCells(container);
+  bindCompareGraphNavigationAnchors(container);
+  const compareAnchor = parseHash().compare_anchor;
+  if (compareAnchor === 'components' || compareAnchor === 'graph') {
+    requestAnimationFrame(() => {
+      const target = compareAnchor === 'graph'
+        ? container.querySelector<HTMLElement>('.compare-graph-wrap')
+        : document.getElementById('compare-benchmark-components');
+      target?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    });
+  }
   const back = document.getElementById('compare-back');
   back?.addEventListener('click', (ev) => {
     ev.preventDefault();
@@ -3254,6 +3601,13 @@ async function drawTable() {
     const data = await loadBenchmarks();
     // Always include all runs, independent from chart filters
     renderStaticTable(Array.isArray(data) ? data : []);
+    if (pendingResultsTableCenterScroll) {
+      pendingResultsTableCenterScroll = false;
+      requestAnimationFrame(() => {
+        const table = document.getElementById('benchmarks-table-wrap') || document.getElementById('panel-table');
+        table?.scrollIntoView({ block: 'center', behavior: 'auto' });
+      });
+    }
   } catch (err) {
     const container = document.getElementById('table-static');
     if (container) {
