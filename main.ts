@@ -1259,16 +1259,6 @@ function extractDeviceMetadataRows(details: any[]) {
 }
 
 
-function getProviderLogoSrc(provider: string) {
-  const p = String(provider || '').toLowerCase();
-  if (!p || p.includes('local')) return null;
-  if (p.includes('ibm')) return 'public/ibm.png';
-  if (p.includes('aws') || p.includes('amazon') || p.includes('braket')) return 'public/aws.png';
-  if (p.includes('origin')) return 'public/origin.png';
-  if (p.includes('quantinuum')) return 'public/quantinuum.png';
-  return null;
-}
-
 function getProviderCompareTheme(provider: string) {
   const p = String(provider || '').toLowerCase();
   if (p.includes('ibm')) return 'ibm';
@@ -1285,28 +1275,6 @@ function getProviderCompareOptionStyle(provider: string) {
   if (theme === 'aws') return 'background-color:#ff9900;color:#111827;';
   if (theme === 'origin') return 'background-color:#fff;color:#111827;';
   return '';
-}
-
-function getProviderInitials(provider: string) {
-  const words = String(provider || '')
-    .replace(/quantum|cloud|computing|services|technologies|technology/ig, ' ')
-    .split(/[^a-z0-9]+/i)
-    .map((w) => w.trim())
-    .filter(Boolean);
-  const initials = words.slice(0, 2).map((w) => w.charAt(0).toUpperCase()).join('');
-  return initials || 'QC';
-}
-
-function renderProviderLogoHtml(provider: string, accent = false) {
-  const src = getProviderLogoSrc(provider);
-  if (!src && String(provider || '').toLowerCase().includes('local')) return '';
-
-  const label = provider ? `${provider} logo` : 'Provider logo';
-  const classes = `provider-logo${accent ? ' provider-logo--accent' : ''}`;
-  if (src) {
-    return `<span class="${classes}" aria-label="${escapeAttr(label)}" title="${escapeAttr(label)}"><img src="${escapeAttr(src)}" alt="" class="provider-logo__img" /></span>`;
-  }
-  return `<span class="${classes} provider-logo--initials" aria-label="${escapeAttr(label)}" title="${escapeAttr(label)}">${escapeHtml(getProviderInitials(provider))}</span>`;
 }
 
 function renderCompareMetricRow(label: string, aHtml: string, bHtml: string) {
