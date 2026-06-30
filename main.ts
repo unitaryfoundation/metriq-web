@@ -2281,14 +2281,13 @@ function renderPlatformsTable() {
 		    table.className = 'smart-table';
 		    table.innerHTML = `
 		      <colgroup>
-		        <col style="width: 205px;" />
-		        <col style="width: 70px;" />
-		        <col style="width: 140px;" />
-		        <col style="width: 210px;" />
-		        <col style="width: 92px;" />
-		        <col style="width: 118px;" />
-		        <col style="width: 116px;" />
-		        <col />
+		        <col style="width: 18%;" />
+		        <col style="width: 7%;" />
+		        <col style="width: 14%;" />
+		        <col style="width: 21%;" />
+		        <col style="width: 9%;" />
+		        <col style="width: 13%;" />
+		        <col style="width: 18%;" />
 		      </colgroup>
 		      <thead>
 		        <tr>
@@ -2418,10 +2417,6 @@ function renderPlatformsTable() {
       ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
       : 0;
     const lastTs = p.last_seen ? dateOnlyFormatter.format(new Date(p.last_seen)) : '';
-    const comparePeer = findDefaultComparePeer(provider, device);
-    const compareHtml = comparePeer
-      ? `<a class="compare-link" href="${buildCompareHash(provider, device, String(comparePeer.provider || ''), String(comparePeer.device || ''))}">Compare with…</a>`
-      : '<span class="compare-link compare-link--disabled" title="No same-provider comparison device available">Not available</span>';
     rows.push(`
       <tr${isRetired ? ' class="platform-row--retired"' : ''}>
         <td><a href="${href}">${deviceLabel}</a></td>
@@ -2430,14 +2425,10 @@ function renderPlatformsTable() {
         <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
         <td class="num">${escapeHtml(coverageText)}</td>
         <td class="num">${escapeHtml(lastTs || '')}</td>
-        <td class="compare-col">${compareHtml}</td>
         <td class="activity-col">${spark}</td>
       </tr>`);
   });
   tbody.innerHTML = rows.join('');
-  tbody.querySelectorAll<HTMLTableCellElement>('td.compare-col').forEach((cell) => {
-    cell.textContent = '';
-  });
   if (table && (table as any).dataset) {
     const dataTable = table as any;
     if (!dataTable.dataset.scoreClickBound) {
@@ -2459,6 +2450,7 @@ function renderPlatformsTable() {
 			    const col = String(th.getAttribute('data-col')) as typeof platformSortKey;
 			    const baseLabel = th.getAttribute('data-label') || th.textContent || '';
 			    const isActive = platformSortKey === col;
+			    th.classList.toggle('is-sorted', isActive);
 			    const icon = isActive ? `<span class="sort-icon" aria-hidden="true">${platformSortDir === 'asc' ? '▲' : '▼'}</span>` : '';
 			    if (col === 'score') {
 			      th.innerHTML = `
