@@ -181,9 +181,10 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 
 /* Platforms table styled like smart table */
 #platforms-table-wrap{overflow-x:auto}
-#platforms-table-wrap table.smart-table{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;border:1px solid rgba(15,23,42,.10);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 14px 30px rgba(15,23,42,.06);font-size:16px;line-height:1.25}
+#platforms-table-wrap table.smart-table{width:100%;min-width:940px;table-layout:fixed;border-collapse:separate;border-spacing:0;border:1px solid rgba(15,23,42,.10);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 14px 30px rgba(15,23,42,.06);font-size:16px;line-height:1.25}
 #platforms-table-wrap thead th{background:#f0f7ff;color:#1f2b3c;font-weight:700;padding:11px 12px;border-bottom:1px solid #dbeafe;user-select:none;vertical-align:middle;white-space:nowrap}
-#platforms-table-wrap thead th[data-col]{position:relative;padding-right:26px}
+#platforms-table-wrap thead th[data-col]{position:relative}
+#platforms-table-wrap thead th[data-col].is-sorted{padding-right:26px}
 #platforms-table-wrap thead th .sort-icon,
 #smart-table-wrap thead th .sort-icon{
   position:absolute;
@@ -205,16 +206,17 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #platforms-table-wrap td.activity-col svg{display:block;margin:0 auto}
 #platforms-table-wrap tbody tr:hover .scorebar{opacity:1}
 
-/* Make Cloud Provider column slimmer */
-#platforms-table-wrap th[data-col="provider"]{width:140px;max-width:140px;overflow:hidden}
-#platforms-table-wrap tbody td:nth-child(3){max-width:140px;overflow:hidden;text-overflow:ellipsis}
-#platforms-table-wrap th[data-col="device"],#platforms-table-wrap tbody td:nth-child(1){max-width:205px;overflow:hidden;text-overflow:ellipsis}
-#platforms-table-wrap th[data-col="num_qubits"],#platforms-table-wrap tbody td:nth-child(2){max-width:64px}
+#platforms-table-wrap th[data-col="provider"],#platforms-table-wrap tbody td:nth-child(3),
+#platforms-table-wrap th[data-col="device"],#platforms-table-wrap tbody td:nth-child(1){overflow:hidden;text-overflow:ellipsis}
+#platforms-table-wrap th[data-col="device"],
+#platforms-table-wrap th[data-col="provider"]{text-align:left}
 #platforms-table-wrap th[data-col="num_qubits"],#platforms-table-wrap tbody td:nth-child(2){text-align:center}
 #platforms-table-wrap th[data-col="score"]{text-align:center}
-#platforms-table-wrap thead th[data-col="score"]{padding-left:26px}
+#platforms-table-wrap thead th[data-col="score"].is-sorted{padding-left:26px}
+#platforms-table-wrap th[data-col="coverage"],
+#platforms-table-wrap th[data-col="last_seen"]{text-align:right}
 
-#platforms-table-wrap tbody td.activity-col{padding:11px 12px}
+#platforms-table-wrap tbody td.activity-col{padding:11px 16px}
 .detail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .compare-with-link{display:inline-flex;align-items:center;gap:8px;border-radius:999px;background:rgba(37,99,235,.10);color:#1d4ed8;text-decoration:none;font-weight:700;padding:7px 12px}
 .compare-with-link:hover{background:rgba(37,99,235,.16);text-decoration:none}
@@ -263,7 +265,6 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
   min-width:0;
   overflow:hidden;
 }
-#platforms-table-wrap th[data-col="provider"] .th-filter-btn__inner{padding-right:26px}
 #platforms-table-wrap th .th-filter-btn__inner i{font-size:12px;opacity:.75}
 #platforms-table-wrap th .th-filter-label{flex:0 0 auto}
 #platforms-table-wrap th .th-filter-btn:hover .th-filter-btn__inner,
