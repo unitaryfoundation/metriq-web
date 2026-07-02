@@ -444,7 +444,9 @@ tabTable?.addEventListener("click", () => activateTab("table"));
 // most recent one. The downloadable JSON always contains every record.
 type RecordAggMode = 'all-time' | 'latest';
 let recordAggMode: RecordAggMode = 'all-time';
-let benchmarkRunsCache: any[] | null = null;
+// Runs indexed by provider::device::benchmark, with per-run instance
+// signatures precomputed, so score adjustments avoid rescanning all runs.
+let benchmarkRunsByGroup: Map<string, Array<{ run: any; sig: string }>> | null = null;
 
 function runTimestampMs(run: any): number {
   const t = Number(new Date(run?.timestamp));
@@ -856,6 +858,18 @@ function appendRecordModeParam(params: URLSearchParams) {
   if (recordAggMode === 'latest') params.set('records', 'latest');
 }
 
+function buildPlatformsListHash() {
+  const params = new URLSearchParams({ view: 'platforms' });
+  appendRecordModeParam(params);
+  return '#' + params.toString();
+}
+
+function buildPlatformsHelpHash(topic: string) {
+  const params = new URLSearchParams({ view: 'platforms', help: topic });
+  appendRecordModeParam(params);
+  return '#' + params.toString();
+}
+
 function navigateToPlatform(provider: string, device: string) {
   // Let the hashchange event drive routing to avoid “first click” no-op.
   suppressHashHandler = false;
@@ -955,7 +969,7 @@ function renderMetriqScoreHelp() {
   if (!container) return;
   container.innerHTML = `
     <div class="detail-page" style="display:flex;flex-direction:column;gap:18px;padding-top:4px;">
-      <div class="meta"><a href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
+      <div class="meta"><a href="${escapeAttr(buildPlatformsListHash())}" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <h3 style="margin:0;">Metriq Score</h3>
         <div class="meta">What the “Metriq Score” column means</div>
@@ -987,9 +1001,10 @@ function renderMetriqScoreHelp() {
 function renderOverlapMetriqScoreHelp() {
   const container = document.getElementById('platforms-container');
   if (!container) return;
-  const backHash = buildCompareHashFromRoute(parseHash()) || '#view=platforms';
-  const backLabel = backHash === '#view=platforms' ? 'Back to Platforms' : 'Back to comparison';
-  const metriqScoreLink = `<a href="#view=platforms&help=metriq-score" style="color:#2563eb;text-decoration:none;font-weight:600;">Metriq Score</a>`;
+  const compareBackHash = buildCompareHashFromRoute(parseHash());
+  const backHash = compareBackHash || buildPlatformsListHash();
+  const backLabel = compareBackHash ? 'Back to comparison' : 'Back to Platforms';
+  const metriqScoreLink = `<a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}" style="color:#2563eb;text-decoration:none;font-weight:600;">Metriq Score</a>`;
   const metriqFormula = renderDisplayMath('\\mathrm{MS}(d,s) = \\sum_{b \\in B} w_b\\mathrm{BS}_b(d,s)');
   const overlapFormula = renderDisplayMath('\\mathrm{OMS}(d_1, d_2, s_1, s_2) = \\sum_{c \\in C} w_c\\mathrm{BS}_c(d_1, d_2, s_1, s_2)');
   const sharedSetFormula = renderInlineMath('C = B_1 \\cap B_2');
@@ -1095,7 +1110,7 @@ async function loadBenchmarks() {
       );
       const rows = looksLikeEtl ? json.map(adaptMetriqEtlRow) : json;
       const normalized = rows.map(normalizeRun);
-      benchmarkRunsCache = normalized;
+      benchmarkRunsByGroup = buildBenchmarkRunIndex(normalized);
       return normalized;
     })();
   }
@@ -1233,12 +1248,26 @@ function recordInstanceSig(params: any): string {
   return JSON.stringify(keys.map((k) => [k, p[k]]));
 }
 
+function getRunGroupKey(provider: string, device: string, benchmark: string) {
+  return `${provider}::${device}::${benchmark}`;
+}
+
+function buildBenchmarkRunIndex(runs: any[]) {
+  const index = new Map<string, Array<{ run: any; sig: string }>>();
+  runs.forEach((run) => {
+    const key = getRunGroupKey(String(run?.provider || ''), String(run?.device || ''), String(run?.benchmark || ''));
+    if (!index.has(key)) index.set(key, []);
+    index.get(key)!.push({ run, sig: recordInstanceSig(run?.rawParams) });
+  });
+  return index;
+}
+
 function withAdjustedMetriqScore(detail: any): any {
   if (recordAggMode !== 'all-time') return detail;
   const score = detail?.metriq_score;
   const components = (score && typeof score.components === 'object') ? score.components : null;
-  const runs = benchmarkRunsCache;
-  if (!components || !Array.isArray(runs) || !runs.length) return detail;
+  const runsIndex = benchmarkRunsByGroup;
+  if (!components || !runsIndex || !runsIndex.size) return detail;
   const provider = String(detail?.provider || '');
   const device = String(detail?.device || '');
 
@@ -1254,21 +1283,19 @@ function withAdjustedMetriqScore(detail: any): any {
     adjustedComponents[name] = c;
     const anchorTs = c?.normalized_timestamp ?? c?.timestamp ?? c?.raw_timestamp;
     if (!anchorTs) return;
-    const groupRows = runs.filter((r: any) => String(r?.provider || '') === provider
-      && String(r?.device || '') === device
-      && String(r?.benchmark || '') === String(c?.group || ''));
-    const anchor = groupRows.find((r: any) => r?.timestamp === anchorTs);
+    const groupEntries = runsIndex.get(getRunGroupKey(provider, device, String(c?.group || ''))) || [];
+    const anchor = groupEntries.find((e) => e.run?.timestamp === anchorTs);
     if (!anchor) return;
-    const sig = recordInstanceSig(anchor.rawParams);
+    const sig = anchor.sig;
     const officialValue = parseFinite(c?.normalized);
     let bestValue = officialValue;
     let bestTs = c?.normalized_timestamp ?? c?.timestamp ?? null;
-    groupRows.forEach((r: any) => {
-      if (recordInstanceSig(r?.rawParams) !== sig) return;
-      const v = parseFinite(r?.normalizedScores?.[String(c?.metric || '')]);
+    groupEntries.forEach((e) => {
+      if (e.sig !== sig) return;
+      const v = parseFinite(e.run?.normalizedScores?.[String(c?.metric || '')]);
       if (v !== null && (bestValue === null || v > bestValue)) {
         bestValue = v;
-        bestTs = r?.timestamp ?? bestTs;
+        bestTs = e.run?.timestamp ?? bestTs;
       }
     });
     if (bestValue !== null && (officialValue === null || bestValue > officialValue)) {
@@ -1375,6 +1402,7 @@ function buildOverlapScoreHelpHashFromRoute(route: Record<string, string>) {
     const value = String(route[key] || '');
     if (value) params.set(key, value);
   });
+  appendRecordModeParam(params);
   return '#' + params.toString();
 }
 
@@ -1905,7 +1933,7 @@ function renderPlatformComparePage(left: any, right: any) {
 
   container.innerHTML = `
     <div class="compare-view">
-      <div class="meta"><a id="compare-back" href="#view=platforms">← Back to Platforms</a></div>
+      <div class="meta"><a id="compare-back" href="${escapeAttr(buildPlatformsListHash())}">← Back to Platforms</a></div>
       <div class="compare-head">
         <div>
           <h3>Compare devices</h3>
@@ -1966,7 +1994,7 @@ function renderPlatformComparePage(left: any, right: any) {
   const back = document.getElementById('compare-back');
   back?.addEventListener('click', (ev) => {
     ev.preventDefault();
-    location.hash = '#view=platforms';
+    location.hash = buildPlatformsListHash();
     applyHashRouting();
   });
   bindComparePicker();
@@ -2086,7 +2114,7 @@ function renderPlatformDetailPage(detail: any) {
   container.innerHTML = `
     <div class="detail-page" style="display:flex;flex-direction:column;gap:20px;padding-top:4px;">
       <div class="detail-header" style="display:flex;flex-direction:column;gap:6px;">
-        <div class="meta"><a id="platform-back" href="#view=platforms" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
+        <div class="meta"><a id="platform-back" href="${escapeAttr(buildPlatformsListHash())}" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
         <h3 style="margin:0;">${escapeHtml(provider)} · ${renderDeviceLabelHtml(String(provider), String(device), detail)}</h3>
         <div class="meta" style="margin-top:2px;">${runs} runs · ${firstSeen || '–'} → ${lastSeen || '–'}</div>
         <div class="detail-actions">${compareActionHtml}</div>
@@ -2113,7 +2141,7 @@ function renderPlatformDetailPage(detail: any) {
   if (backLink) {
     backLink.addEventListener('click', (ev) => {
       ev.preventDefault();
-      location.hash = '#view=platforms';
+      location.hash = buildPlatformsListHash();
       // Route immediately so the list is shown even if hashchange is coalesced.
       applyHashRouting();
     });
@@ -2336,7 +2364,7 @@ function ensurePlatformsHeaderTooltipsBound(table: HTMLTableElement) {
       return `Benchmark components with a recorded result for this device, shown as covered/total.`;
     }
     if (which === 'platforms-score') {
-      return `Aggregate score for the device. Click a score cell to see the breakdown. <a href="#view=platforms&help=metriq-score">Learn more</a>`;
+      return `Aggregate score for the device. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
     }
     return '';
   };
