@@ -37,6 +37,8 @@ const tabGraph = document.getElementById("tab-graph") as HTMLButtonElement | nul
 const tabTable = document.getElementById("tab-table") as HTMLButtonElement | null;
 const panelGraph = document.getElementById("panel-graph") as HTMLElement | null;
 const panelTable = document.getElementById("panel-table") as HTMLElement | null;
+const recordModeAllTimeBtn = document.getElementById("record-mode-all-time") as HTMLButtonElement | null;
+const recordModeLatestBtn = document.getElementById("record-mode-latest") as HTMLButtonElement | null;
 const chartTitleEl = (panelGraph?.querySelector('.panel__title') as HTMLElement | null) || null;
 const downloadChartBtn = document.getElementById('btn-download-chart') as HTMLButtonElement | null;
 const downloadChartMenu = document.getElementById('chart-download-menu') as HTMLElement | null;
@@ -438,6 +440,69 @@ function activateTab(which) {
 tabGraph?.addEventListener("click", () => activateTab("graph"));
 tabTable?.addEventListener("click", () => activateTab("table"));
 
+// ---- Duplicate-record aggregation ----
+// The dataset can contain multiple records for the same provider/device/benchmark.
+// 'all-time' (default) keeps the best-scoring record per group; 'latest' keeps the
+// most recent one. The downloadable JSON always contains every record.
+type RecordAggMode = 'all-time' | 'latest';
+let recordAggMode: RecordAggMode = 'all-time';
+
+function runTimestampMs(run: any): number {
+  const t = Number(new Date(run?.timestamp));
+  return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
+}
+
+function isPreferredRecord(candidate: any, incumbent: any, metricId: string): boolean {
+  const cv = getMetricValue(candidate, metricId);
+  const iv = getMetricValue(incumbent, metricId);
+  if (recordAggMode === 'latest') {
+    // Newest record wins, but a record with a displayable value beats one
+    // without (some records lack a metriq_score and would render as "—").
+    if ((cv === null) !== (iv === null)) return cv !== null;
+    return runTimestampMs(candidate) > runTimestampMs(incumbent);
+  }
+  // 'all-time': higher metric value wins (surfaced metrics are higher-is-better);
+  // records without a value lose, and ties go to the more recent record.
+  const c = cv === null ? Number.NEGATIVE_INFINITY : cv;
+  const i = iv === null ? Number.NEGATIVE_INFINITY : iv;
+  if (c !== i) return c > i;
+  return runTimestampMs(candidate) > runTimestampMs(incumbent);
+}
+
+function dedupeRunsForDisplay(runs: any[], metricId: string): any[] {
+  if (!Array.isArray(runs) || runs.length <= 1) return Array.isArray(runs) ? runs : [];
+  const byGroup = new Map<string, any>();
+  runs.forEach((run) => {
+    const key = `${String(run?.provider || '')}::${String(run?.device || '')}::${String(run?.benchmark || '')}`;
+    const prev = byGroup.get(key);
+    if (!prev || isPreferredRecord(run, prev, metricId)) {
+      byGroup.set(key, run);
+    }
+  });
+  return byGroup.size === runs.length ? runs : Array.from(byGroup.values());
+}
+
+function syncRecordModeToggle() {
+  const isAllTime = recordAggMode === 'all-time';
+  recordModeAllTimeBtn?.classList.toggle('is-current', isAllTime);
+  recordModeAllTimeBtn?.setAttribute('aria-pressed', String(isAllTime));
+  recordModeLatestBtn?.classList.toggle('is-current', !isAllTime);
+  recordModeLatestBtn?.setAttribute('aria-pressed', String(!isAllTime));
+}
+
+function setRecordAggMode(mode: RecordAggMode) {
+  if (recordAggMode === mode) return;
+  recordAggMode = mode;
+  syncRecordModeToggle();
+  updateHash({ results_agg: mode === 'latest' ? 'latest' : '' });
+  // Redraw only the visible panel; activateTab redraws the other on switch.
+  if (panelGraph?.classList.contains('is-active')) void drawChart();
+  if (panelTable?.classList.contains('is-active')) void drawTable();
+}
+
+recordModeAllTimeBtn?.addEventListener('click', () => setRecordAggMode('all-time'));
+recordModeLatestBtn?.addEventListener('click', () => setRecordAggMode('latest'));
+
 async function initBenchmarksDocsView() {
   if (docsLoaded) return;
   docsLoaded = true;
@@ -805,6 +870,9 @@ function applyResultsRoute(route: Record<string, string>) {
   const benchmark = String(route.results_benchmark || '').trim();
   const timestamp = String(route.results_timestamp || '').trim();
   const tab = route.results_tab === 'graph' ? 'graph' : 'table';
+
+  recordAggMode = String(route.results_agg || '').trim().toLowerCase() === 'latest' ? 'latest' : 'all-time';
+  syncRecordModeToggle();
 
   if (provider || benchmark) {
     const providers = uniqueValues(rawBenchmarks as any, 'provider');
@@ -3425,8 +3493,9 @@ function renderStaticTable(values: any[]) {
   // Init filters if first time
   populateSmartFilters(values);
 
-  // Apply filters and sorting
-  const working = applyTableFilters(values.slice());
+  // Apply filters, then collapse duplicate records per device/benchmark.
+  // Dedupe runs after the filters so timestamp deep-links still pin their exact record.
+  const working = dedupeRunsForDisplay(applyTableFilters(values.slice()), metric.id);
 	  sortTableRows(working);
 	
 	  const table = document.createElement('table');
@@ -3588,7 +3657,7 @@ async function drawChart() {
   }
   const metric = getActiveMetric();
   updateChartHeading(metric);
-  const chartValues = filtered
+  const chartValues = dedupeRunsForDisplay(filtered, metric.id)
     .map(run => {
       const metricValue = getMetricValue(run, metric.id);
       if (metricValue === null) return null;
