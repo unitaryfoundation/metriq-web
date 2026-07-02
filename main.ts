@@ -37,8 +37,6 @@ const tabGraph = document.getElementById("tab-graph") as HTMLButtonElement | nul
 const tabTable = document.getElementById("tab-table") as HTMLButtonElement | null;
 const panelGraph = document.getElementById("panel-graph") as HTMLElement | null;
 const panelTable = document.getElementById("panel-table") as HTMLElement | null;
-const recordModeAllTimeBtn = document.getElementById("record-mode-all-time") as HTMLButtonElement | null;
-const recordModeLatestBtn = document.getElementById("record-mode-latest") as HTMLButtonElement | null;
 const chartTitleEl = (panelGraph?.querySelector('.panel__title') as HTMLElement | null) || null;
 const downloadChartBtn = document.getElementById('btn-download-chart') as HTMLButtonElement | null;
 const downloadChartMenu = document.getElementById('chart-download-menu') as HTMLElement | null;
@@ -446,6 +444,7 @@ tabTable?.addEventListener("click", () => activateTab("table"));
 // most recent one. The downloadable JSON always contains every record.
 type RecordAggMode = 'all-time' | 'latest';
 let recordAggMode: RecordAggMode = 'all-time';
+let benchmarkRunsCache: any[] | null = null;
 
 function runTimestampMs(run: any): number {
   const t = Number(new Date(run?.timestamp));
@@ -483,25 +482,53 @@ function dedupeRunsForDisplay(runs: any[], metricId: string): any[] {
 }
 
 function syncRecordModeToggle() {
-  const isAllTime = recordAggMode === 'all-time';
-  recordModeAllTimeBtn?.classList.toggle('is-current', isAllTime);
-  recordModeAllTimeBtn?.setAttribute('aria-pressed', String(isAllTime));
-  recordModeLatestBtn?.classList.toggle('is-current', !isAllTime);
-  recordModeLatestBtn?.setAttribute('aria-pressed', String(!isAllTime));
+  document.querySelectorAll<HTMLButtonElement>('[data-record-mode]').forEach((btn) => {
+    const isCurrent = btn.getAttribute('data-record-mode') === recordAggMode;
+    btn.classList.toggle('is-current', isCurrent);
+    btn.setAttribute('aria-pressed', String(isCurrent));
+  });
+}
+
+function applyRecordModeFromRoute(route: Record<string, string>) {
+  // Only an explicit hash value changes the mode; internal links that drop the
+  // param keep the user's current selection.
+  const raw = String(route.records || '').trim().toLowerCase();
+  if (raw !== 'latest' && raw !== 'all-time') return;
+  recordAggMode = raw as RecordAggMode;
+  syncRecordModeToggle();
+}
+
+function recordModeToggleHtml() {
+  return `
+    <span class="record-toggle__label">Benchmark Record Type:</span>
+    <button type="button" class="btn-mini" data-record-mode="all-time" aria-pressed="false" title="Show the best all-time recorded result for each device and benchmark">All-time</button>
+    <button type="button" class="btn-mini" data-record-mode="latest" aria-pressed="false" title="Show the most recent recorded result for each device and benchmark">Latest</button>
+  `;
 }
 
 function setRecordAggMode(mode: RecordAggMode) {
   if (recordAggMode === mode) return;
   recordAggMode = mode;
   syncRecordModeToggle();
-  updateHash({ results_agg: mode === 'latest' ? 'latest' : '' });
-  // Redraw only the visible panel; activateTab redraws the other on switch.
-  if (panelGraph?.classList.contains('is-active')) void drawChart();
-  if (panelTable?.classList.contains('is-active')) void drawTable();
+  updateHash({ records: mode === 'latest' ? 'latest' : '' });
+  if (viewResults && !viewResults.hidden) {
+    // Redraw only the visible panel; activateTab redraws the other on switch.
+    if (panelGraph?.classList.contains('is-active')) void drawChart();
+    if (panelTable?.classList.contains('is-active')) void drawTable();
+  }
+  if (viewPlatforms && !viewPlatforms.hidden) {
+    void rerenderPlatformsRoute();
+  }
 }
 
-recordModeAllTimeBtn?.addEventListener('click', () => setRecordAggMode('all-time'));
-recordModeLatestBtn?.addEventListener('click', () => setRecordAggMode('latest'));
+document.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement | null;
+  const btn = target?.closest?.('[data-record-mode]') as HTMLElement | null;
+  if (!btn) return;
+  const mode = btn.getAttribute('data-record-mode');
+  if (mode === 'all-time' || mode === 'latest') setRecordAggMode(mode);
+});
+syncRecordModeToggle();
 
 async function initBenchmarksDocsView() {
   if (docsLoaded) return;
@@ -825,10 +852,15 @@ function updateHash(next: Record<string, string>) {
   }
 }
 
+function appendRecordModeParam(params: URLSearchParams) {
+  if (recordAggMode === 'latest') params.set('records', 'latest');
+}
+
 function navigateToPlatform(provider: string, device: string) {
   // Let the hashchange event drive routing to avoid “first click” no-op.
   suppressHashHandler = false;
   const params = new URLSearchParams({ view: 'platforms', provider, device });
+  appendRecordModeParam(params);
   const newHash = '#' + params.toString();
   if (location.hash !== newHash) {
     location.hash = newHash;
@@ -859,6 +891,7 @@ function buildResultsHash(
   });
   if (timestamp) params.set('results_timestamp', timestamp);
   if (tab === 'table') params.set('results_anchor', 'table');
+  appendRecordModeParam(params);
   return '#' + params.toString();
 }
 
@@ -871,8 +904,7 @@ function applyResultsRoute(route: Record<string, string>) {
   const timestamp = String(route.results_timestamp || '').trim();
   const tab = route.results_tab === 'graph' ? 'graph' : 'table';
 
-  recordAggMode = String(route.results_agg || '').trim().toLowerCase() === 'latest' ? 'latest' : 'all-time';
-  syncRecordModeToggle();
+  applyRecordModeFromRoute(route);
 
   if (provider || benchmark) {
     const providers = uniqueValues(rawBenchmarks as any, 'provider');
@@ -1004,24 +1036,8 @@ async function applyHashRouting() {
     : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
   activateView(view, true);
   if (view === 'platforms') {
-    const helpTopic = String((h as any).help || '');
-    if (helpTopic === 'metriq-score') {
-      renderMetriqScoreHelp();
-      return;
-    }
-    if (helpTopic === 'overlap-metriq-score') {
-      renderOverlapMetriqScoreHelp();
-      return;
-    }
-    if (h.compare_provider_a && h.compare_device_a && h.compare_provider_b && h.compare_device_b) {
-      await showPlatformComparePage(h.compare_provider_a, h.compare_device_a, h.compare_provider_b, h.compare_device_b);
-      return;
-    }
-    if (h.provider && h.device) {
-      await showPlatformDetailPage(h.provider, h.device);
-      return;
-    }
-    await initPlatformsView(true);
+    applyRecordModeFromRoute(h);
+    await rerenderPlatformsRoute(h);
     return;
   }
   if (view === 'results') {
@@ -1034,6 +1050,27 @@ async function applyHashRouting() {
   if (view === 'benchmarks') {
     await initBenchmarksDocsView();
   }
+}
+
+async function rerenderPlatformsRoute(h: Record<string, string> = parseHash()) {
+  const helpTopic = String((h as any).help || '');
+  if (helpTopic === 'metriq-score') {
+    renderMetriqScoreHelp();
+    return;
+  }
+  if (helpTopic === 'overlap-metriq-score') {
+    renderOverlapMetriqScoreHelp();
+    return;
+  }
+  if (h.compare_provider_a && h.compare_device_a && h.compare_provider_b && h.compare_device_b) {
+    await showPlatformComparePage(h.compare_provider_a, h.compare_device_a, h.compare_provider_b, h.compare_device_b);
+    return;
+  }
+  if (h.provider && h.device) {
+    await showPlatformDetailPage(h.provider, h.device);
+    return;
+  }
+  await initPlatformsView(true);
 }
 
 window.addEventListener('hashchange', () => { applyHashRouting(); });
@@ -1057,7 +1094,9 @@ async function loadBenchmarks() {
         'results' in json[0] || 'params' in json[0] || 'job_type' in json[0]
       );
       const rows = looksLikeEtl ? json.map(adaptMetriqEtlRow) : json;
-      return rows.map(normalizeRun);
+      const normalized = rows.map(normalizeRun);
+      benchmarkRunsCache = normalized;
+      return normalized;
     })();
   }
   return benchmarksPromise;
@@ -1179,6 +1218,81 @@ async function loadPlatformScores() {
   return platformScoresCache;
 }
 
+// ---- Record-mode adjustment for platform Metriq scores ----
+// The published platform score is built from the latest record per benchmark
+// instance. In 'all-time' mode, replace each component's normalized value with
+// the best one among duplicate records of the same benchmark instance in the
+// suite data, then recompute the score as the weighted sum of components.
+// Duplicate records are identified by matching benchmark params, ignoring
+// sampling-effort settings.
+const RECORD_SIG_EXCLUDED_PARAMS = new Set(['shots', 'num_circuits', 'num_random_trials', 'trials', 'seed', 'confidence_level']);
+
+function recordInstanceSig(params: any): string {
+  const p = (params && typeof params === 'object') ? params : {};
+  const keys = Object.keys(p).filter((k) => !RECORD_SIG_EXCLUDED_PARAMS.has(k)).sort();
+  return JSON.stringify(keys.map((k) => [k, p[k]]));
+}
+
+function withAdjustedMetriqScore(detail: any): any {
+  if (recordAggMode !== 'all-time') return detail;
+  const score = detail?.metriq_score;
+  const components = (score && typeof score.components === 'object') ? score.components : null;
+  const runs = benchmarkRunsCache;
+  if (!components || !Array.isArray(runs) || !runs.length) return detail;
+  const provider = String(detail?.provider || '');
+  const device = String(detail?.device || '');
+
+  const parseFinite = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  let changed = false;
+  const adjustedComponents: Record<string, any> = {};
+  Object.entries(components as Record<string, any>).forEach(([name, c]) => {
+    adjustedComponents[name] = c;
+    const anchorTs = c?.normalized_timestamp ?? c?.timestamp ?? c?.raw_timestamp;
+    if (!anchorTs) return;
+    const groupRows = runs.filter((r: any) => String(r?.provider || '') === provider
+      && String(r?.device || '') === device
+      && String(r?.benchmark || '') === String(c?.group || ''));
+    const anchor = groupRows.find((r: any) => r?.timestamp === anchorTs);
+    if (!anchor) return;
+    const sig = recordInstanceSig(anchor.rawParams);
+    const officialValue = parseFinite(c?.normalized);
+    let bestValue = officialValue;
+    let bestTs = c?.normalized_timestamp ?? c?.timestamp ?? null;
+    groupRows.forEach((r: any) => {
+      if (recordInstanceSig(r?.rawParams) !== sig) return;
+      const v = parseFinite(r?.normalizedScores?.[String(c?.metric || '')]);
+      if (v !== null && (bestValue === null || v > bestValue)) {
+        bestValue = v;
+        bestTs = r?.timestamp ?? bestTs;
+      }
+    });
+    if (bestValue !== null && (officialValue === null || bestValue > officialValue)) {
+      changed = true;
+      adjustedComponents[name] = {
+        ...c,
+        normalized: bestValue,
+        normalized_available: true,
+        timestamp: bestTs,
+        normalized_timestamp: bestTs,
+      };
+    }
+  });
+  if (!changed) return detail;
+
+  let total = 0;
+  Object.values(adjustedComponents).forEach((c: any) => {
+    const w = Number(c?.weight);
+    const n = Number(c?.normalized);
+    if (Number.isFinite(w) && Number.isFinite(n)) total += w * n;
+  });
+  return { ...detail, metriq_score: { ...score, value: total, components: adjustedComponents } };
+}
+
 function getPlatformsBaseUrl(indexUrl: string) {
   try {
     if (!indexUrl) return null;
@@ -1227,6 +1341,7 @@ async function loadPlatformDetail(provider: string, device: string) {
 
 function buildPlatformDetailHash(provider: string, device: string) {
   const params = new URLSearchParams({ view: 'platforms', provider, device });
+  appendRecordModeParam(params);
   return '#' + params.toString();
 }
 
@@ -1238,6 +1353,7 @@ function buildCompareHash(providerA: string, deviceA: string, providerB: string,
     compare_provider_b: providerB,
     compare_device_b: deviceB,
   });
+  appendRecordModeParam(params);
   return '#' + params.toString();
 }
 
@@ -1505,6 +1621,7 @@ async function showPlatformComparePage(providerA: string, deviceA: string, provi
     const platforms = Array.isArray((data as any).platforms) ? (data as any).platforms : [];
     setPlatformsIndexCache(platforms);
     try { await loadPlatformScores(); } catch {}
+    try { await loadBenchmarks(); } catch {}
 
     const defaults = findDefaultComparePair(platforms, providerA);
     const left = normalizeCompareSelection(providerA, deviceA, defaults[0]);
@@ -1530,7 +1647,7 @@ async function showPlatformComparePage(providerA: string, deviceA: string, provi
       loadPlatformDetail(leftProvider, leftDevice).catch((err) => ({ provider: leftProvider, device: leftDevice, error: String(err) })),
       loadPlatformDetail(rightProvider, rightDevice).catch((err) => ({ provider: rightProvider, device: rightDevice, error: String(err) })),
     ]);
-    renderPlatformComparePage(leftDetail, rightDetail);
+    renderPlatformComparePage(withAdjustedMetriqScore(leftDetail), withAdjustedMetriqScore(rightDetail));
   } catch (err) {
     console.error('[platforms] compare load failed:', err);
     container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load comparison.</div>';
@@ -1866,6 +1983,7 @@ async function showPlatformDetailPage(provider: string, device: string) {
       setPlatformsIndexCache(platforms);
     }
     try { await loadPlatformScores(); } catch {}
+    try { await loadBenchmarks(); } catch {}
     const json = await loadPlatformDetail(provider, device);
     renderPlatformDetailPage(json);
     scrollToPlatformsLead();
@@ -1879,6 +1997,7 @@ async function showPlatformDetailPage(provider: string, device: string) {
 function renderPlatformDetailPage(detail: any) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
+  detail = withAdjustedMetriqScore(detail);
   const provider = detail?.provider || 'Unknown';
   const device = detail?.device || 'Unknown';
   const runs = detail?.runs ?? 0;
@@ -1942,6 +2061,7 @@ function renderPlatformDetailPage(detail: any) {
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;" title="Which record is used when a benchmark has multiple submissions">Records: ${recordAggMode === 'all-time' ? 'All-time best' : 'Latest'}</span>
       </div>
       ${components.length ? `
         <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
@@ -2333,6 +2453,21 @@ function renderPlatformsTable() {
   if (legacyControls) legacyControls.remove();
   const platforms = Array.isArray(platformsIndexCache) ? platformsIndexCache.slice() : [];
 
+  // Scores shown/sorted follow the record-aggregation mode.
+  const displayScores = new Map<string, number>();
+  platforms.forEach((p: any) => {
+    const key = getDeviceKey(String(p.provider || ''), String(p.device || ''));
+    let v = platformScoresCache ? platformScoresCache.get(key) : undefined;
+    if (recordAggMode === 'all-time' && platformDetailsCache) {
+      const detail = platformDetailsCache.get(key);
+      if (detail) {
+        const adj = Number(withAdjustedMetriqScore(detail)?.metriq_score?.value);
+        if (Number.isFinite(adj)) v = adj;
+      }
+    }
+    if (v !== undefined && Number.isFinite(v)) displayScores.set(key, Number(v));
+  });
+
   let wrap = document.getElementById('platforms-table-wrap') as HTMLDivElement | null;
   if (wrap) {
     wrap.remove();
@@ -2343,6 +2478,12 @@ function renderPlatformsTable() {
 
 		  if (!wrap || !table || !tbody) {
 		    container.innerHTML = '';
+		    const recordToggle = document.createElement('div');
+		    recordToggle.className = 'record-toggle record-toggle--platforms';
+		    recordToggle.setAttribute('role', 'group');
+		    recordToggle.setAttribute('aria-label', 'How to aggregate repeated benchmark records per device');
+		    recordToggle.innerHTML = recordModeToggleHtml();
+		    container.appendChild(recordToggle);
 		    wrap = document.createElement('div');
 		    wrap.id = 'platforms-table-wrap';
 		    table = document.createElement('table');
@@ -2415,8 +2556,8 @@ function renderPlatformsTable() {
 	  filtered.sort((a: any, b: any) => {
 	    const keyA = getDeviceKey(String(a.provider||''), String(a.device||''));
 	    const keyB = getDeviceKey(String(b.provider||''), String(b.device||''));
-	    const sa = platformScoresCache && platformScoresCache.get(keyA);
-	    const sb = platformScoresCache && platformScoresCache.get(keyB);
+	    const sa = displayScores.get(keyA);
+	    const sb = displayScores.get(keyB);
 	    const ca = platformCoverageCache && platformCoverageCache.get(keyA);
 	    const cb = platformCoverageCache && platformCoverageCache.get(keyB);
 	    const qa = platformQubitsCache && platformQubitsCache.get(keyA);
@@ -2460,7 +2601,7 @@ function renderPlatformsTable() {
   if (!tbody) return;
   const maxScore = filtered.reduce((max: number, p: any) => {
     const key = getDeviceKey(String(p.provider || ''), String(p.device || ''));
-    const scoreVal = platformScoresCache && platformScoresCache.get(key);
+    const scoreVal = displayScores.get(key);
     const v = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? Number(scoreVal) : Number.NEGATIVE_INFINITY;
     return v > max ? v : max;
   }, Number.NEGATIVE_INFINITY);
@@ -2478,7 +2619,7 @@ function renderPlatformsTable() {
     const lifecycle = getPlatformLifecycle(provider, device, p);
     const isRetired = lifecycle?.status === 'retired';
     const deviceLabel = renderDeviceLabelHtml(provider, device, p);
-    const scoreVal = platformScoresCache && platformScoresCache.get(key);
+    const scoreVal = displayScores.get(key);
     const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
     const coverageText = coverage && coverage.total > 0 ? `${coverage.covered}/${coverage.total}` : '–';
     const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
@@ -2538,6 +2679,7 @@ function renderPlatformsTable() {
 		  // Sorting indicator updates overwrite header markup; re-bind tooltip triggers after update.
 		  ensurePlatformsHeaderTooltipsBound(table!);
 		  ensurePlatformsProviderFilterBound(table!);
+		  syncRecordModeToggle();
 		}
 
 function adaptMetriqEtlRow(row: any) {
@@ -2590,7 +2732,7 @@ function adaptMetriqEtlRow(row: any) {
     metrics = {};
   }
   const errors: Record<string, number> = {};
-  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams, num_qubits };
+  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams, num_qubits, normalizedScores };
 }
 
 function normalizeRun(run: any) {
