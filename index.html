@@ -155,9 +155,11 @@
       <section id="view-results" hidden>
         <!-- Tabs -->
         <section class="tabs">
-          <header class="tabs__nav" role="tablist" aria-label="Data view selector">
-          <button class="tab" role="tab" aria-selected="false" id="tab-graph" data-target="#panel-graph">Graph</button>
-          <button class="tab is-active" role="tab" aria-selected="true" id="tab-table" data-target="#panel-table">Table</button>
+          <header class="tabs__nav">
+          <div class="tabs__tabset" role="tablist" aria-label="Data view selector">
+            <button class="tab" role="tab" aria-selected="false" id="tab-graph" data-target="#panel-graph">Graph</button>
+            <button class="tab is-active" role="tab" aria-selected="true" id="tab-table" data-target="#panel-table">Table</button>
+          </div>
           </header>
 
           <div class="tabs__panels">
