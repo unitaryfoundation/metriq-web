@@ -3605,7 +3605,19 @@ function populateSmartFilters(values: any[]) {
     provSel.value = tableState.filterProvider || 'all';
   }
   if (devSel) {
-    const opts = unique(values.map(v => String(v.device||'')));
+    // Scope the device options to the selected provider so the Device dropdown
+    // never lists devices from a provider that isn't currently selected.
+    const provFilter = tableState.filterProvider && tableState.filterProvider !== 'all'
+      ? tableState.filterProvider
+      : null;
+    const scoped = provFilter
+      ? values.filter(v => String(v.provider||'') === provFilter)
+      : values;
+    const opts = unique(scoped.map(v => String(v.device||'')));
+    // Drop a stale device selection that no longer belongs to the chosen provider.
+    if (tableState.filterDevice && tableState.filterDevice !== 'all' && !opts.includes(tableState.filterDevice)) {
+      tableState.filterDevice = 'all';
+    }
     devSel.innerHTML = '<option value="all">All</option>' + opts.map(o=>`<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join('');
     devSel.value = tableState.filterDevice || 'all';
   }
