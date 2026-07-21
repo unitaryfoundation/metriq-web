@@ -64,7 +64,13 @@ let platformsIndexCache: any[] | null = null;
 let platformsIndexByKeyCache: Map<string, any> | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformQubitsCache: Map<string, number> | null = null;
-let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
+type PlatformCoverage = {
+  covered: number;
+  runnable: number;
+  unsupported: number;
+  total: number;
+};
+let platformCoverageCache: Map<string, PlatformCoverage> | null = null;
 let platformDetailsCache: Map<string, any> | null = null;
 let platformSortKey: 'score' | 'coverage' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
 let platformSortDir: 'asc' | 'desc' = 'desc';
@@ -1169,22 +1175,42 @@ function extractPlatformNumQubits(detail: any): number | null {
   return null;
 }
 
-function extractPlatformCoverage(detail: any): { covered: number; total: number } | null {
+function extractPlatformCoverage(detail: any): PlatformCoverage | null {
   const comps = detail?.metriq_score?.components;
   if (!comps || typeof comps !== 'object') return null;
   const values = Object.values(comps as Record<string, any>);
   if (!values.length) return null;
   const hasFinite = (value: any) => value !== null && value !== undefined && Number.isFinite(Number(value));
+  const deviceQubits = extractPlatformNumQubits(detail);
   let covered = 0;
+  let unsupported = 0;
   values.forEach((value: any) => {
     const hasResult = value?.normalized_available === true
       || value?.raw_available === true
       || hasFinite(value?.normalized)
       || hasFinite(value?.raw)
       || Boolean(value?.timestamp || value?.normalized_timestamp || value?.raw_timestamp);
-    if (hasResult) covered += 1;
+    if (hasResult) {
+      covered += 1;
+      return;
+    }
+    // A benchmark with no result is unsupported when the device has fewer
+    // qubits than the component structurally requires. Otherwise it is a
+    // runnable benchmark still awaiting a submission. When the requirement or
+    // the device qubit count is unknown, treat it as runnable rather than guess.
+    const required = parseNumQubits(value?.required_num_qubits);
+    if (required !== null && deviceQubits !== null && deviceQubits < required) {
+      unsupported += 1;
+    }
   });
-  return { covered, total: values.length };
+  const total = values.length;
+  return { covered, runnable: total - unsupported, unsupported, total };
+}
+
+function formatCompareCoverage(coverage: PlatformCoverage | null): string {
+  if (!coverage || coverage.runnable <= 0) return '–';
+  const base = `${coverage.covered}/${coverage.runnable}`;
+  return coverage.unsupported > 0 ? `${base} (+${coverage.unsupported} n/a)` : base;
 }
 
 async function loadPlatformScores() {
@@ -1886,7 +1912,7 @@ function renderPlatformComparePage(left: any, right: any) {
     renderCompareMetricRowHtml(renderCompareOverlapScoreLabelHtml(), renderCompareMaybeBetterNumber(leftOverlapScore, rightOverlapScore, 2), renderCompareMaybeBetterNumber(rightOverlapScore, leftOverlapScore, 2)),
   ].join('');
   const dataRows = [
-    renderCompareMetricRow('Benchmark coverage', leftCoverage ? `${leftCoverage.covered}/${leftCoverage.total}` : '–', rightCoverage ? `${rightCoverage.covered}/${rightCoverage.total}` : '–'),
+    renderCompareMetricRow('Benchmark coverage', formatCompareCoverage(leftCoverage), formatCompareCoverage(rightCoverage)),
     renderCompareMetricRow('Runs in suite data', escapeHtml(String(left?.runs ?? '–')), escapeHtml(String(right?.runs ?? '–'))),
     renderCompareMetricRow('First seen in data', left?.first_seen ? escapeHtml(formatDateOnly(left.first_seen)) : '–', right?.first_seen ? escapeHtml(formatDateOnly(right.first_seen)) : '–'),
     renderCompareMetricRow('Last seen in data', left?.last_seen ? escapeHtml(formatDateOnly(left.last_seen)) : '–', right?.last_seen ? escapeHtml(formatDateOnly(right.last_seen)) : '–'),
@@ -2361,7 +2387,7 @@ function ensurePlatformsHeaderTooltipsBound(table: HTMLTableElement) {
       return `Runs per week over the last 12 weeks (newest week on the right).`;
     }
     if (which === 'platforms-coverage') {
-      return `Benchmark components with a recorded result for this device, shown as covered/total.`;
+      return `Submitted results out of the benchmarks this device can run, shown as submitted/runnable. Benchmarks the device cannot run (it has fewer qubits than the benchmark requires) are excluded from the ratio and reported separately as "n/a".`;
     }
     if (which === 'platforms-score') {
       return `Aggregate score for the device. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
@@ -2597,8 +2623,8 @@ function renderPlatformsTable() {
 	      const vb = sb ?? Number.NEGATIVE_INFINITY;
 	      if (va !== vb) return (va < vb ? -1 : 1) * dir;
 	    } else if (platformSortKey === 'coverage') {
-	      const ra = ca && ca.total > 0 ? ca.covered / ca.total : Number.NEGATIVE_INFINITY;
-	      const rb = cb && cb.total > 0 ? cb.covered / cb.total : Number.NEGATIVE_INFINITY;
+	      const ra = ca && ca.runnable > 0 ? ca.covered / ca.runnable : Number.NEGATIVE_INFINITY;
+	      const rb = cb && cb.runnable > 0 ? cb.covered / cb.runnable : Number.NEGATIVE_INFINITY;
 	      if (ra !== rb) return (ra < rb ? -1 : 1) * dir;
 	      const va = ca?.covered ?? Number.NEGATIVE_INFINITY;
 	      const vb = cb?.covered ?? Number.NEGATIVE_INFINITY;
@@ -2649,7 +2675,15 @@ function renderPlatformsTable() {
     const deviceLabel = renderDeviceLabelHtml(provider, device, p);
     const scoreVal = displayScores.get(key);
     const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
-    const coverageText = coverage && coverage.total > 0 ? `${coverage.covered}/${coverage.total}` : '–';
+    const missing = coverage ? coverage.runnable - coverage.covered : 0;
+    const coverageText = coverage && coverage.runnable > 0 ? `${coverage.covered}/${coverage.runnable}` : '–';
+    const coverageTitle = coverage
+      ? `${coverage.covered} submitted, ${missing} runnable but not submitted`
+        + (coverage.unsupported > 0 ? `, ${coverage.unsupported} not supported by this device` : '')
+      : '';
+    const coverageNa = coverage && coverage.unsupported > 0
+      ? ` <span class="coverage-na">+${coverage.unsupported} n/a</span>`
+      : '';
     const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
       ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
       : 0;
@@ -2660,7 +2694,7 @@ function renderPlatformsTable() {
         <td>${numQubits !== undefined && numQubits !== null ? escapeHtml(String(numQubits)) : '—'}</td>
         <td title="${escapeAttr(provider)}">${escapeHtml(provider)}</td>
         <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
-        <td class="num">${escapeHtml(coverageText)}</td>
+        <td class="num"${coverageTitle ? ` title="${escapeAttr(coverageTitle)}"` : ''}>${escapeHtml(coverageText)}${coverageNa}</td>
         <td class="num">${escapeHtml(lastTs || '')}</td>
         <td class="activity-col">${spark}</td>
       </tr>`);
