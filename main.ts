@@ -1175,13 +1175,24 @@ function extractPlatformNumQubits(detail: any): number | null {
   return null;
 }
 
+function deviceMetadataNumQubits(detail: any): number | null {
+  // Only trust the device's own reported qubit count for capability checks,
+  // never a value inferred from benchmark component fields.
+  const md = detail?.current?.device_metadata ?? detail?.device_metadata ?? null;
+  for (const candidate of [md?.num_qubits, md?.max_qubits, md?.qubits, md?.width]) {
+    const n = parseNumQubits(candidate);
+    if (n !== null) return n;
+  }
+  return null;
+}
+
 function extractPlatformCoverage(detail: any): PlatformCoverage | null {
   const comps = detail?.metriq_score?.components;
   if (!comps || typeof comps !== 'object') return null;
   const values = Object.values(comps as Record<string, any>);
   if (!values.length) return null;
   const hasFinite = (value: any) => value !== null && value !== undefined && Number.isFinite(Number(value));
-  const deviceQubits = extractPlatformNumQubits(detail);
+  const deviceQubits = deviceMetadataNumQubits(detail);
   let covered = 0;
   let unsupported = 0;
   values.forEach((value: any) => {
@@ -1197,7 +1208,8 @@ function extractPlatformCoverage(detail: any): PlatformCoverage | null {
     // A benchmark with no result is unsupported when the device has fewer
     // qubits than the component structurally requires. Otherwise it is a
     // runnable benchmark still awaiting a submission. When the requirement or
-    // the device qubit count is unknown, treat it as runnable rather than guess.
+    // the device's reported qubit count is unknown, treat it as runnable
+    // rather than guess.
     const required = parseNumQubits(value?.required_num_qubits);
     if (required !== null && deviceQubits !== null && deviceQubits < required) {
       unsupported += 1;
@@ -1208,8 +1220,8 @@ function extractPlatformCoverage(detail: any): PlatformCoverage | null {
 }
 
 function formatCompareCoverage(coverage: PlatformCoverage | null): string {
-  if (!coverage || coverage.runnable <= 0) return '–';
-  const base = `${coverage.covered}/${coverage.runnable}`;
+  if (!coverage) return '–';
+  const base = coverage.runnable > 0 ? `${coverage.covered}/${coverage.runnable}` : '–';
   return coverage.unsupported > 0 ? `${base} (+${coverage.unsupported} n/a)` : base;
 }
 
