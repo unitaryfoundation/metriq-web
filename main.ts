@@ -64,6 +64,11 @@ let platformsIndexCache: any[] | null = null;
 let platformsIndexByKeyCache: Map<string, any> | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformQubitsCache: Map<string, number> | null = null;
+type BaselinePlatform = {
+  provider: string;
+  device: string;
+  series: string | null;
+};
 let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
 let platformDetailsCache: Map<string, any> | null = null;
 let platformSortKey: 'score' | 'coverage' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
@@ -77,8 +82,17 @@ let filtersInitialized = false;
 let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
-// Optional: baseline device name from config (highlighted in chart/table)
-let baselineDevice: string | null = null;
+// Canonical scoring baseline published by metriq-data (highlighted in chart/table).
+let baselinePlatform: BaselinePlatform | null = null;
+
+function setPublishedBaseline(value: any) {
+  const provider = typeof value?.provider === 'string' ? value.provider.trim() : '';
+  const device = typeof value?.device === 'string' ? value.device.trim() : '';
+  const series = typeof value?.series === 'string' ? value.series.trim() : '';
+  baselinePlatform = provider && device
+    ? { provider, device, series: series || null }
+    : null;
+}
 
 function normalizePlatformLifecycle(value: any) {
   if (!value || typeof value !== 'object') return null;
@@ -147,7 +161,11 @@ function renderDeviceBadgesHtml(provider: string, device: string, source?: any) 
     const lifecycleBadge = renderLifecycleBadgeHtml(lifecycle);
     if (lifecycleBadge) badges.push(lifecycleBadge);
   }
-  if (baselineDevice && String(device || '') === baselineDevice) {
+  if (
+    baselinePlatform
+    && String(provider || '') === baselinePlatform.provider
+    && String(device || '') === baselinePlatform.device
+  ) {
     badges.push('<span class="device-badge baseline-badge">Baseline</span>');
   }
   return badges.length ? ` ${badges.join(' ')}` : '';
@@ -1127,13 +1145,16 @@ async function loadPlatformsIndex() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
         const json = await resp.json();
         if (json && Array.isArray(json.platforms)) {
+          setPublishedBaseline(json.baseline);
           setPlatformsIndexCache(json.platforms);
           return json;
         }
+        setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       } catch (err) {
         console.warn('[platforms] failed to load index:', err);
+        setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       }
@@ -3881,11 +3902,6 @@ async function initBenchmarksView() {
       if (skeletonGraph) skeletonGraph.style.display = 'none';
       return;
     }
-    // Read baseline device from config if available
-    try {
-      const bd = (config && typeof (config as any).baselineDevice === 'string') ? String((config as any).baselineDevice).trim() : '';
-      baselineDevice = bd || null;
-    } catch { baselineDevice = null; }
     setupMetrics(rawBenchmarks, config);
     setupFilters(rawBenchmarks);
     refreshMetricOptions(rawBenchmarks);

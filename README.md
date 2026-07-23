@@ -92,18 +92,23 @@ Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish th
 
 ## Baseline highlighting
 
-- To highlight a specific device across both the chart and the table, add `baselineDevice` to `data/config.json`:
+- The baseline is read from the `baseline` object published at the root of the
+  configured `platformsIndexUrl`:
 
 ```json
 {
-  "benchmarksUrl": "https://unitaryfoundation.github.io/metriq-data/benchmark.latest.json",
-  "platformsIndexUrl": "https://unitaryfoundation.github.io/metriq-data/platforms/index.json",
-  "baselineDevice": "Device A",
-  "benchmarkPages": []
+  "baseline": {
+    "provider": "ibm",
+    "device": "ibm_boston",
+    "series": "v0.7"
+  }
 }
 ```
 
-- The baseline device will render with a bold badge in the table and an emphasized overlay in the chart.
+- The provider and device are matched together, and the baseline platform renders with
+  a badge wherever device labels are shown. Score charts use the horizontal 100-point
+  reference line. Baseline selection remains owned by `metriq-data`; no duplicate web
+  configuration is required.
 
 ## Guided Tour
 
