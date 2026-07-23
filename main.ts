@@ -1221,8 +1221,12 @@ function extractPlatformCoverage(detail: any): PlatformCoverage | null {
 
 function formatCompareCoverage(coverage: PlatformCoverage | null): string {
   if (!coverage) return '–';
-  const base = coverage.runnable > 0 ? `${coverage.covered}/${coverage.runnable}` : '–';
-  return coverage.unsupported > 0 ? `${base} (+${coverage.unsupported} n/a)` : base;
+  if (coverage.runnable <= 0) {
+    return coverage.unsupported > 0 ? `– (${coverage.unsupported} not supported)` : '–';
+  }
+  const pct = Math.round((coverage.covered / coverage.runnable) * 100);
+  const base = `${pct}% (${coverage.covered} of ${coverage.runnable})`;
+  return coverage.unsupported > 0 ? `${base}, ${coverage.unsupported} not supported` : base;
 }
 
 async function loadPlatformScores() {
@@ -2399,7 +2403,7 @@ function ensurePlatformsHeaderTooltipsBound(table: HTMLTableElement) {
       return `Runs per week over the last 12 weeks (newest week on the right).`;
     }
     if (which === 'platforms-coverage') {
-      return `Submitted results out of the benchmarks this device can run, shown as submitted/runnable. Benchmarks the device cannot run (it has fewer qubits than the benchmark requires) are excluded from the ratio and reported separately as "n/a".`;
+      return `Share of the benchmarks this device can run that have a submitted result. Benchmarks the device cannot run, because it has fewer qubits than the benchmark requires, are left out of the ratio. Hover a row for the underlying counts.`;
     }
     if (which === 'platforms-score') {
       return `Aggregate score for the device. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
@@ -2687,14 +2691,18 @@ function renderPlatformsTable() {
     const deviceLabel = renderDeviceLabelHtml(provider, device, p);
     const scoreVal = displayScores.get(key);
     const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
+    // Show the ratio as a percentage so rows stay comparable: the denominator is
+    // the number of benchmarks each device can actually run, which differs per
+    // device. The counts behind it live in the tooltip.
     const missing = coverage ? coverage.runnable - coverage.covered : 0;
-    const coverageText = coverage && coverage.runnable > 0 ? `${coverage.covered}/${coverage.runnable}` : '–';
+    const coverageText = coverage && coverage.runnable > 0
+      ? `${Math.round((coverage.covered / coverage.runnable) * 100)}%`
+      : '–';
     const coverageTitle = coverage
-      ? `${coverage.covered} submitted, ${missing} runnable but not submitted`
-        + (coverage.unsupported > 0 ? `, ${coverage.unsupported} not supported by this device` : '')
-      : '';
-    const coverageNa = coverage && coverage.unsupported > 0
-      ? ` <span class="coverage-na">+${coverage.unsupported} n/a</span>`
+      ? `${coverage.covered} of ${coverage.runnable} runnable benchmarks submitted`
+        + (coverage.unsupported > 0
+          ? `, ${coverage.unsupported} not supported by this device`
+          : '')
       : '';
     const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
       ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
@@ -2706,7 +2714,7 @@ function renderPlatformsTable() {
         <td>${numQubits !== undefined && numQubits !== null ? escapeHtml(String(numQubits)) : '—'}</td>
         <td title="${escapeAttr(provider)}">${escapeHtml(provider)}</td>
         <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
-        <td class="num"${coverageTitle ? ` title="${escapeAttr(coverageTitle)}"` : ''}>${escapeHtml(coverageText)}${coverageNa}</td>
+        <td class="num"${coverageTitle ? ` title="${escapeAttr(coverageTitle)}"` : ''}>${escapeHtml(coverageText)}</td>
         <td class="num">${escapeHtml(lastTs || '')}</td>
         <td class="activity-col">${spark}</td>
       </tr>`);
