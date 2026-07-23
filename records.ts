@@ -97,8 +97,11 @@ export function variantParamSummaries(runs: any[], extraExcludedKeys: string[] =
     group.forEach((run) => {
       const p = paramsOf(run);
       const parts = varyingKeys
-        .filter((k) => p[k] !== undefined)
-        .map((k) => `${k}=${typeof p[k] === 'object' ? JSON.stringify(p[k]) : String(p[k])}`);
+        .map((k) => {
+          const v = p[k];
+          if (v === undefined) return `${k}=—`;
+          return `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`;
+        });
       summaries.set(run, parts.join(', '));
     });
   });
