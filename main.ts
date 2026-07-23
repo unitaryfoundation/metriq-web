@@ -1,3 +1,5 @@
+import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries } from './records.js';
+
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
 const UPDATES_JSON = "./data/updates.json";
@@ -440,47 +442,23 @@ tabTable?.addEventListener("click", () => activateTab("table"));
 
 // ---- Duplicate-record aggregation ----
 // The dataset can contain multiple records for the same provider/device/benchmark.
-// 'all-time' (default) keeps the best-scoring record per group; 'latest' keeps the
-// most recent one. The downloadable JSON always contains every record.
-type RecordAggMode = 'all-time' | 'latest';
+// Records of the same benchmark instance (matching params up to sampling-effort
+// settings) collapse per the mode below: 'all-time' (default) keeps the
+// best-scoring record, 'latest' the most recent one. Records that differ in a
+// meaningful param (e.g. num_qubits) always stay visible as distinct results.
+// The downloadable JSON always contains every record. See records.ts.
 let recordAggMode: RecordAggMode = 'all-time';
 // Runs indexed by provider::device::benchmark, with per-run instance
 // signatures precomputed, so score adjustments avoid rescanning all runs.
 let benchmarkRunsByGroup: Map<string, Array<{ run: any; sig: string }>> | null = null;
 
-function runTimestampMs(run: any): number {
-  const t = Number(new Date(run?.timestamp));
-  return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
-}
+// Params whose values already have a dedicated display slot, so variant badges
+// and tooltips don't need to repeat them (the Qubits column/tooltip covers the
+// qubit-count aliases; the Benchmark column shows the benchmark name).
+const VARIANT_BADGE_EXCLUDED_PARAMS = ['benchmark_name', 'num_qubits', 'max_qubits', 'width'];
 
-function isPreferredRecord(candidate: any, incumbent: any, metricId: string): boolean {
-  const cv = getMetricValue(candidate, metricId);
-  const iv = getMetricValue(incumbent, metricId);
-  if (recordAggMode === 'latest') {
-    // Newest record wins, but a record with a displayable value beats one
-    // without (some records lack a metriq_score and would render as "—").
-    if ((cv === null) !== (iv === null)) return cv !== null;
-    return runTimestampMs(candidate) > runTimestampMs(incumbent);
-  }
-  // 'all-time': higher metric value wins (surfaced metrics are higher-is-better);
-  // records without a value lose, and ties go to the more recent record.
-  const c = cv === null ? Number.NEGATIVE_INFINITY : cv;
-  const i = iv === null ? Number.NEGATIVE_INFINITY : iv;
-  if (c !== i) return c > i;
-  return runTimestampMs(candidate) > runTimestampMs(incumbent);
-}
-
-function dedupeRunsForDisplay(runs: any[], metricId: string): any[] {
-  if (!Array.isArray(runs) || runs.length <= 1) return Array.isArray(runs) ? runs : [];
-  const byGroup = new Map<string, any>();
-  runs.forEach((run) => {
-    const key = `${String(run?.provider || '')}::${String(run?.device || '')}::${String(run?.benchmark || '')}`;
-    const prev = byGroup.get(key);
-    if (!prev || isPreferredRecord(run, prev, metricId)) {
-      byGroup.set(key, run);
-    }
-  });
-  return byGroup.size === runs.length ? runs : Array.from(byGroup.values());
+function dedupeRunsForDisplayWithMetric(runs: any[], metricId: string): any[] {
+  return dedupeRunsForDisplay(runs, recordAggMode, (run) => getMetricValue(run, metricId));
 }
 
 function syncRecordModeToggle() {
@@ -1239,14 +1217,7 @@ async function loadPlatformScores() {
 // the best one among duplicate records of the same benchmark instance in the
 // suite data, then recompute the score as the weighted sum of components.
 // Duplicate records are identified by matching benchmark params, ignoring
-// sampling-effort settings.
-const RECORD_SIG_EXCLUDED_PARAMS = new Set(['shots', 'num_circuits', 'num_random_trials', 'trials', 'seed', 'confidence_level']);
-
-function recordInstanceSig(params: any): string {
-  const p = (params && typeof params === 'object') ? params : {};
-  const keys = Object.keys(p).filter((k) => !RECORD_SIG_EXCLUDED_PARAMS.has(k)).sort();
-  return JSON.stringify(keys.map((k) => [k, p[k]]));
-}
+// sampling-effort settings (recordInstanceSig in records.ts).
 
 function getRunGroupKey(provider: string, device: string, benchmark: string) {
   return `${provider}::${device}::${benchmark}`;
@@ -3413,6 +3384,8 @@ async function renderChart(values, token, metric) {
           { field: 'device', title: 'Device' },
           { field: 'provider', title: 'Provider' },
           { field: 'benchmark', title: 'Benchmark' },
+          { field: 'num_qubits', title: 'Qubits' },
+          { field: 'variantParams', title: 'Params' },
           { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
           { field: 'metricError', title: 'Error', type: 'quantitative', format: tooltipFormat },
           { field: 'timestamp', title: 'Timestamp', type: 'temporal', format: '%Y-%m-%d %H:%M' }
@@ -3675,9 +3648,12 @@ function renderStaticTable(values: any[]) {
   // Init filters if first time
   populateSmartFilters(values);
 
-  // Apply filters, then collapse duplicate records per device/benchmark.
+  // Apply filters, then collapse duplicate records per device/benchmark instance.
   // Dedupe runs after the filters so timestamp deep-links still pin their exact record.
-  const working = dedupeRunsForDisplay(applyTableFilters(values.slice()), metric.id);
+  const working = dedupeRunsForDisplayWithMetric(applyTableFilters(values.slice()), metric.id);
+  // Distinct results can share a device/benchmark while differing in params other
+  // than qubit count (e.g. num_layers); badge those so sibling rows stay tellable apart.
+  const variantSummaries = variantParamSummaries(working, VARIANT_BADGE_EXCLUDED_PARAMS);
 	  sortTableRows(working);
 	
 	  const table = document.createElement('table');
@@ -3733,10 +3709,14 @@ function renderStaticTable(values: any[]) {
       const content = isScore ? `<a href="#" class="metric-link" data-role="score">${disp}</a>` : disp;
       return `<td class="num">${content}</td>`;
     }).join('');
+    const variantLabel = variantSummaries.get(run) || '';
+    const variantBadge = variantLabel
+      ? ` <span class="param-badge" title="Parameters distinguishing this result from others of the same benchmark on this device">${escapeHtml(variantLabel)}</span>`
+      : '';
     tr.innerHTML = `
       <td>${escapeHtml(run.provider || '')}</td>
       <td><a href="${deviceHref}" class="metric-link" data-role="device">${deviceLabel}</a></td>
-      <td><a href="${benchHref}" class="metric-link" data-role="benchmark">${escapeHtml(run.benchmark || '')}</a></td>
+      <td><a href="${benchHref}" class="metric-link" data-role="benchmark">${escapeHtml(run.benchmark || '')}</a>${variantBadge}</td>
       <td class="num">${run.num_qubits !== undefined && run.num_qubits !== null ? escapeHtml(String(run.num_qubits)) : '—'}</td>
       ${metricCells}
       <td class="num">${escapeHtml(formatDateOnly(run.timestamp))}</td>`;
@@ -3839,7 +3819,9 @@ async function drawChart() {
   }
   const metric = getActiveMetric();
   updateChartHeading(metric);
-  const chartValues = dedupeRunsForDisplay(filtered, metric.id)
+  const dedupedRuns = dedupeRunsForDisplayWithMetric(filtered, metric.id);
+  const chartVariantSummaries = variantParamSummaries(dedupedRuns, VARIANT_BADGE_EXCLUDED_PARAMS);
+  const chartValues = dedupedRuns
     .map(run => {
       const metricValue = getMetricValue(run, metric.id);
       if (metricValue === null) return null;
@@ -3855,7 +3837,9 @@ async function drawChart() {
           metricUpper = null;
         }
       }
-      return { ...run, metricValue, metricError, metricLower, metricUpper };
+      // undefined (not '') so the tooltip omits the row when there is no variant info
+      const variantParams = chartVariantSummaries.get(run) || undefined;
+      return { ...run, metricValue, metricError, metricLower, metricUpper, variantParams };
     })
     .filter(Boolean);
   await renderChart(chartValues, token, metric);
