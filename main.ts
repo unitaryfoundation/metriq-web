@@ -163,8 +163,7 @@ function renderDeviceBadgesHtml(provider: string, device: string, source?: any) 
   }
   if (
     baselinePlatform
-    && String(provider || '') === baselinePlatform.provider
-    && String(device || '') === baselinePlatform.device
+    && getDeviceKey(String(provider || '').trim(), String(device || '').trim()) === getDeviceKey(baselinePlatform.provider, baselinePlatform.device)
   ) {
     badges.push('<span class="device-badge baseline-badge">Baseline</span>');
   }

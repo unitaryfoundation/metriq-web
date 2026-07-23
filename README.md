@@ -92,7 +92,7 @@ Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish th
 
 ## Baseline highlighting
 
-- The baseline is read from the `baseline` object published at the root of the
+- The baseline is read from the `baseline` object published at the root of the platforms index JSON served at the
   configured `platformsIndexUrl`:
 
 ```json
