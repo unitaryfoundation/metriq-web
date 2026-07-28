@@ -1,7 +1,12 @@
 import { cp, copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const outputDirectory = "build";
+const rootDirectory = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const outputDirectory = path.join(rootDirectory, "build");
 const staticFiles = [
   "index.html",
   "footer.html",
@@ -17,11 +22,15 @@ await rm(outputDirectory, { recursive: true, force: true });
 await mkdir(outputDirectory, { recursive: true });
 
 await Promise.all(
-  staticFiles.map((file) => copyFile(file, path.join(outputDirectory, file))),
+  staticFiles.map((file) =>
+    copyFile(path.join(rootDirectory, file), path.join(outputDirectory, file)),
+  ),
 );
 await Promise.all(
   ["data", "public"].map((directory) =>
-    cp(directory, path.join(outputDirectory, directory), { recursive: true }),
+    cp(path.join(rootDirectory, directory), path.join(outputDirectory, directory), {
+      recursive: true,
+    }),
   ),
 );
 

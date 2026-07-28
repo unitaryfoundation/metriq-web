@@ -11,8 +11,8 @@ permissions:
   pages: write
 
 concurrency:
-  group: "pr-preview-${{ github.event.pull_request.number }}"
-  cancel-in-progress: true
+  group: 'metriq-pages'
+  queue: max
 
 jobs:
   build-preview:

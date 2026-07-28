@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: 'metriq-pages'
-  cancel-in-progress: true
+  queue: max
 
 jobs:
   deploy:
