@@ -76,13 +76,29 @@ The container reads `data/config.json`. Add benchmark landing pages to `config.j
 
 ## GitHub Pages CI/CD pipeline
 
-Deploying the static site is handled by `.github/workflows/deploy-pages.yml`. The workflow runs on pushes to `main` or when triggered manually. It:
+Production and pull-request previews share the `gh-pages` deployment branch:
 
-1. Installs Node dependencies.
-2. Builds TypeScript from the repo root.
-3. Uploads the static site bundle (`index.html`, compiled JS, CSS, `data/`, and `public/`) to GitHub Pages.
+- `.github/workflows/deploy-pages.yml` deploys production after pushes to `main`.
+- `.github/workflows/pr-preview.yml` deploys same-repository pull requests to
+  `https://metriq.info/pr-preview/pr-<number>/`, posts a sticky preview link on the pull
+  request, updates it on new commits, and removes it when the pull request closes.
+- Production deployments preserve the `pr-preview/` directory, so updating production does
+  not remove active previews.
 
-Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish the latest build.
+Both workflows use `npm run build:site`, which compiles TypeScript, generates the RSS feed,
+and prepares the static `build/` directory. Production adds the custom-domain `CNAME`; preview
+artifacts intentionally do not.
+
+Repository settings must use **Settings → Pages → Deploy from a branch**, with `gh-pages` and
+`/(root)` selected. **Settings → Actions → General → Workflow permissions** must allow read and
+write access so the workflows can update `gh-pages` and the preview comment.
+
+When migrating an existing deployment, let the production workflow populate `gh-pages` before
+switching the Pages source, so the custom-domain site remains available throughout the change.
+
+The default GitHub token cannot deploy previews for pull requests from forks. Those workflows
+report the skipped deployment in their job summary instead of running untrusted fork code with
+elevated permissions.
 
 ## Metrics support
 
