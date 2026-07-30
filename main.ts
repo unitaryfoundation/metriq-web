@@ -71,6 +71,7 @@ let platformDetailsCache: Map<string, any> | null = null;
 let platformSortKey: 'score' | 'coverage' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
 let platformSortDir: 'asc' | 'desc' = 'desc';
 let platformProviderFilter = '';
+let showRetiredDevices = false;
 let deviceSeriesCache: Map<string, number[]> | null = null;
 let suppressHashHandler = false;
 let chartView = null;
@@ -480,7 +481,7 @@ function applyRecordModeFromRoute(route: Record<string, string>) {
 
 function recordModeToggleHtml() {
   return `
-    <span class="record-toggle__label">Benchmark Record Type:</span>
+    <span class="record-toggle__label">Record type</span>
     <button type="button" class="btn-mini" data-record-mode="all-time" aria-pressed="false" title="Show the best all-time recorded result for each device and benchmark">All-time</button>
     <button type="button" class="btn-mini" data-record-mode="latest" aria-pressed="false" title="Show the most recent recorded result for each device and benchmark">Latest</button>
   `;
@@ -2477,12 +2478,27 @@ function renderPlatformsTable() {
 
 		  if (!wrap || !table || !tbody) {
 		    container.innerHTML = '';
+		    const platformControls = document.createElement('div');
+		    platformControls.className = 'platform-controls';
+		    const retiredDevicesToggle = document.createElement('label');
+		    retiredDevicesToggle.className = 'retired-devices-toggle';
+		    retiredDevicesToggle.innerHTML = `
+		      <span>Show retired devices</span>
+		      <input type="checkbox"${showRetiredDevices ? ' checked' : ''} />
+		    `.trim();
+		    const retiredDevicesCheckbox = retiredDevicesToggle.querySelector('input') as HTMLInputElement | null;
+		    retiredDevicesCheckbox?.addEventListener('change', () => {
+		      showRetiredDevices = retiredDevicesCheckbox.checked;
+		      renderPlatformsTable();
+		    });
+		    platformControls.appendChild(retiredDevicesToggle);
 		    const recordToggle = document.createElement('div');
 		    recordToggle.className = 'record-toggle record-toggle--platforms';
 		    recordToggle.setAttribute('role', 'group');
 		    recordToggle.setAttribute('aria-label', 'How to aggregate repeated benchmark records per device');
 		    recordToggle.innerHTML = recordModeToggleHtml();
-		    container.appendChild(recordToggle);
+		    platformControls.appendChild(recordToggle);
+		    container.appendChild(platformControls);
 		    wrap = document.createElement('div');
 		    wrap.id = 'platforms-table-wrap';
 		    table = document.createElement('table');
@@ -2545,6 +2561,8 @@ function renderPlatformsTable() {
 
 	  const providerTerm = (platformProviderFilter || '').toLowerCase().trim();
 	  const filtered = platforms.filter((p: any) => {
+	    const lifecycle = getPlatformLifecycle(String(p.provider || ''), String(p.device || ''), p);
+	    if (!showRetiredDevices && lifecycle?.status === 'retired') return false;
 	    if (providerTerm) {
 	      const prov = String(p.provider || '').toLowerCase();
 	      if (prov !== providerTerm) return false;
@@ -2636,7 +2654,9 @@ function renderPlatformsTable() {
         <td class="activity-col">${spark}</td>
       </tr>`);
   });
-  tbody.innerHTML = rows.join('');
+  tbody.innerHTML = rows.length
+    ? rows.join('')
+    : `<tr class="platforms-empty-row"><td colspan="7">${showRetiredDevices ? 'No devices match the current filters.' : 'No active devices match the current filters.'}</td></tr>`;
   if (table && (table as any).dataset) {
     const dataTable = table as any;
     if (!dataTable.dataset.scoreClickBound) {

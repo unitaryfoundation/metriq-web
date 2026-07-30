@@ -201,6 +201,8 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 #platforms-table-wrap tbody tr.platform-row--retired{background:#fffaf2}
 #platforms-table-wrap tbody tr.platform-row--retired:nth-child(even){background:#fff7ed}
 #platforms-table-wrap tbody tr.platform-row--retired:hover{background:#ffedd5}
+#platforms-table-wrap tbody tr.platforms-empty-row:hover{background:transparent}
+#platforms-table-wrap tbody tr.platforms-empty-row td{padding:28px 12px;text-align:center;color:var(--muted);white-space:normal}
 #platforms-table-wrap th.activity-col,#platforms-table-wrap td.activity-col{text-align:center}
 #platforms-table-wrap th.compare-col,#platforms-table-wrap td.compare-col{text-align:center;white-space:nowrap}
 #platforms-table-wrap td.activity-col svg{display:block;margin:0 auto}
@@ -541,7 +543,11 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .tabs__tabset{display:flex;align-items:center;gap:16px}
 .record-toggle{display:flex;align-items:center;gap:6px;margin-left:auto}
 .record-toggle__label{font-family:var(--font-sans);font-size:12px;font-weight:600;letter-spacing:.02em;color:var(--muted)}
-.record-toggle--platforms{margin:0 0 12px;justify-content:flex-end}
+.platform-controls{display:flex;align-items:center;justify-content:flex-end;gap:18px;flex-wrap:wrap;margin:0 0 12px}
+.record-toggle--platforms{margin:0;justify-content:flex-end}
+.retired-devices-toggle{display:inline-flex;align-items:center;gap:7px;color:var(--muted);font-family:var(--font-sans);font-size:12px;font-weight:600;letter-spacing:.02em;cursor:pointer}
+.retired-devices-toggle input{width:15px;height:15px;margin:0;accent-color:var(--accent);cursor:pointer}
+.retired-devices-toggle input:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 65%,transparent);outline-offset:2px}
 .param-badge{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:rgba(37,99,235,.07);color:var(--muted);font-family:var(--font-sans);font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap;vertical-align:middle}
 .tabs__panels{padding:24px 0 36px;background:transparent}
 .panel{display:none}
