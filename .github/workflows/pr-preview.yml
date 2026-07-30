@@ -1,0 +1,57 @@
+name: PR Preview
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  pages: write
+
+concurrency:
+  group: 'metriq-pages'
+  queue: max
+
+jobs:
+  build-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        if: github.event.pull_request.head.repo.fork == false && github.event.action != 'closed'
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        if: github.event.pull_request.head.repo.fork == false && github.event.action != 'closed'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 25
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        if: github.event.pull_request.head.repo.fork == false && github.event.action != 'closed'
+        run: npm ci --no-audit --no-fund
+
+      - name: Build preview site
+        if: github.event.pull_request.head.repo.fork == false && github.event.action != 'closed'
+        run: npm run build:site
+
+      - name: Deploy PR preview
+        if: github.event.pull_request.head.repo.fork == false
+        id: preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./build
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+          pages-base-url: metriq.info
+          wait-for-pages-deployment: false
+          action: auto
+
+      - name: Preview skipped for fork PR
+        if: github.event.pull_request.head.repo.fork == true
+        run: |
+          echo "### PR preview not deployed for fork PRs" >> "$GITHUB_STEP_SUMMARY"
+          echo "The preview action cannot deploy from forks with the default token permissions." >> "$GITHUB_STEP_SUMMARY"
