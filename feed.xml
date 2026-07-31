@@ -21,6 +21,15 @@
             <description><![CDATA[IBM's ibm_miami and OriginQ's WK_C180 have been added to the dataset, with more devices on the way. Check back often for updates!]]></description>
         </item>
         <item>
+            <title><![CDATA[Rigetti Ankaa-3 retired]]></title>
+            <link>https://metriq.info/#update=2026-04-17-ankaa-3-retired</link>
+            <guid isPermaLink="false">https://metriq.info/#update=2026-04-17-ankaa-3-retired</guid>
+            <pubDate>Fri, 17 Apr 2026 00:00:00 GMT</pubDate>
+            <description><![CDATA[Rigetti retired Ankaa-3 on April 17, 2026. Historical benchmark results remain available in Metriq under “Show retired devices”.
+
+View announcement: https://rigetti.statuspage.io/incidents/dbsh9sb7wt1k]]></description>
+        </item>
+        <item>
             <title><![CDATA[IBM and OriginQ retired devices]]></title>
             <link>https://metriq.info/#update=2026-04-15-retired-devices</link>
             <guid isPermaLink="false">https://metriq.info/#update=2026-04-15-retired-devices</guid>
