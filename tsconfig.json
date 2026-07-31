@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "CommonJS",
+    "module": "ES2020",
     "moduleResolution": "Node",
     "ignoreDeprecations": "5.0",
     "lib": ["DOM", "ES2020"],
@@ -15,6 +15,7 @@
   },
   "include": [
     "main.ts",
+    "records.ts",
     "tour.ts"
   ],
   "exclude": ["node_modules", "**/*.test.ts"]

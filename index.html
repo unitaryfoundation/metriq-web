@@ -160,6 +160,11 @@
             <button class="tab" role="tab" aria-selected="false" id="tab-graph" data-target="#panel-graph">Graph</button>
             <button class="tab is-active" role="tab" aria-selected="true" id="tab-table" data-target="#panel-table">Table</button>
           </div>
+          <div class="record-toggle" role="group" aria-label="How to aggregate repeated benchmark records per device">
+            <span class="record-toggle__label">Record type</span>
+            <button type="button" class="btn-mini is-current" data-record-mode="all-time" aria-pressed="true" title="Show the best all-time recorded result for each device and benchmark">All-time</button>
+            <button type="button" class="btn-mini" data-record-mode="latest" aria-pressed="false" title="Show the most recent recorded result for each device and benchmark">Latest</button>
+          </div>
           </header>
 
           <div class="tabs__panels">

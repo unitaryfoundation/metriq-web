@@ -14,6 +14,14 @@
     "body": "IBM's ibm_miami and OriginQ's WK_C180 have been added to the dataset, with more devices on the way. Check back often for updates!"
   },
   {
+    "id": "2026-04-17-ankaa-3-retired",
+    "date": "2026-04-17",
+    "title": "Rigetti Ankaa-3 retired",
+    "body": "Rigetti retired Ankaa-3 on April 17, 2026. Historical benchmark results remain available in Metriq under “Show retired devices”.",
+    "href": "https://rigetti.statuspage.io/incidents/dbsh9sb7wt1k",
+    "linkText": "View announcement"
+  },
+  {
     "id": "2026-04-15-retired-devices",
     "date": "2026-04-15",
     "title": "IBM and OriginQ retired devices",
