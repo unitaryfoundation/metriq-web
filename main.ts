@@ -69,7 +69,6 @@ let platformQubitsCache: Map<string, number> | null = null;
 type BaselinePlatform = {
   provider: string;
   device: string;
-  series: string | null;
 };
 let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
 let platformDetailsCache: Map<string, any> | null = null;
@@ -91,10 +90,24 @@ let baselinePlatform: BaselinePlatform | null = null;
 function setPublishedBaseline(value: any) {
   const provider = typeof value?.provider === 'string' ? value.provider.trim() : '';
   const device = typeof value?.device === 'string' ? value.device.trim() : '';
-  const series = typeof value?.series === 'string' ? value.series.trim() : '';
   baselinePlatform = provider && device
-    ? { provider, device, series: series || null }
+    ? { provider, device }
     : null;
+}
+
+function getNormalizedBaselineKey(provider: string, device: string) {
+  return getDeviceKey(provider.trim().toLowerCase(), device.trim().toLowerCase());
+}
+
+function warnIfPublishedBaselineMissing(platforms: any[]) {
+  if (!baselinePlatform) return;
+  const baselineKey = getNormalizedBaselineKey(baselinePlatform.provider, baselinePlatform.device);
+  const hasMatch = platforms.some((platform: any) => (
+    getNormalizedBaselineKey(String(platform?.provider || ''), String(platform?.device || '')) === baselineKey
+  ));
+  if (!hasMatch) {
+    console.warn('[platforms] published baseline does not match any platform in the index:', baselinePlatform);
+  }
 }
 
 function normalizePlatformLifecycle(value: any) {
@@ -166,7 +179,7 @@ function renderDeviceBadgesHtml(provider: string, device: string, source?: any) 
   }
   if (
     baselinePlatform
-    && getDeviceKey(String(provider || '').trim(), String(device || '').trim()) === getDeviceKey(baselinePlatform.provider, baselinePlatform.device)
+    && getNormalizedBaselineKey(String(provider || ''), String(device || '')) === getNormalizedBaselineKey(baselinePlatform.provider, baselinePlatform.device)
   ) {
     badges.push('<span class="device-badge baseline-badge">Baseline</span>');
   }
@@ -1125,6 +1138,7 @@ async function loadPlatformsIndex() {
         if (json && Array.isArray(json.platforms)) {
           setPublishedBaseline(json.baseline);
           setPlatformsIndexCache(json.platforms);
+          warnIfPublishedBaselineMissing(json.platforms);
           return json;
         }
         setPublishedBaseline(null);

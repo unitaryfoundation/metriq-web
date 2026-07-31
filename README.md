@@ -98,9 +98,9 @@ Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish th
 ```json
 {
   "baseline": {
-    "provider": "ibm",
-    "device": "ibm_boston",
-    "series": "v0.7"
+    "provider": "<provider>",
+    "device": "<device>",
+    "series": "<series>"
   }
 }
 ```

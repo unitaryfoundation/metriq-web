@@ -1,13 +1,5 @@
 [
   {
-    "id": "2026-07-23-torino-retired-boston-baseline",
-    "date": "2026-07-23",
-    "title": "IBM Torino retired; Boston is the new baseline",
-    "body": "IBM retired ibm_torino on April 1, 2026. Metriq now uses ibm_boston, the latest Heron r3 platform in our dataset, as the normalization baseline. Historical Torino results remain available for reference.",
-    "href": "https://quantum.cloud.ibm.com/announcements/product-updates/2026-04-01-torino-retirement",
-    "linkText": "IBM retirement announcement"
-  },
-  {
     "id": "2026-04-19-new-devices",
     "date": "2026-04-19",
     "title": "Data from new IBM and OriginQ devices",
