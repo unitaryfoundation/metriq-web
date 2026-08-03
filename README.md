@@ -74,6 +74,8 @@ Running `python scripts/aggregate.py` in the metriq-data repo before starting th
 
 The container reads `data/config.json`. Add benchmark landing pages to `config.json` under `benchmarkPages` so the search box populates dropdown suggestions. Clicking a point in the score-vs-time chart opens an in-app detail modal for that run.
 
+Providers listed in `hiddenProviders` remain available in the source dataset and downloads but are omitted from the platform and results views. The `local` provider is hidden by default and in the production configuration so simulator runs are not confused with hardware results, even if configuration loading fails. Set `"hiddenProviders": []` in a local configuration when those records are useful for development.
+
 ## GitHub Pages CI/CD pipeline
 
 Deploying the static site is handled by `.github/workflows/deploy-pages.yml`. The workflow runs on pushes to `main` or when triggered manually. It:

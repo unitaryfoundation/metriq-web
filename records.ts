@@ -8,6 +8,33 @@
 // distinct results and must all stay visible.
 
 export type RecordAggMode = 'all-time' | 'latest';
+export const DEFAULT_HIDDEN_PROVIDERS = ['local'];
+
+// Providers can remain in metriq-data as source-of-truth records while being
+// omitted from a particular UI deployment (for example, local simulators on
+// the production website). Matching is case-insensitive and whitespace-safe.
+export function hiddenProvidersFromConfig(config: any): Set<string> {
+  const providers = Array.isArray(config?.hiddenProviders)
+    ? config.hiddenProviders
+    : DEFAULT_HIDDEN_PROVIDERS;
+  return new Set(
+    providers
+      .map((provider: any) => String(provider ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export function isProviderHidden(provider: any, config: any): boolean {
+  const normalized = String(provider ?? '').trim().toLowerCase();
+  return Boolean(normalized) && hiddenProvidersFromConfig(config).has(normalized);
+}
+
+export function withoutHiddenProviders<T extends { provider?: any }>(items: T[], config: any): T[] {
+  if (!Array.isArray(items)) return [];
+  const hidden = hiddenProvidersFromConfig(config);
+  if (!hidden.size) return items;
+  return items.filter((item) => !hidden.has(String(item?.provider ?? '').trim().toLowerCase()));
+}
 
 // Params that describe sampling effort rather than the benchmark instance.
 export const RECORD_SIG_EXCLUDED_PARAMS = new Set(['shots', 'num_circuits', 'num_random_trials', 'trials', 'seed', 'confidence_level']);
