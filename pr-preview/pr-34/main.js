@@ -891,6 +891,9 @@ function applyResultsRoute(route) {
     const timestamp = invalidProvider ? '' : String(route.results_timestamp || '').trim();
     const tab = route.results_tab === 'graph' ? 'graph' : 'table';
     applyRecordModeFromRoute(route);
+    if (invalidProvider) {
+        updateHash({ view: 'results', results_tab: tab });
+    }
     if (invalidProvider || provider || benchmark) {
         const benchmarks = uniqueValues(rawBenchmarks, 'benchmark');
         filterState.provider = provider ? [provider] : availableProviders.slice();

@@ -27,7 +27,7 @@ export function withoutHiddenProviders(items, config) {
         return [];
     const hidden = hiddenProvidersFromConfig(config);
     if (!hidden.size)
-        return items;
+        return items.slice();
     return items.filter((item) => !hidden.has(String(item?.provider ?? '').trim().toLowerCase()));
 }
 // Params that describe sampling effort rather than the benchmark instance.
