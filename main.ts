@@ -1,4 +1,4 @@
-import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries } from './records.js';
+import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
 
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
@@ -891,23 +891,28 @@ function buildResultsHash(
 let pendingResultsTableCenterScroll = false;
 
 function applyResultsRoute(route: Record<string, string>) {
-  const provider = String(route.results_provider || '').trim();
-  const device = String(route.results_device || '').trim();
-  const benchmark = String(route.results_benchmark || '').trim();
-  const timestamp = String(route.results_timestamp || '').trim();
+  const requestedProvider = String(route.results_provider || '').trim();
+  const availableProviders = uniqueValues(rawBenchmarks as any, 'provider');
+  const invalidProvider = Boolean(requestedProvider && !availableProviders.includes(requestedProvider));
+  const provider = availableProviders.includes(requestedProvider) ? requestedProvider : '';
+  const device = invalidProvider ? '' : String(route.results_device || '').trim();
+  const benchmark = invalidProvider ? '' : String(route.results_benchmark || '').trim();
+  const timestamp = invalidProvider ? '' : String(route.results_timestamp || '').trim();
   const tab = route.results_tab === 'graph' ? 'graph' : 'table';
 
   applyRecordModeFromRoute(route);
+  if (invalidProvider) {
+    updateHash({ view: 'results', results_tab: tab });
+  }
 
-  if (provider || benchmark) {
-    const providers = uniqueValues(rawBenchmarks as any, 'provider');
+  if (invalidProvider || provider || benchmark) {
     const benchmarks = uniqueValues(rawBenchmarks as any, 'benchmark');
-    filterState.provider = provider ? [provider] : providers.slice();
+    filterState.provider = provider ? [provider] : availableProviders.slice();
     filterState.benchmark = benchmark ? [benchmark] : benchmarks.slice();
     renderMultiLists();
   }
 
-  if (provider || device || benchmark || timestamp) {
+  if (invalidProvider || provider || device || benchmark || timestamp) {
     tableState.filterProvider = provider || 'all';
     tableState.filterDevice = device || 'all';
     tableState.filterBenchmark = benchmark || 'all';
@@ -1088,7 +1093,7 @@ async function loadBenchmarks() {
         'results' in json[0] || 'params' in json[0] || 'job_type' in json[0]
       );
       const rows = looksLikeEtl ? json.map(adaptMetriqEtlRow) : json;
-      const normalized = rows.map(normalizeRun);
+      const normalized = withoutHiddenProviders(rows.map(normalizeRun), config);
       benchmarkRunsByGroup = buildBenchmarkRunIndex(normalized);
       return normalized;
     })();
@@ -1106,8 +1111,9 @@ async function loadPlatformsIndex() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
         const json = await resp.json();
         if (json && Array.isArray(json.platforms)) {
-          setPlatformsIndexCache(json.platforms);
-          return json;
+          const platforms = withoutHiddenProviders(json.platforms, config);
+          setPlatformsIndexCache(platforms);
+          return { ...json, platforms };
         }
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
@@ -1975,6 +1981,12 @@ function renderPlatformComparePage(left: any, right: any) {
 async function showPlatformDetailPage(provider: string, device: string) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
+  const config = await loadAppConfig();
+  if (isProviderHidden(provider, config)) {
+    history.replaceState(null, '', buildPlatformsListHash());
+    await initPlatformsView(true);
+    return;
+  }
   container.innerHTML = '<div class="meta">Loading platform…</div>';
   try {
     if (!Array.isArray(platformsIndexCache) || platformsIndexCache.length === 0) {
