@@ -32,7 +32,7 @@ export function isProviderHidden(provider: any, config: any): boolean {
 export function withoutHiddenProviders<T extends { provider?: any }>(items: T[], config: any): T[] {
   if (!Array.isArray(items)) return [];
   const hidden = hiddenProvidersFromConfig(config);
-  if (!hidden.size) return items;
+  if (!hidden.size) return items.slice();
   return items.filter((item) => !hidden.has(String(item?.provider ?? '').trim().toLowerCase()));
 }
 

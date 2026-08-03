@@ -901,6 +901,9 @@ function applyResultsRoute(route: Record<string, string>) {
   const tab = route.results_tab === 'graph' ? 'graph' : 'table';
 
   applyRecordModeFromRoute(route);
+  if (invalidProvider) {
+    updateHash({ view: 'results', results_tab: tab });
+  }
 
   if (invalidProvider || provider || benchmark) {
     const benchmarks = uniqueValues(rawBenchmarks as any, 'benchmark');

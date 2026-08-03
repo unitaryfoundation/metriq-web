@@ -93,6 +93,15 @@ test('hidden providers are omitted case-insensitively without mutating source da
   assert.equal(rows.length, 2, 'source data remains unchanged');
 });
 
+test('provider filtering always returns a new array', () => {
+  const rows = [makeRun()];
+  const visible = withoutHiddenProviders(rows, { hiddenProviders: [] });
+  assert.deepEqual(visible, rows);
+  assert.notStrictEqual(visible, rows);
+  visible.pop();
+  assert.equal(rows.length, 1, 'mutating the result does not affect the source array');
+});
+
 test('provider visibility is configurable', () => {
   assert.equal(isProviderHidden('local', { hiddenProviders: ['local'] }), true);
   assert.equal(isProviderHidden('local', {}), true, 'local stays hidden if production config fails to load');
