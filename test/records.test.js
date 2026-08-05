@@ -2,7 +2,7 @@
 // Runs against the compiled records.js: `npm test` builds first.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dedupeRunsForDisplay, recordInstanceSig, variantParamSummaries } from '../records.js';
+import { dedupeRunsForDisplay, isProviderHidden, recordInstanceSig, variantParamSummaries, withoutHiddenProviders } from '../records.js';
 
 const getScore = (run) => {
   const v = run?.metrics?.score;
@@ -81,4 +81,30 @@ test('qubit-count-only variants get no badge (Qubits column covers them)', () =>
   const summaries = variantParamSummaries([q10, q20], ['benchmark_name', 'num_qubits', 'max_qubits', 'width']);
   assert.equal(summaries.get(q10), '');
   assert.equal(summaries.get(q20), '');
+});
+
+test('hidden providers are omitted case-insensitively without mutating source data', () => {
+  const rows = [
+    makeRun({ provider: 'ibm', device: 'ibm_fez' }),
+    makeRun({ provider: 'LOCAL', device: 'ibm_fez' }),
+  ];
+  const visible = withoutHiddenProviders(rows, { hiddenProviders: [' local '] });
+  assert.deepEqual(visible, [rows[0]]);
+  assert.equal(rows.length, 2, 'source data remains unchanged');
+});
+
+test('provider filtering always returns a new array', () => {
+  const rows = [makeRun()];
+  const visible = withoutHiddenProviders(rows, { hiddenProviders: [] });
+  assert.deepEqual(visible, rows);
+  assert.notStrictEqual(visible, rows);
+  visible.pop();
+  assert.equal(rows.length, 1, 'mutating the result does not affect the source array');
+});
+
+test('provider visibility is configurable', () => {
+  assert.equal(isProviderHidden('local', { hiddenProviders: ['local'] }), true);
+  assert.equal(isProviderHidden('local', {}), true, 'local stays hidden if production config fails to load');
+  assert.equal(isProviderHidden('local', { hiddenProviders: [] }), false);
+  assert.equal(isProviderHidden('ibm', { hiddenProviders: ['local'] }), false);
 });
