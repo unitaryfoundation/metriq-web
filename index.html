@@ -280,7 +280,7 @@
               </details>
               <details class="faq-item" role="listitem">
                 <summary class="faq-q">How was the baseline device chosen?</summary>
-                <div class="faq-a">The device <code>ibm_torino</code> from IBM Quantum Cloud is used as a consistent reference point for the derived “score” scale (so 100 means “on par with the baseline”); it was chosen because it is a widely-run, stable platform that provides good coverage across benchmarks. Note this choice does not bias the data: raw benchmark metrics are unchanged, and the baseline is only an anchor for normalization/visual reference (and can be changed in the configuration of the dataset). Picking a different baseline would primarily rescale the scores, but the relative comparisons between platforms would remain the same.</div>
+                <div class="faq-a">The baseline published by <code>metriq-data</code> is used as a consistent reference point for the derived “score” scale, so 100 means “on par with the baseline.” The selection is maintained alongside the scoring rules, with benchmark coverage as a key consideration. It does not alter raw benchmark metrics; it only provides an anchor for normalization and visual comparison. Within an individual metric, changing the baseline rescales values without changing their ordering; composite scores can shift because their components are normalized independently.</div>
               </details>
               <details class="faq-item" role="listitem">
                 <summary class="faq-q">What are Metriq's "classical" inspirations?</summary>
