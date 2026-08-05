@@ -66,6 +66,10 @@ let platformsIndexCache: any[] | null = null;
 let platformsIndexByKeyCache: Map<string, any> | null = null;
 let platformScoresCache: Map<string, number> | null = null;
 let platformQubitsCache: Map<string, number> | null = null;
+type BaselinePlatform = {
+  provider: string;
+  device: string;
+};
 let platformCoverageCache: Map<string, { covered: number; total: number }> | null = null;
 let platformDetailsCache: Map<string, any> | null = null;
 let platformSortKey: 'score' | 'coverage' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
@@ -80,8 +84,31 @@ let filtersInitialized = false;
 let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
-// Optional: baseline device name from config (highlighted in chart/table)
-let baselineDevice: string | null = null;
+// Canonical scoring baseline published by metriq-data (highlighted in chart/table).
+let baselinePlatform: BaselinePlatform | null = null;
+
+function setPublishedBaseline(value: any) {
+  const provider = typeof value?.provider === 'string' ? value.provider.trim() : '';
+  const device = typeof value?.device === 'string' ? value.device.trim() : '';
+  baselinePlatform = provider && device
+    ? { provider, device }
+    : null;
+}
+
+function getNormalizedBaselineKey(provider: string, device: string) {
+  return getDeviceKey(provider.trim().toLowerCase(), device.trim().toLowerCase());
+}
+
+function warnIfPublishedBaselineMissing(platforms: any[]) {
+  if (!baselinePlatform) return;
+  const baselineKey = getNormalizedBaselineKey(baselinePlatform.provider, baselinePlatform.device);
+  const hasMatch = platforms.some((platform: any) => (
+    getNormalizedBaselineKey(String(platform?.provider || ''), String(platform?.device || '')) === baselineKey
+  ));
+  if (!hasMatch) {
+    console.warn('[platforms] published baseline does not match any platform in the index:', baselinePlatform);
+  }
+}
 
 function normalizePlatformLifecycle(value: any) {
   if (!value || typeof value !== 'object') return null;
@@ -150,7 +177,10 @@ function renderDeviceBadgesHtml(provider: string, device: string, source?: any) 
     const lifecycleBadge = renderLifecycleBadgeHtml(lifecycle);
     if (lifecycleBadge) badges.push(lifecycleBadge);
   }
-  if (baselineDevice && String(device || '') === baselineDevice) {
+  if (
+    baselinePlatform
+    && getNormalizedBaselineKey(String(provider || ''), String(device || '')) === getNormalizedBaselineKey(baselinePlatform.provider, baselinePlatform.device)
+  ) {
     badges.push('<span class="device-badge baseline-badge">Baseline</span>');
   }
   return badges.length ? ` ${badges.join(' ')}` : '';
@@ -1111,14 +1141,18 @@ async function loadPlatformsIndex() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
         const json = await resp.json();
         if (json && Array.isArray(json.platforms)) {
+          setPublishedBaseline(json.baseline);
           const platforms = withoutHiddenProviders(json.platforms, config);
           setPlatformsIndexCache(platforms);
+          warnIfPublishedBaselineMissing(json.platforms);
           return { ...json, platforms };
         }
+        setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       } catch (err) {
         console.warn('[platforms] failed to load index:', err);
+        setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       }
@@ -3897,11 +3931,6 @@ async function initBenchmarksView() {
       if (skeletonGraph) skeletonGraph.style.display = 'none';
       return;
     }
-    // Read baseline device from config if available
-    try {
-      const bd = (config && typeof (config as any).baselineDevice === 'string') ? String((config as any).baselineDevice).trim() : '';
-      baselineDevice = bd || null;
-    } catch { baselineDevice = null; }
     setupMetrics(rawBenchmarks, config);
     setupFilters(rawBenchmarks);
     refreshMetricOptions(rawBenchmarks);
