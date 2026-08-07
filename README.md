@@ -74,6 +74,8 @@ Running `python scripts/aggregate.py` in the metriq-data repo before starting th
 
 The container reads `data/config.json`. Add benchmark landing pages to `config.json` under `benchmarkPages` so the search box populates dropdown suggestions. Clicking a point in the score-vs-time chart opens an in-app detail modal for that run.
 
+Providers listed in `hiddenProviders` remain available in the source dataset and downloads but are omitted from the platform and results views. The `local` provider is hidden by default and in the production configuration so simulator runs are not confused with hardware results, even if configuration loading fails. Set `"hiddenProviders": []` in a local configuration when those records are useful for development.
+
 ## GitHub Pages CI/CD pipeline
 
 Deploying the static site is handled by `.github/workflows/deploy-pages.yml`. The workflow runs on pushes to `main` or when triggered manually. It:
@@ -92,18 +94,23 @@ Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish th
 
 ## Baseline highlighting
 
-- To highlight a specific device across both the chart and the table, add `baselineDevice` to `data/config.json`:
+- The baseline is read from the `baseline` object published at the root of the platforms index JSON served at the
+  configured `platformsIndexUrl`:
 
 ```json
 {
-  "benchmarksUrl": "https://unitaryfoundation.github.io/metriq-data/benchmark.latest.json",
-  "platformsIndexUrl": "https://unitaryfoundation.github.io/metriq-data/platforms/index.json",
-  "baselineDevice": "Device A",
-  "benchmarkPages": []
+  "baseline": {
+    "provider": "<provider>",
+    "device": "<device>",
+    "series": "<series>"
+  }
 }
 ```
 
-- The baseline device will render with a bold badge in the table and an emphasized overlay in the chart.
+- The provider and device are matched together, and the baseline platform renders with
+  a badge wherever device labels are shown. Score charts use the horizontal 100-point
+  reference line. Baseline selection remains owned by `metriq-data`; no duplicate web
+  configuration is required.
 
 ## Guided Tour
 

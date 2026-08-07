@@ -1,3 +1,5 @@
+import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
+
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
 const UPDATES_JSON = "./data/updates.json";
@@ -70,11 +72,16 @@ type PlatformCoverage = {
   unsupported: number;
   total: number;
 };
+type BaselinePlatform = {
+  provider: string;
+  device: string;
+};
 let platformCoverageCache: Map<string, PlatformCoverage> | null = null;
 let platformDetailsCache: Map<string, any> | null = null;
 let platformSortKey: 'score' | 'coverage' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
 let platformSortDir: 'asc' | 'desc' = 'desc';
 let platformProviderFilter = '';
+let showRetiredDevices = false;
 let deviceSeriesCache: Map<string, number[]> | null = null;
 let suppressHashHandler = false;
 let chartView = null;
@@ -83,8 +90,31 @@ let filtersInitialized = false;
 let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
-// Optional: baseline device name from config (highlighted in chart/table)
-let baselineDevice: string | null = null;
+// Canonical scoring baseline published by metriq-data (highlighted in chart/table).
+let baselinePlatform: BaselinePlatform | null = null;
+
+function setPublishedBaseline(value: any) {
+  const provider = typeof value?.provider === 'string' ? value.provider.trim() : '';
+  const device = typeof value?.device === 'string' ? value.device.trim() : '';
+  baselinePlatform = provider && device
+    ? { provider, device }
+    : null;
+}
+
+function getNormalizedBaselineKey(provider: string, device: string) {
+  return getDeviceKey(provider.trim().toLowerCase(), device.trim().toLowerCase());
+}
+
+function warnIfPublishedBaselineMissing(platforms: any[]) {
+  if (!baselinePlatform) return;
+  const baselineKey = getNormalizedBaselineKey(baselinePlatform.provider, baselinePlatform.device);
+  const hasMatch = platforms.some((platform: any) => (
+    getNormalizedBaselineKey(String(platform?.provider || ''), String(platform?.device || '')) === baselineKey
+  ));
+  if (!hasMatch) {
+    console.warn('[platforms] published baseline does not match any platform in the index:', baselinePlatform);
+  }
+}
 
 function normalizePlatformLifecycle(value: any) {
   if (!value || typeof value !== 'object') return null;
@@ -153,7 +183,10 @@ function renderDeviceBadgesHtml(provider: string, device: string, source?: any) 
     const lifecycleBadge = renderLifecycleBadgeHtml(lifecycle);
     if (lifecycleBadge) badges.push(lifecycleBadge);
   }
-  if (baselineDevice && String(device || '') === baselineDevice) {
+  if (
+    baselinePlatform
+    && getNormalizedBaselineKey(String(provider || ''), String(device || '')) === getNormalizedBaselineKey(baselinePlatform.provider, baselinePlatform.device)
+  ) {
     badges.push('<span class="device-badge baseline-badge">Baseline</span>');
   }
   return badges.length ? ` ${badges.join(' ')}` : '';
@@ -446,47 +479,23 @@ tabTable?.addEventListener("click", () => activateTab("table"));
 
 // ---- Duplicate-record aggregation ----
 // The dataset can contain multiple records for the same provider/device/benchmark.
-// 'all-time' (default) keeps the best-scoring record per group; 'latest' keeps the
-// most recent one. The downloadable JSON always contains every record.
-type RecordAggMode = 'all-time' | 'latest';
+// Records of the same benchmark instance (matching params up to sampling-effort
+// settings) collapse per the mode below: 'all-time' (default) keeps the
+// best-scoring record, 'latest' the most recent one. Records that differ in a
+// meaningful param (e.g. num_qubits) always stay visible as distinct results.
+// The downloadable JSON always contains every record. See records.ts.
 let recordAggMode: RecordAggMode = 'all-time';
 // Runs indexed by provider::device::benchmark, with per-run instance
 // signatures precomputed, so score adjustments avoid rescanning all runs.
 let benchmarkRunsByGroup: Map<string, Array<{ run: any; sig: string }>> | null = null;
 
-function runTimestampMs(run: any): number {
-  const t = Number(new Date(run?.timestamp));
-  return Number.isFinite(t) ? t : Number.NEGATIVE_INFINITY;
-}
+// Params whose values already have a dedicated display slot, so variant badges
+// and tooltips don't need to repeat them (the Qubits column/tooltip covers the
+// qubit-count aliases; the Benchmark column shows the benchmark name).
+const VARIANT_BADGE_EXCLUDED_PARAMS = ['benchmark_name', 'num_qubits', 'max_qubits', 'width'];
 
-function isPreferredRecord(candidate: any, incumbent: any, metricId: string): boolean {
-  const cv = getMetricValue(candidate, metricId);
-  const iv = getMetricValue(incumbent, metricId);
-  if (recordAggMode === 'latest') {
-    // Newest record wins, but a record with a displayable value beats one
-    // without (some records lack a metriq_score and would render as "—").
-    if ((cv === null) !== (iv === null)) return cv !== null;
-    return runTimestampMs(candidate) > runTimestampMs(incumbent);
-  }
-  // 'all-time': higher metric value wins (surfaced metrics are higher-is-better);
-  // records without a value lose, and ties go to the more recent record.
-  const c = cv === null ? Number.NEGATIVE_INFINITY : cv;
-  const i = iv === null ? Number.NEGATIVE_INFINITY : iv;
-  if (c !== i) return c > i;
-  return runTimestampMs(candidate) > runTimestampMs(incumbent);
-}
-
-function dedupeRunsForDisplay(runs: any[], metricId: string): any[] {
-  if (!Array.isArray(runs) || runs.length <= 1) return Array.isArray(runs) ? runs : [];
-  const byGroup = new Map<string, any>();
-  runs.forEach((run) => {
-    const key = `${String(run?.provider || '')}::${String(run?.device || '')}::${String(run?.benchmark || '')}`;
-    const prev = byGroup.get(key);
-    if (!prev || isPreferredRecord(run, prev, metricId)) {
-      byGroup.set(key, run);
-    }
-  });
-  return byGroup.size === runs.length ? runs : Array.from(byGroup.values());
+function dedupeRunsForDisplayWithMetric(runs: any[], metricId: string): any[] {
+  return dedupeRunsForDisplay(runs, recordAggMode, (run) => getMetricValue(run, metricId));
 }
 
 function syncRecordModeToggle() {
@@ -508,7 +517,7 @@ function applyRecordModeFromRoute(route: Record<string, string>) {
 
 function recordModeToggleHtml() {
   return `
-    <span class="record-toggle__label">Benchmark Record Type:</span>
+    <span class="record-toggle__label">Record type</span>
     <button type="button" class="btn-mini" data-record-mode="all-time" aria-pressed="false" title="Show the best all-time recorded result for each device and benchmark">All-time</button>
     <button type="button" class="btn-mini" data-record-mode="latest" aria-pressed="false" title="Show the most recent recorded result for each device and benchmark">Latest</button>
   `;
@@ -918,23 +927,28 @@ function buildResultsHash(
 let pendingResultsTableCenterScroll = false;
 
 function applyResultsRoute(route: Record<string, string>) {
-  const provider = String(route.results_provider || '').trim();
-  const device = String(route.results_device || '').trim();
-  const benchmark = String(route.results_benchmark || '').trim();
-  const timestamp = String(route.results_timestamp || '').trim();
+  const requestedProvider = String(route.results_provider || '').trim();
+  const availableProviders = uniqueValues(rawBenchmarks as any, 'provider');
+  const invalidProvider = Boolean(requestedProvider && !availableProviders.includes(requestedProvider));
+  const provider = availableProviders.includes(requestedProvider) ? requestedProvider : '';
+  const device = invalidProvider ? '' : String(route.results_device || '').trim();
+  const benchmark = invalidProvider ? '' : String(route.results_benchmark || '').trim();
+  const timestamp = invalidProvider ? '' : String(route.results_timestamp || '').trim();
   const tab = route.results_tab === 'graph' ? 'graph' : 'table';
 
   applyRecordModeFromRoute(route);
+  if (invalidProvider) {
+    updateHash({ view: 'results', results_tab: tab });
+  }
 
-  if (provider || benchmark) {
-    const providers = uniqueValues(rawBenchmarks as any, 'provider');
+  if (invalidProvider || provider || benchmark) {
     const benchmarks = uniqueValues(rawBenchmarks as any, 'benchmark');
-    filterState.provider = provider ? [provider] : providers.slice();
+    filterState.provider = provider ? [provider] : availableProviders.slice();
     filterState.benchmark = benchmark ? [benchmark] : benchmarks.slice();
     renderMultiLists();
   }
 
-  if (provider || device || benchmark || timestamp) {
+  if (invalidProvider || provider || device || benchmark || timestamp) {
     tableState.filterProvider = provider || 'all';
     tableState.filterDevice = device || 'all';
     tableState.filterBenchmark = benchmark || 'all';
@@ -1115,7 +1129,7 @@ async function loadBenchmarks() {
         'results' in json[0] || 'params' in json[0] || 'job_type' in json[0]
       );
       const rows = looksLikeEtl ? json.map(adaptMetriqEtlRow) : json;
-      const normalized = rows.map(normalizeRun);
+      const normalized = withoutHiddenProviders(rows.map(normalizeRun), config);
       benchmarkRunsByGroup = buildBenchmarkRunIndex(normalized);
       return normalized;
     })();
@@ -1133,13 +1147,18 @@ async function loadPlatformsIndex() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
         const json = await resp.json();
         if (json && Array.isArray(json.platforms)) {
-          setPlatformsIndexCache(json.platforms);
-          return json;
+          setPublishedBaseline(json.baseline);
+          const platforms = withoutHiddenProviders(json.platforms, config);
+          setPlatformsIndexCache(platforms);
+          warnIfPublishedBaselineMissing(json.platforms);
+          return { ...json, platforms };
         }
+        setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       } catch (err) {
         console.warn('[platforms] failed to load index:', err);
+        setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       }
@@ -1281,14 +1300,7 @@ async function loadPlatformScores() {
 // the best one among duplicate records of the same benchmark instance in the
 // suite data, then recompute the score as the weighted sum of components.
 // Duplicate records are identified by matching benchmark params, ignoring
-// sampling-effort settings.
-const RECORD_SIG_EXCLUDED_PARAMS = new Set(['shots', 'num_circuits', 'num_random_trials', 'trials', 'seed', 'confidence_level']);
-
-function recordInstanceSig(params: any): string {
-  const p = (params && typeof params === 'object') ? params : {};
-  const keys = Object.keys(p).filter((k) => !RECORD_SIG_EXCLUDED_PARAMS.has(k)).sort();
-  return JSON.stringify(keys.map((k) => [k, p[k]]));
-}
+// sampling-effort settings (recordInstanceSig in records.ts).
 
 function getRunGroupKey(provider: string, device: string, benchmark: string) {
   return `${provider}::${device}::${benchmark}`;
@@ -2045,6 +2057,12 @@ function renderPlatformComparePage(left: any, right: any) {
 async function showPlatformDetailPage(provider: string, device: string) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
+  const config = await loadAppConfig();
+  if (isProviderHidden(provider, config)) {
+    history.replaceState(null, '', buildPlatformsListHash());
+    await initPlatformsView(true);
+    return;
+  }
   container.innerHTML = '<div class="meta">Loading platform…</div>';
   try {
     if (!Array.isArray(platformsIndexCache) || platformsIndexCache.length === 0) {
@@ -2548,12 +2566,27 @@ function renderPlatformsTable() {
 
 		  if (!wrap || !table || !tbody) {
 		    container.innerHTML = '';
+		    const platformControls = document.createElement('div');
+		    platformControls.className = 'platform-controls';
+		    const retiredDevicesToggle = document.createElement('label');
+		    retiredDevicesToggle.className = 'retired-devices-toggle';
+		    retiredDevicesToggle.innerHTML = `
+		      <span>Show retired devices</span>
+		      <input type="checkbox"${showRetiredDevices ? ' checked' : ''} />
+		    `.trim();
+		    const retiredDevicesCheckbox = retiredDevicesToggle.querySelector('input') as HTMLInputElement | null;
+		    retiredDevicesCheckbox?.addEventListener('change', () => {
+		      showRetiredDevices = retiredDevicesCheckbox.checked;
+		      renderPlatformsTable();
+		    });
+		    platformControls.appendChild(retiredDevicesToggle);
 		    const recordToggle = document.createElement('div');
 		    recordToggle.className = 'record-toggle record-toggle--platforms';
 		    recordToggle.setAttribute('role', 'group');
 		    recordToggle.setAttribute('aria-label', 'How to aggregate repeated benchmark records per device');
 		    recordToggle.innerHTML = recordModeToggleHtml();
-		    container.appendChild(recordToggle);
+		    platformControls.appendChild(recordToggle);
+		    container.appendChild(platformControls);
 		    wrap = document.createElement('div');
 		    wrap.id = 'platforms-table-wrap';
 		    table = document.createElement('table');
@@ -2616,6 +2649,8 @@ function renderPlatformsTable() {
 
 	  const providerTerm = (platformProviderFilter || '').toLowerCase().trim();
 	  const filtered = platforms.filter((p: any) => {
+	    const lifecycle = getPlatformLifecycle(String(p.provider || ''), String(p.device || ''), p);
+	    if (!showRetiredDevices && lifecycle?.status === 'retired') return false;
 	    if (providerTerm) {
 	      const prov = String(p.provider || '').toLowerCase();
 	      if (prov !== providerTerm) return false;
@@ -2719,7 +2754,9 @@ function renderPlatformsTable() {
         <td class="activity-col">${spark}</td>
       </tr>`);
   });
-  tbody.innerHTML = rows.join('');
+  tbody.innerHTML = rows.length
+    ? rows.join('')
+    : `<tr class="platforms-empty-row"><td colspan="7">${showRetiredDevices ? 'No devices match the current filters.' : 'No active devices match the current filters.'}</td></tr>`;
   if (table && (table as any).dataset) {
     const dataTable = table as any;
     if (!dataTable.dataset.scoreClickBound) {
@@ -3467,6 +3504,8 @@ async function renderChart(values, token, metric) {
           { field: 'device', title: 'Device' },
           { field: 'provider', title: 'Provider' },
           { field: 'benchmark', title: 'Benchmark' },
+          { field: 'num_qubits', title: 'Qubits' },
+          { field: 'variantParams', title: 'Params' },
           { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
           { field: 'metricError', title: 'Error', type: 'quantitative', format: tooltipFormat },
           { field: 'timestamp', title: 'Timestamp', type: 'temporal', format: '%Y-%m-%d %H:%M' }
@@ -3659,7 +3698,19 @@ function populateSmartFilters(values: any[]) {
     provSel.value = tableState.filterProvider || 'all';
   }
   if (devSel) {
-    const opts = unique(values.map(v => String(v.device||'')));
+    // Scope the device options to the selected provider so the Device dropdown
+    // never lists devices from a provider that isn't currently selected.
+    const provFilter = tableState.filterProvider && tableState.filterProvider !== 'all'
+      ? tableState.filterProvider
+      : null;
+    const scoped = provFilter
+      ? values.filter(v => String(v.provider||'') === provFilter)
+      : values;
+    const opts = unique(scoped.map(v => String(v.device||'')));
+    // Drop a stale device selection that no longer belongs to the chosen provider.
+    if (tableState.filterDevice && tableState.filterDevice !== 'all' && !opts.includes(tableState.filterDevice)) {
+      tableState.filterDevice = 'all';
+    }
     devSel.innerHTML = '<option value="all">All</option>' + opts.map(o=>`<option value="${escapeAttr(o)}">${escapeHtml(o)}</option>`).join('');
     devSel.value = tableState.filterDevice || 'all';
   }
@@ -3717,9 +3768,12 @@ function renderStaticTable(values: any[]) {
   // Init filters if first time
   populateSmartFilters(values);
 
-  // Apply filters, then collapse duplicate records per device/benchmark.
+  // Apply filters, then collapse duplicate records per device/benchmark instance.
   // Dedupe runs after the filters so timestamp deep-links still pin their exact record.
-  const working = dedupeRunsForDisplay(applyTableFilters(values.slice()), metric.id);
+  const working = dedupeRunsForDisplayWithMetric(applyTableFilters(values.slice()), metric.id);
+  // Distinct results can share a device/benchmark while differing in params other
+  // than qubit count (e.g. num_layers); badge those so sibling rows stay tellable apart.
+  const variantSummaries = variantParamSummaries(working, VARIANT_BADGE_EXCLUDED_PARAMS);
 	  sortTableRows(working);
 	
 	  const table = document.createElement('table');
@@ -3775,10 +3829,14 @@ function renderStaticTable(values: any[]) {
       const content = isScore ? `<a href="#" class="metric-link" data-role="score">${disp}</a>` : disp;
       return `<td class="num">${content}</td>`;
     }).join('');
+    const variantLabel = variantSummaries.get(run) || '';
+    const variantBadge = variantLabel
+      ? ` <span class="param-badge" title="Parameters distinguishing this result from others of the same benchmark on this device">${escapeHtml(variantLabel)}</span>`
+      : '';
     tr.innerHTML = `
       <td>${escapeHtml(run.provider || '')}</td>
       <td><a href="${deviceHref}" class="metric-link" data-role="device">${deviceLabel}</a></td>
-      <td><a href="${benchHref}" class="metric-link" data-role="benchmark">${escapeHtml(run.benchmark || '')}</a></td>
+      <td><a href="${benchHref}" class="metric-link" data-role="benchmark">${escapeHtml(run.benchmark || '')}</a>${variantBadge}</td>
       <td class="num">${run.num_qubits !== undefined && run.num_qubits !== null ? escapeHtml(String(run.num_qubits)) : '—'}</td>
       ${metricCells}
       <td class="num">${escapeHtml(formatDateOnly(run.timestamp))}</td>`;
@@ -3881,7 +3939,9 @@ async function drawChart() {
   }
   const metric = getActiveMetric();
   updateChartHeading(metric);
-  const chartValues = dedupeRunsForDisplay(filtered, metric.id)
+  const dedupedRuns = dedupeRunsForDisplayWithMetric(filtered, metric.id);
+  const chartVariantSummaries = variantParamSummaries(dedupedRuns, VARIANT_BADGE_EXCLUDED_PARAMS);
+  const chartValues = dedupedRuns
     .map(run => {
       const metricValue = getMetricValue(run, metric.id);
       if (metricValue === null) return null;
@@ -3897,7 +3957,9 @@ async function drawChart() {
           metricUpper = null;
         }
       }
-      return { ...run, metricValue, metricError, metricLower, metricUpper };
+      // undefined (not '') so the tooltip omits the row when there is no variant info
+      const variantParams = chartVariantSummaries.get(run) || undefined;
+      return { ...run, metricValue, metricError, metricLower, metricUpper, variantParams };
     })
     .filter(Boolean);
   await renderChart(chartValues, token, metric);
@@ -3923,11 +3985,6 @@ async function initBenchmarksView() {
       if (skeletonGraph) skeletonGraph.style.display = 'none';
       return;
     }
-    // Read baseline device from config if available
-    try {
-      const bd = (config && typeof (config as any).baselineDevice === 'string') ? String((config as any).baselineDevice).trim() : '';
-      baselineDevice = bd || null;
-    } catch { baselineDevice = null; }
     setupMetrics(rawBenchmarks, config);
     setupFilters(rawBenchmarks);
     refreshMetricOptions(rawBenchmarks);
