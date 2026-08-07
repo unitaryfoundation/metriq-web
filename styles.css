@@ -709,3 +709,9 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
   .compare-cards{grid-template-columns:1fr}
   .compare-head h3{font-size:24px}
 }
+
+.component-status{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:600;font-size:10.5px;white-space:nowrap}
+.component-status--ok{background:rgba(22,163,74,.12);color:#166534}
+.component-status--missing{background:rgba(180,83,9,.12);color:#9a3412}
+.component-status--na{background:rgba(100,116,139,.14);color:var(--muted)}
+.platform-component-row--unsupported td{color:var(--muted)}

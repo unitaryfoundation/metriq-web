@@ -2122,6 +2122,8 @@ function renderPlatformDetailPage(detail: any) {
       const wb = Number(b[1]?.weight) || 0;
       return wb - wa;
     });
+    const detailDeviceQubits = deviceMetadataNumQubits(detail);
+    let unsupportedCount = 0;
     const rows = components.map(([name, c]) => {
       const benchmark = typeof c?.group === 'string' ? String(c.group).trim() : '';
       const wRaw = c?.weight;
@@ -2131,14 +2133,36 @@ function renderPlatformDetailPage(detail: any) {
       const raw = rawRaw === null || rawRaw === undefined ? null : formatPlatformComponentRawValue(rawRaw);
       const n = (nRaw === null || nRaw === undefined) ? null : Number(nRaw);
       const ts = c?.timestamp ? dateOnlyFormatter.format(new Date(c.timestamp)) : '';
+      // Same classification as extractPlatformCoverage: a component with no
+      // result is unsupported when the device has fewer qubits than the
+      // component requires, otherwise it is runnable but not yet submitted.
+      const hasResult = c?.normalized_available === true
+        || c?.raw_available === true
+        || raw !== null
+        || (n !== null && Number.isFinite(n))
+        || Boolean(c?.timestamp || c?.normalized_timestamp || c?.raw_timestamp);
+      const required = parseNumQubits(c?.required_num_qubits);
+      const isUnsupported = !hasResult
+        && required !== null
+        && detailDeviceQubits !== null
+        && detailDeviceQubits < required;
+      if (isUnsupported) unsupportedCount += 1;
+      const statusHtml = hasResult
+        ? '<span class="component-status component-status--ok">Submitted</span>'
+        : isUnsupported
+          ? `<span class="component-status component-status--na" title="Requires ${required} qubits; this device has ${detailDeviceQubits}">Not supported</span>`
+          : '<span class="component-status component-status--missing">No submission</span>';
       const href = benchmark
         ? buildResultsHash(String(provider), String(device), benchmark, String(c?.timestamp || ''), 'table')
         : '';
+      const rowClasses = ['platform-component-row'];
+      if (isUnsupported) rowClasses.push('platform-component-row--unsupported');
       const rowAttrs = href
-        ? ` class="platform-component-row" data-results-href="${escapeAttr(href)}" tabindex="0" title="Open matching results"`
-        : '';
+        ? ` class="${rowClasses.join(' ')}" data-results-href="${escapeAttr(href)}" tabindex="0" title="Open matching results"`
+        : (isUnsupported ? ' class="platform-component-row--unsupported"' : '');
       return `<tr${rowAttrs}>
         <td>${escapeHtml(name)}</td>
+        <td>${statusHtml}</td>
         <td class="num">${w !== null && Number.isFinite(w) ? w.toFixed(2) : '–'}</td>
         <td class="num">${raw !== null ? escapeHtml(raw) : '–'}</td>
         <td class="num">${n !== null && Number.isFinite(n) ? n.toFixed(3) : '–'}</td>
@@ -2151,13 +2175,17 @@ function renderPlatformDetailPage(detail: any) {
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;" title="Which record is used when a benchmark has multiple submissions">Records: ${recordAggMode === 'all-time' ? 'All-time best' : 'Latest'}</span>
       </div>
+      ${unsupportedCount > 0 ? `
+        <div class="meta" style="margin-top:8px;">${unsupportedCount} component${unsupportedCount === 1 ? '' : 's'} require${unsupportedCount === 1 ? 's' : ''} more qubits than this device has and cannot be run. Their weight still counts in the Metriq Score denominator, so the score reflects the full benchmark suite rather than only what this device supports.</div>
+      ` : ''}
       ${components.length ? `
         <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
         <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
-          <table class="smart-table" style="width:100%;min-width:660px;">
+          <table class="smart-table" style="width:100%;min-width:720px;">
             <thead>
               <tr>
                 <th>Component</th>
+                <th>Status</th>
                 <th class="num">Weight</th>
                 <th class="num">Raw</th>
                 <th class="num">Normalized</th>
