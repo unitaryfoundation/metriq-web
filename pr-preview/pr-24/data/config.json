@@ -1,7 +1,0 @@
-{
-  "benchmarksUrl": "https://unitaryfoundation.github.io/metriq-data/benchmark.latest.json",
-  "platformsIndexUrl": "https://unitaryfoundation.github.io/metriq-data/platforms/index.json",
-  "hiddenProviders": ["local"],
-  "gymDocsUrl": "https://unitaryfoundation.github.io/metriq-gym/benchmarks/overview/#available-benchmarks",
-  "benchmarkPages": []
-}
