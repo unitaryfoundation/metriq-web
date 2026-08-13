@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   buildMetriqGymDispatchInstructions,
   sortPlatformScoreComponents,
-  suiteComponentForPlatformGroup,
 } from '../platform-components.js';
 
 const entry = (name, group, weight, normalized = 1) => [name, { group, weight, normalized }];
@@ -60,41 +59,42 @@ test('platform score component sorting falls back to the label for missing group
   );
 });
 
-test('platform score groups map to Metriq Score 1.0 suite components', () => {
-  assert.deepEqual(
-    [
-      'BSEQ',
-      'CLOPS',
-      'EPLG',
-      'Linear Ramp QAOA',
-      'Mirror Circuits',
-      'QML Kernel',
-      'Quantum Fourier Transform',
-      'WIT',
-    ].map(suiteComponentForPlatformGroup),
-    ['bseq', 'clops', 'eplg', 'lr-qaoa', 'mirror-circuits', 'qml-kernel', 'qft', 'wit'],
-  );
-  assert.equal(suiteComponentForPlatformGroup('  ePlG  '), 'eplg');
-  assert.equal(suiteComponentForPlatformGroup('Unknown benchmark'), null);
-});
-
-test('builds a copyable component dispatch command for a platform', () => {
+test('builds a copyable command from payload-provided dispatch metadata', () => {
   assert.deepEqual(
     buildMetriqGymDispatchInstructions({
       provider: 'ibm',
       device: 'ibm_fez',
-      group: 'EPLG',
+      suite: 'future_score_2_0',
+      component: 'future-eplg',
     }),
     {
       command: [
-        'mgym suite dispatch metriq_score_1_0 \\',
-        '  --component eplg \\',
+        'mgym suite dispatch future_score_2_0 \\',
+        '  --component future-eplg \\',
         '  --provider ibm \\',
         '  --device ibm_fez',
       ].join('\n'),
-      suiteComponent: 'eplg',
+      suite: 'future_score_2_0',
+      suiteComponent: 'future-eplg',
       requiresRuntimeDeviceId: false,
     },
+  );
+});
+
+test('missing or invalid payload dispatch metadata does not produce a command', () => {
+  const platform = { provider: 'ibm', device: 'ibm_fez' };
+
+  assert.equal(
+    buildMetriqGymDispatchInstructions({ ...platform, suite: undefined, component: 'eplg' }),
+    null,
+  );
+  assert.equal(
+    buildMetriqGymDispatchInstructions({ ...platform, suite: 'future_score_2_0', component: '' }),
+    null,
+  );
+  assert.equal(
+    buildMetriqGymDispatchInstructions({ ...platform, suite: {}, component: 'eplg' }),
+    null,
   );
 });
 
@@ -102,7 +102,8 @@ test('AWS dispatch guidance requests the full runtime ARN when the payload only 
   const missingArn = buildMetriqGymDispatchInstructions({
     provider: 'aws',
     device: 'ionq_forte-1',
-    group: 'Linear Ramp QAOA',
+    suite: 'future_score_2_0',
+    component: 'lr-qaoa',
   });
   assert.equal(missingArn?.requiresRuntimeDeviceId, true);
   assert.match(missingArn?.command ?? '', /--device '<full Braket ARN for ionq_forte-1>'/);
@@ -110,7 +111,8 @@ test('AWS dispatch guidance requests the full runtime ARN when the payload only 
   const withArn = buildMetriqGymDispatchInstructions({
     provider: 'aws',
     device: 'ionq_forte-1',
-    group: 'Linear Ramp QAOA',
+    suite: 'future_score_2_0',
+    component: 'lr-qaoa',
     runtimeDeviceId: 'arn:aws:braket:us-east-1::device/qpu/ionq/Forte-1',
   });
   assert.equal(withArn?.requiresRuntimeDeviceId, false);
@@ -119,7 +121,8 @@ test('AWS dispatch guidance requests the full runtime ARN when the payload only 
   const invalidArn = buildMetriqGymDispatchInstructions({
     provider: 'aws',
     device: 'ionq_forte-1',
-    group: 'Linear Ramp QAOA',
+    suite: 'future_score_2_0',
+    component: 'lr-qaoa',
     runtimeDeviceId: 'not-an-arn',
   });
   assert.equal(invalidArn?.requiresRuntimeDeviceId, true);
@@ -130,7 +133,8 @@ test('non-AWS platforms always use their platform device identifier', () => {
   const instructions = buildMetriqGymDispatchInstructions({
     provider: 'ibm',
     device: 'ibm_fez',
-    group: 'WIT',
+    suite: 'future_score_2_0',
+    component: 'wit',
     runtimeDeviceId: 'stale-runtime-id',
   });
   assert.equal(instructions?.requiresRuntimeDeviceId, false);
@@ -141,12 +145,29 @@ test('dispatch command arguments are shell-quoted and control characters are rej
   const quoted = buildMetriqGymDispatchInstructions({
     provider: 'ibm; echo unsafe',
     device: "device '$(echo unsafe)'",
-    group: 'WIT',
+    suite: 'future score; echo unsafe',
+    component: 'wit; echo unsafe',
   });
+  assert.match(quoted?.command ?? '', /mgym suite dispatch 'future score; echo unsafe'/);
+  assert.match(quoted?.command ?? '', /--component 'wit; echo unsafe'/);
   assert.match(quoted?.command ?? '', /--provider 'ibm; echo unsafe'/);
   assert.match(quoted?.command ?? '', /--device 'device '"'"'\$\(echo unsafe\)'"'"''$/);
   assert.equal(
-    buildMetriqGymDispatchInstructions({ provider: 'ibm\necho unsafe', device: 'ibm_fez', group: 'WIT' }),
+    buildMetriqGymDispatchInstructions({
+      provider: 'ibm',
+      device: 'ibm_fez',
+      suite: 'future_score_2_0\necho unsafe',
+      component: 'wit',
+    }),
+    null,
+  );
+  assert.equal(
+    buildMetriqGymDispatchInstructions({
+      provider: 'ibm',
+      device: 'ibm_fez',
+      suite: 'future_score_2_0',
+      component: 'wit\necho unsafe',
+    }),
     null,
   );
 });
