@@ -2138,7 +2138,8 @@ function renderPlatformDetailPage(detail) {
                 ? buildMetriqGymDispatchInstructions({
                     provider: String(provider),
                     device: String(device),
-                    group: benchmark,
+                    suite: c?.dispatch?.suite,
+                    component: c?.dispatch?.component,
                     runtimeDeviceId,
                 })
                 : null;
@@ -2183,7 +2184,7 @@ function renderPlatformDetailPage(detail) {
         <div class="meta" style="margin-top:8px;">${unsupportedCount} component${unsupportedCount === 1 ? '' : 's'} require${unsupportedCount === 1 ? 's' : ''} more qubits than this device has and cannot be run. Their weight still counts in the Metriq Score denominator, so the score reflects the full benchmark suite rather than only what this device supports.</div>
       ` : ''}
       ${components.length ? `
-        <div class="meta" style="margin-top:12px;">Submitted rows open their matching Results run.${isRetiredPlatform ? '' : ' Select an available “No submission” status for a Metriq-Gym dispatch command.'}</div>
+        <div class="meta" style="margin-top:12px;">Submitted rows open their matching Results run.${submissionActions.length > 0 ? ' Select an available “No submission” status for a Metriq-Gym dispatch command.' : ''}</div>
         <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
           <table class="smart-table" style="width:100%;min-width:720px;">
             <thead>
@@ -3298,13 +3299,14 @@ function openPlatformSubmissionInstructions(action, trigger) {
     const copyButton = detailBody.querySelector('[data-copy-submission-command]');
     const copyLabel = detailBody.querySelector('[data-copy-submission-label]');
     const copyStatus = detailBody.querySelector('.submission-command__copy-status');
+    const componentScope = action.group || action.instructions.suiteComponent;
     if (summary) {
-        summary.textContent = `Run this command to dispatch the ${action.group} component of Metriq Score 1.0 on ${action.provider} / ${action.device}.`;
+        summary.textContent = `Run this command to dispatch the ${componentScope} component from the ${action.instructions.suite} suite on ${action.provider} / ${action.device}.`;
     }
     if (command)
         command.textContent = action.instructions.command;
     if (scopeNote) {
-        scopeNote.textContent = `The --component option selects the full ${action.group} suite component, not only the ${action.componentName} score row. Depending on the component, this can dispatch additional configured scale points.`;
+        scopeNote.textContent = `The --component option selects the full ${componentScope} suite component, not only the ${action.componentName} score row. Depending on the component, this can dispatch additional configured scale points.`;
     }
     if (action.instructions.requiresRuntimeDeviceId && runtimeDeviceNote) {
         runtimeDeviceNote.hidden = false;

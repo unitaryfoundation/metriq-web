@@ -1,13 +1,3 @@
-const metriqGymSuiteComponents = new Map([
-    ['bseq', 'bseq'],
-    ['clops', 'clops'],
-    ['eplg', 'eplg'],
-    ['linear ramp qaoa', 'lr-qaoa'],
-    ['mirror circuits', 'mirror-circuits'],
-    ['qml kernel', 'qml-kernel'],
-    ['quantum fourier transform', 'qft'],
-    ['wit', 'wit'],
-]);
 const platformComponentCollator = new Intl.Collator('en', {
     numeric: true,
     sensitivity: 'base',
@@ -24,11 +14,6 @@ export function sortPlatformScoreComponents(entries) {
         return platformComponentCollator.compare(a[0], b[0]);
     });
 }
-export function suiteComponentForPlatformGroup(group) {
-    if (typeof group !== 'string')
-        return null;
-    return metriqGymSuiteComponents.get(group.trim().toLocaleLowerCase('en-US')) ?? null;
-}
 function commandArgument(value) {
     if (typeof value !== 'string')
         return null;
@@ -42,11 +27,12 @@ function quotePosixShellArgument(value) {
         return value;
     return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
-export function buildMetriqGymDispatchInstructions({ provider, device, group, runtimeDeviceId, }) {
+export function buildMetriqGymDispatchInstructions({ provider, device, suite, component, runtimeDeviceId, }) {
     const providerArgument = commandArgument(provider);
     const platformDevice = commandArgument(device);
-    const suiteComponent = suiteComponentForPlatformGroup(group);
-    if (!providerArgument || !platformDevice || !suiteComponent)
+    const suiteArgument = commandArgument(suite);
+    const suiteComponent = commandArgument(component);
+    if (!providerArgument || !platformDevice || !suiteArgument || !suiteComponent)
         return null;
     const isAws = ['aws', 'braket'].includes(providerArgument.toLocaleLowerCase('en-US'));
     const suppliedRuntimeDevice = runtimeDeviceId === undefined || runtimeDeviceId === null
@@ -61,10 +47,10 @@ export function buildMetriqGymDispatchInstructions({ provider, device, group, ru
     const deviceArgument = validAwsRuntimeDevice
         ?? (requiresRuntimeDeviceId ? `<full Braket ARN for ${platformDevice}>` : platformDevice);
     const command = [
-        'mgym suite dispatch metriq_score_1_0 \\',
+        `mgym suite dispatch ${quotePosixShellArgument(suiteArgument)} \\`,
         `  --component ${quotePosixShellArgument(suiteComponent)} \\`,
         `  --provider ${quotePosixShellArgument(providerArgument)} \\`,
         `  --device ${quotePosixShellArgument(deviceArgument)}`,
     ].join('\n');
-    return { command, suiteComponent, requiresRuntimeDeviceId };
+    return { command, suite: suiteArgument, suiteComponent, requiresRuntimeDeviceId };
 }
