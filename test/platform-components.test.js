@@ -228,6 +228,16 @@ test('AWS dispatch guidance requests the full runtime ARN when the payload only 
   assert.equal(withArn?.requiresRuntimeDeviceId, false);
   assert.match(withArn?.command ?? '', /--device arn:aws:braket:us-east-1::device\/qpu\/ionq\/Forte-1$/);
 
+  const withPaddedArn = buildMetriqGymDispatchInstructions({
+    provider: 'aws',
+    device: 'ionq_forte-1',
+    suite: 'future_score_2_0',
+    component: 'lr-qaoa',
+    runtimeDeviceId: '  arn:aws:braket:us-east-1::device/qpu/ionq/Forte-1  ',
+  });
+  assert.equal(withPaddedArn?.requiresRuntimeDeviceId, false);
+  assert.match(withPaddedArn?.command ?? '', /--device arn:aws:braket:us-east-1::device\/qpu\/ionq\/Forte-1$/);
+
   const invalidArn = buildMetriqGymDispatchInstructions({
     provider: 'aws',
     device: 'ionq_forte-1',
@@ -237,6 +247,21 @@ test('AWS dispatch guidance requests the full runtime ARN when the payload only 
   });
   assert.equal(invalidArn?.requiresRuntimeDeviceId, true);
   assert.match(invalidArn?.command ?? '', /--device '<full Braket ARN for ionq_forte-1>'/);
+
+  for (const runtimeDeviceId of ['', '   ', 'invalid\nruntime-id', 42]) {
+    const unusableRuntimeId = buildMetriqGymDispatchInstructions({
+      provider: 'aws',
+      device: 'ionq_forte-1',
+      suite: 'future_score_2_0',
+      component: 'lr-qaoa',
+      runtimeDeviceId,
+    });
+    assert.equal(unusableRuntimeId?.requiresRuntimeDeviceId, true);
+    assert.match(
+      unusableRuntimeId?.command ?? '',
+      /--device '<full Braket ARN for ionq_forte-1>'/,
+    );
+  }
 });
 
 test('non-AWS platforms always use their platform device identifier', () => {
@@ -249,6 +274,18 @@ test('non-AWS platforms always use their platform device identifier', () => {
   });
   assert.equal(instructions?.requiresRuntimeDeviceId, false);
   assert.match(instructions?.command ?? '', /--device ibm_fez$/);
+
+  for (const runtimeDeviceId of ['', '   ', 'invalid\nruntime-id', 42, {}]) {
+    const unusableRuntimeId = buildMetriqGymDispatchInstructions({
+      provider: 'ibm',
+      device: 'ibm_fez',
+      suite: 'future_score_2_0',
+      component: 'wit',
+      runtimeDeviceId,
+    });
+    assert.equal(unusableRuntimeId?.requiresRuntimeDeviceId, false);
+    assert.match(unusableRuntimeId?.command ?? '', /--device ibm_fez$/);
+  }
 });
 
 test('dispatch command arguments are shell-quoted and control characters are rejected', () => {
