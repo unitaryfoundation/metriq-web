@@ -1,4 +1,5 @@
 import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
+import { buildMetriqGymDispatchInstructions, resolveMetriqGymSuiteDispatch, sortPlatformScoreComponents, } from './platform-components.js';
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
 const UPDATES_JSON = "./data/updates.json";
@@ -14,6 +15,7 @@ const detailTitle = document.getElementById("detail-title");
 const detailSubtitle = document.getElementById("detail-subtitle");
 const detailBody = document.getElementById("detail-body");
 const detailCloseBtn = detailModal?.querySelector('.detail-modal__close') || null;
+let detailModalReturnFocus = null;
 // Top-level views
 const viewResultsBtn = document.getElementById('view-results-btn');
 const viewPlatformsBtn = document.getElementById('view-platforms-btn');
@@ -44,6 +46,7 @@ let allMetricDefs = [];
 let currentMetricId = null;
 let appConfigPromise;
 let appConfigCache = null;
+let metriqGymSuitePromise;
 let benchmarksPromise;
 let rawBenchmarks = [];
 let platformsPromise;
@@ -2039,6 +2042,7 @@ async function showPlatformDetailPage(provider, device) {
         await initPlatformsView(true);
         return;
     }
+    const suiteDefinitionPromise = loadMetriqGymSuiteDefinition();
     container.innerHTML = '<div class="meta">Loading platform…</div>';
     try {
         if (!Array.isArray(platformsIndexCache) || platformsIndexCache.length === 0) {
@@ -2054,17 +2058,20 @@ async function showPlatformDetailPage(provider, device) {
             await loadBenchmarks();
         }
         catch { }
-        const json = await loadPlatformDetail(provider, device);
-        renderPlatformDetailPage(json);
+        const [json, suiteDefinition] = await Promise.all([
+            loadPlatformDetail(provider, device),
+            suiteDefinitionPromise,
+        ]);
+        renderPlatformDetailPage(json, suiteDefinition);
         scrollToPlatformsLead();
     }
     catch (err) {
         console.error('[platforms] detail load failed:', err);
-        renderPlatformDetailPage({ provider, device, error: String(err) });
+        renderPlatformDetailPage({ provider, device, error: String(err) }, null);
         scrollToPlatformsLead();
     }
 }
-function renderPlatformDetailPage(detail) {
+function renderPlatformDetailPage(detail, suiteDefinition = null) {
     const container = document.getElementById('platforms-container');
     if (!container)
         return;
@@ -2078,6 +2085,7 @@ function renderPlatformDetailPage(detail) {
     const history = Array.isArray(detail?.history) ? detail.history : [];
     const metriqScore = detail?.metriq_score || null;
     const lifecycleNote = renderLifecycleNoteHtml(String(provider), String(device), detail);
+    const isRetiredPlatform = getPlatformLifecycle(String(provider), String(device), detail)?.status === 'retired';
     const comparePeer = findDefaultComparePeer(String(provider), String(device));
     const compareActionHtml = comparePeer
         ? `<a class="compare-with-link" href="${buildCompareHash(String(provider), String(device), String(comparePeer.provider || ''), String(comparePeer.device || ''))}"><i class="fa-solid fa-code-compare" aria-hidden="true"></i> Compare with another device</a>`
@@ -2090,21 +2098,21 @@ function renderPlatformDetailPage(detail) {
         const r = h?.runs ?? 0;
         return `<li>${escapeHtml(f)} → ${escapeHtml(l)} · <strong>${r}</strong> run${r === 1 ? '' : 's'}</li>`;
     }).join('') : '<li>No metadata history</li>';
+    const submissionActions = [];
     let scoreHtml = '<div class="meta">No Metriq score available.</div>';
     if (metriqScore && typeof metriqScore === 'object') {
         const valRaw = metriqScore.value;
         const val = (valRaw === null || valRaw === undefined) ? null : Number(valRaw);
         const series = metriqScore.series || '';
-        const components = metriqScore.components && typeof metriqScore.components === 'object'
+        const components = sortPlatformScoreComponents(metriqScore.components && typeof metriqScore.components === 'object'
             ? Object.entries(metriqScore.components)
-            : [];
-        components.sort((a, b) => {
-            const wa = Number(a[1]?.weight) || 0;
-            const wb = Number(b[1]?.weight) || 0;
-            return wb - wa;
-        });
+            : []);
+        const runtimeDeviceId = detail?.runtime_device_id
+            ?? detail?.current?.runtime_device_id
+            ?? detail?.current?.device_metadata?.runtime_device_id;
         const detailDeviceQubits = deviceMetadataNumQubits(detail);
         let unsupportedCount = 0;
+        let dispatchUnavailableCount = 0;
         const rows = components.map(([name, c]) => {
             const benchmark = typeof c?.group === 'string' ? String(c.group).trim() : '';
             const wRaw = c?.weight;
@@ -2129,20 +2137,46 @@ function renderPlatformDetailPage(detail) {
                 && detailDeviceQubits < required;
             if (isUnsupported)
                 unsupportedCount += 1;
-            const statusHtml = hasResult
+            const href = hasResult && benchmark
+                ? buildResultsHash(String(provider), String(device), benchmark, String(c?.timestamp || ''), 'table')
+                : '';
+            const dispatch = !hasResult && !isUnsupported && !isRetiredPlatform
+                ? resolveMetriqGymSuiteDispatch(suiteDefinition, benchmark)
+                : null;
+            const instructions = dispatch
+                ? buildMetriqGymDispatchInstructions({
+                    provider: String(provider),
+                    device: String(device),
+                    suite: dispatch.suite,
+                    component: dispatch.component,
+                    runtimeDeviceId,
+                })
+                : null;
+            if (!hasResult && !isUnsupported && !isRetiredPlatform && !instructions) {
+                dispatchUnavailableCount += 1;
+            }
+            let statusHtml = hasResult
                 ? '<span class="component-status component-status--ok">Submitted</span>'
                 : isUnsupported
                     ? `<span class="component-status component-status--na" title="Requires ${required} qubits; this device has ${detailDeviceQubits}">Not supported</span>`
                     : '<span class="component-status component-status--missing">No submission</span>';
-            const href = benchmark
-                ? buildResultsHash(String(provider), String(device), benchmark, String(c?.timestamp || ''), 'table')
-                : '';
             const rowClasses = ['platform-component-row'];
             if (isUnsupported)
                 rowClasses.push('platform-component-row--unsupported');
-            const rowAttrs = href
-                ? ` class="${rowClasses.join(' ')}" data-results-href="${escapeAttr(href)}" tabindex="0" title="Open matching results"`
-                : (isUnsupported ? ' class="platform-component-row--unsupported"' : '');
+            let rowAttrs = ` class="${rowClasses.join(' ')}"`;
+            if (href) {
+                rowAttrs += ` data-results-href="${escapeAttr(href)}" tabindex="0" title="Open matching results"`;
+            }
+            else if (instructions) {
+                const actionIndex = submissionActions.push({
+                    componentName: name,
+                    group: benchmark,
+                    provider: String(provider),
+                    device: String(device),
+                    instructions,
+                }) - 1;
+                statusHtml = `<button class="component-status component-status--missing component-status-button" type="button" data-submission-action="${actionIndex}" aria-label="${escapeHtml(`Show how to submit ${name} with Metriq-Gym`)}" title="Show how to submit with Metriq-Gym">No submission</button>`;
+            }
             return `<tr${rowAttrs}>
         <td>${escapeHtml(name)}</td>
         <td>${statusHtml}</td>
@@ -2162,7 +2196,7 @@ function renderPlatformDetailPage(detail) {
         <div class="meta" style="margin-top:8px;">${unsupportedCount} component${unsupportedCount === 1 ? '' : 's'} require${unsupportedCount === 1 ? 's' : ''} more qubits than this device has and cannot be run. Their weight still counts in the Metriq Score denominator, so the score reflects the full benchmark suite rather than only what this device supports.</div>
       ` : ''}
       ${components.length ? `
-        <div class="meta" style="margin-top:12px;">Click a component row to open the matching run in Results.</div>
+        <div class="meta" style="margin-top:12px;">Submitted rows open their matching Results run.${submissionActions.length > 0 ? ' Select an available “No submission” status for a Metriq-Gym dispatch command.' : ''}${dispatchUnavailableCount > 0 ? ` Dispatch instructions are unavailable for ${dispatchUnavailableCount} missing component${dispatchUnavailableCount === 1 ? '' : 's'}.` : ''}</div>
         <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
           <table class="smart-table" style="width:100%;min-width:720px;">
             <thead>
@@ -2235,6 +2269,13 @@ function renderPlatformDetailPage(detail) {
             event.preventDefault();
             open();
         });
+    });
+    container.querySelectorAll('#platform-detail-table button[data-submission-action]').forEach((button) => {
+        const actionIndex = Number(button.getAttribute('data-submission-action'));
+        const action = Number.isInteger(actionIndex) ? submissionActions[actionIndex] : null;
+        if (!action)
+            return;
+        button.addEventListener('click', () => openPlatformSubmissionInstructions(action, button));
     });
 }
 function escapeHtml(s) {
@@ -2953,6 +2994,38 @@ function loadAppConfig() {
     }
     return appConfigPromise;
 }
+function loadMetriqGymSuiteDefinition() {
+    if (!metriqGymSuitePromise) {
+        metriqGymSuitePromise = (async () => {
+            const config = await loadAppConfig();
+            const url = typeof config?.metriqGymSuiteUrl === 'string'
+                ? config.metriqGymSuiteUrl.trim()
+                : '';
+            if (!url)
+                return null;
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), 8000);
+            try {
+                const resp = await fetch(url, { cache: 'force-cache', signal: controller.signal });
+                if (!resp.ok)
+                    throw new Error(`HTTP ${resp.status}`);
+                const definition = await resp.json();
+                if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
+                    throw new Error('expected a suite object');
+                }
+                return definition;
+            }
+            catch (err) {
+                console.warn(`[platforms] failed to load Metriq-Gym suite definition from ${url}:`, err);
+                return null;
+            }
+            finally {
+                window.clearTimeout(timeout);
+            }
+        })();
+    }
+    return metriqGymSuitePromise;
+}
 function appendCacheBust(url) {
     const bust = `_=${Date.now()}`;
     if (url.includes('?')) {
@@ -3035,6 +3108,24 @@ if (metricSelect) {
 document.addEventListener('keydown', event => {
     if (event.key === 'Escape') {
         closeDetail();
+        return;
+    }
+    if (event.key === 'Tab' && detailModal && !detailModal.hidden) {
+        const focusable = Array.from(detailModal.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hidden && element.getAttribute('aria-hidden') !== 'true');
+        if (!focusable.length) {
+            event.preventDefault();
+            return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        }
+        else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
     }
 });
 if (detailModal) {
@@ -3211,6 +3302,78 @@ function getFilteredData() {
         return [];
     return rawBenchmarks.filter(item => selProv.includes(String(item.provider || '')) && selBench.includes(String(item.benchmark || '')));
 }
+function showDetailModal(returnFocus) {
+    if (!detailModal)
+        return;
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    detailModalReturnFocus = returnFocus ?? activeElement;
+    detailModal.hidden = false;
+    document.body.style.overflow = 'hidden';
+    window.requestAnimationFrame(() => detailCloseBtn?.focus({ preventScroll: true }));
+}
+function openPlatformSubmissionInstructions(action, trigger) {
+    if (!detailModal || !detailTitle || !detailBody || !detailSubtitle)
+        return;
+    detailTitle.textContent = `Submit ${action.componentName}`;
+    detailSubtitle.textContent = `${action.provider} · ${action.device}`;
+    detailBody.innerHTML = `
+    <section class="detail-section submission-instructions">
+      <p data-submission-summary></p>
+      <div class="submission-command">
+        <pre><code data-submission-command></code></pre>
+        <div class="submission-command__actions">
+          <button class="btn-mini" type="button" data-copy-submission-command>
+            <i class="fa-regular fa-copy" aria-hidden="true"></i>
+            <span data-copy-submission-label>Copy command</span>
+          </button>
+          <span class="submission-command__copy-status" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <p class="submission-instructions__note" data-component-scope-note></p>
+      <p class="submission-instructions__warning" data-runtime-device-note hidden></p>
+      <p class="submission-instructions__docs">
+        <a href="https://unitaryfoundation.github.io/metriq-gym/cli/suite-commands/#dispatch" target="_blank" rel="noopener noreferrer">Metriq-Gym suite dispatch guide</a>
+      </p>
+    </section>
+  `;
+    const summary = detailBody.querySelector('[data-submission-summary]');
+    const command = detailBody.querySelector('[data-submission-command]');
+    const scopeNote = detailBody.querySelector('[data-component-scope-note]');
+    const runtimeDeviceNote = detailBody.querySelector('[data-runtime-device-note]');
+    const copyButton = detailBody.querySelector('[data-copy-submission-command]');
+    const copyLabel = detailBody.querySelector('[data-copy-submission-label]');
+    const copyStatus = detailBody.querySelector('.submission-command__copy-status');
+    const componentScope = action.group || action.instructions.suiteComponent;
+    if (summary) {
+        summary.textContent = `Run this command to dispatch the ${componentScope} component from the ${action.instructions.suite} suite on ${action.provider} / ${action.device}.`;
+    }
+    if (command)
+        command.textContent = action.instructions.command;
+    if (scopeNote) {
+        scopeNote.textContent = `The --component option selects the full ${componentScope} suite component, not only the ${action.componentName} score row. Depending on the component, this can dispatch additional configured scale points.`;
+    }
+    if (action.instructions.requiresRuntimeDeviceId && runtimeDeviceNote) {
+        runtimeDeviceNote.hidden = false;
+        runtimeDeviceNote.textContent = `Metriq stores this AWS device as ${action.device}, but dispatch requires its full, case-sensitive Braket ARN. Replace the device placeholder before running the command.`;
+    }
+    if (action.instructions.requiresRuntimeDeviceId && copyLabel) {
+        copyLabel.textContent = 'Copy template';
+    }
+    copyButton?.addEventListener('click', async () => {
+        try {
+            if (!navigator.clipboard?.writeText)
+                throw new Error('Clipboard API unavailable');
+            await navigator.clipboard.writeText(action.instructions.command);
+            if (copyStatus)
+                copyStatus.textContent = action.instructions.requiresRuntimeDeviceId ? 'Template copied' : 'Command copied';
+        }
+        catch {
+            if (copyStatus)
+                copyStatus.textContent = 'Copy failed — select the command manually';
+        }
+    });
+    showDetailModal(trigger);
+}
 function openRunDetail(run) {
     if (!detailModal || !detailTitle || !detailBody || !detailSubtitle)
         return;
@@ -3240,14 +3403,18 @@ function openRunDetail(run) {
       </div>
     </section>
   `;
-    detailModal.hidden = false;
-    document.body.style.overflow = 'hidden';
+    showDetailModal();
 }
 function closeDetail() {
     if (!detailModal || detailModal.hidden)
         return;
     detailModal.hidden = true;
     document.body.style.overflow = '';
+    const returnFocus = detailModalReturnFocus;
+    detailModalReturnFocus = null;
+    if (returnFocus?.isConnected) {
+        returnFocus.focus({ preventScroll: true });
+    }
 }
 function summarizeMetric(runs, metricId) {
     const values = runs.map(run => getMetricValue(run, metricId)).filter(value => value !== null);
