@@ -7,6 +7,11 @@ export type MetriqGymDispatchInstructions = {
   requiresRuntimeDeviceId: boolean;
 };
 
+export type MetriqGymSuiteDispatch = {
+  suite: string;
+  component: string;
+};
+
 const platformComponentCollator = new Intl.Collator('en', {
   numeric: true,
   sensitivity: 'base',
@@ -33,6 +38,60 @@ function commandArgument(value: unknown) {
   const trimmed = value.trim();
   if (!trimmed || /[\u0000-\u001f\u007f]/.test(trimmed)) return null;
   return trimmed;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function suiteLookupKey(value: unknown) {
+  const normalized = commandArgument(value);
+  return normalized?.toLocaleLowerCase('en-US') ?? null;
+}
+
+function suiteBenchmarkSelector(benchmark: Record<string, unknown>) {
+  const rawComponent = benchmark.component;
+  if (rawComponent !== undefined && rawComponent !== null) {
+    if (typeof rawComponent !== 'string') return null;
+    if (/[\u0000-\u001f\u007f]/.test(rawComponent)) return null;
+    const component = rawComponent.trim();
+    if (component) return component;
+  }
+  return commandArgument(benchmark.name);
+}
+
+export function resolveMetriqGymSuiteDispatch(
+  suiteDefinition: unknown,
+  group: unknown,
+): MetriqGymSuiteDispatch | null {
+  const definition = objectRecord(suiteDefinition);
+  const requestedAlias = suiteLookupKey(group);
+  if (!definition || !requestedAlias) return null;
+
+  const suite = commandArgument(definition.name);
+  const benchmarks = definition.benchmarks;
+  if (!suite || !Array.isArray(benchmarks)) return null;
+
+  let component: string | null = null;
+  let componentKey: string | null = null;
+  for (const value of benchmarks) {
+    const benchmark = objectRecord(value);
+    const config = objectRecord(benchmark?.config);
+    if (!benchmark || !config) continue;
+    if (suiteLookupKey(config.benchmark_name) !== requestedAlias) continue;
+
+    const selector = suiteBenchmarkSelector(benchmark);
+    if (!selector) return null;
+
+    const selectorKey = selector.toLocaleLowerCase('en-US');
+    if (componentKey !== null && selectorKey !== componentKey) return null;
+    if (component === null) component = selector;
+    componentKey = selectorKey;
+  }
+
+  return component ? { suite, component } : null;
 }
 
 function quotePosixShellArgument(value: string) {

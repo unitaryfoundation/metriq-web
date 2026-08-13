@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildMetriqGymDispatchInstructions,
+  resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
 } from '../platform-components.js';
 
@@ -59,29 +60,138 @@ test('platform score component sorting falls back to the label for missing group
   );
 });
 
-test('builds a copyable command from payload-provided dispatch metadata', () => {
+const suiteDefinition = {
+  name: ' future_score_2_0 ',
+  benchmarks: [
+    {
+      name: 'qft_4q',
+      component: 'qft',
+      config: { benchmark_name: ' Quantum Fourier Transform ' },
+    },
+    {
+      name: 'qft_8q',
+      component: ' QFT ',
+      config: { benchmark_name: 'quantum fourier transform' },
+    },
+    {
+      name: 'wit_7q',
+      component: 'wit',
+      config: { benchmark_name: 'WIT' },
+    },
+  ],
+};
+
+test('resolves repeated suite aliases to one canonical component', () => {
+  assert.deepEqual(
+    resolveMetriqGymSuiteDispatch(suiteDefinition, '  QUANTUM FOURIER TRANSFORM  '),
+    { suite: 'future_score_2_0', component: 'qft' },
+  );
+  assert.deepEqual(
+    resolveMetriqGymSuiteDispatch(suiteDefinition, 'wit'),
+    { suite: 'future_score_2_0', component: 'wit' },
+  );
+});
+
+test('falls back to a benchmark name for legacy entries without a component', () => {
+  for (const component of [undefined, null, '   ']) {
+    const benchmark = {
+      name: 'legacy-qft',
+      config: { benchmark_name: 'Quantum Fourier Transform' },
+    };
+    if (component !== undefined) benchmark.component = component;
+
+    assert.deepEqual(
+      resolveMetriqGymSuiteDispatch(
+        { name: 'legacy_suite', benchmarks: [benchmark] },
+        'quantum fourier transform',
+      ),
+      { suite: 'legacy_suite', component: 'legacy-qft' },
+    );
+  }
+});
+
+test('suite parsing fails closed for ambiguous or malformed matching entries', () => {
+  const suiteWith = (...benchmarks) => ({ name: 'future_suite', benchmarks });
+  const match = (component, name = 'entry') => ({
+    name,
+    component,
+    config: { benchmark_name: 'Future benchmark' },
+  });
+
+  assert.equal(
+    resolveMetriqGymSuiteDispatch(suiteWith(match('one'), match('two')), 'Future benchmark'),
+    null,
+  );
+  assert.equal(
+    resolveMetriqGymSuiteDispatch(suiteWith(match('one'), match(42)), 'Future benchmark'),
+    null,
+  );
+  assert.equal(
+    resolveMetriqGymSuiteDispatch(suiteWith(match('one'), match('bad\nselector')), 'Future benchmark'),
+    null,
+  );
+  assert.equal(
+    resolveMetriqGymSuiteDispatch(
+      suiteWith({ config: { benchmark_name: 'Future benchmark' } }),
+      'Future benchmark',
+    ),
+    null,
+  );
+});
+
+test('suite parsing rejects invalid top-level data and ignores irrelevant bad entries', () => {
+  const valid = {
+    name: 'future_suite',
+    benchmarks: [
+      null,
+      { name: 42, component: {}, config: { benchmark_name: 'Other benchmark' } },
+      { name: 'future', component: 'future-component', config: { benchmark_name: 'Future benchmark' } },
+    ],
+  };
+  assert.deepEqual(
+    resolveMetriqGymSuiteDispatch(valid, 'future benchmark'),
+    { suite: 'future_suite', component: 'future-component' },
+  );
+
+  for (const [definition, group] of [
+    [null, 'Future benchmark'],
+    [[], 'Future benchmark'],
+    [{ name: '', benchmarks: [] }, 'Future benchmark'],
+    [{ name: 'bad\nsuite', benchmarks: [] }, 'Future benchmark'],
+    [{ name: 'future_suite', benchmarks: {} }, 'Future benchmark'],
+    [{ name: 'future_suite', benchmarks: [] }, 'Future benchmark'],
+    [valid, ''],
+    [valid, 'bad\ngroup'],
+  ]) {
+    assert.equal(resolveMetriqGymSuiteDispatch(definition, group), null);
+  }
+  assert.equal(resolveMetriqGymSuiteDispatch(valid, 'Missing benchmark'), null);
+});
+
+test('builds a copyable command from parsed suite metadata', () => {
+  const dispatch = resolveMetriqGymSuiteDispatch(suiteDefinition, 'Quantum Fourier Transform');
+  assert.ok(dispatch);
   assert.deepEqual(
     buildMetriqGymDispatchInstructions({
       provider: 'ibm',
       device: 'ibm_fez',
-      suite: 'future_score_2_0',
-      component: 'future-eplg',
+      ...dispatch,
     }),
     {
       command: [
         'mgym suite dispatch future_score_2_0 \\',
-        '  --component future-eplg \\',
+        '  --component qft \\',
         '  --provider ibm \\',
         '  --device ibm_fez',
       ].join('\n'),
       suite: 'future_score_2_0',
-      suiteComponent: 'future-eplg',
+      suiteComponent: 'qft',
       requiresRuntimeDeviceId: false,
     },
   );
 });
 
-test('missing or invalid payload dispatch metadata does not produce a command', () => {
+test('missing or invalid dispatch metadata does not produce a command', () => {
   const platform = { provider: 'ibm', device: 'ibm_fez' };
 
   assert.equal(
