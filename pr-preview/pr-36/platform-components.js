@@ -87,11 +87,9 @@ export function buildMetriqGymDispatchInstructions({ provider, device, suite, co
     if (!providerArgument || !platformDevice || !suiteArgument || !suiteComponent)
         return null;
     const isAws = ['aws', 'braket'].includes(providerArgument.toLocaleLowerCase('en-US'));
-    const suppliedRuntimeDevice = runtimeDeviceId === undefined || runtimeDeviceId === null
-        ? null
-        : commandArgument(runtimeDeviceId);
-    if (runtimeDeviceId !== undefined && runtimeDeviceId !== null && !suppliedRuntimeDevice)
-        return null;
+    // Runtime identifiers are optional metadata. Ignore unusable values rather
+    // than suppressing otherwise valid dispatch guidance.
+    const suppliedRuntimeDevice = commandArgument(runtimeDeviceId);
     const validAwsRuntimeDevice = isAws && suppliedRuntimeDevice && /^arn:[^:]+:braket:[^:]+:[^:]*:device\/.+$/i.test(suppliedRuntimeDevice)
         ? suppliedRuntimeDevice
         : null;
