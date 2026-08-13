@@ -22,6 +22,58 @@ function commandArgument(value) {
         return null;
     return trimmed;
 }
+function objectRecord(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+        ? value
+        : null;
+}
+function suiteLookupKey(value) {
+    const normalized = commandArgument(value);
+    return normalized?.toLocaleLowerCase('en-US') ?? null;
+}
+function suiteBenchmarkSelector(benchmark) {
+    const rawComponent = benchmark.component;
+    if (rawComponent !== undefined && rawComponent !== null) {
+        if (typeof rawComponent !== 'string')
+            return null;
+        if (/[\u0000-\u001f\u007f]/.test(rawComponent))
+            return null;
+        const component = rawComponent.trim();
+        if (component)
+            return component;
+    }
+    return commandArgument(benchmark.name);
+}
+export function resolveMetriqGymSuiteDispatch(suiteDefinition, group) {
+    const definition = objectRecord(suiteDefinition);
+    const requestedAlias = suiteLookupKey(group);
+    if (!definition || !requestedAlias)
+        return null;
+    const suite = commandArgument(definition.name);
+    const benchmarks = definition.benchmarks;
+    if (!suite || !Array.isArray(benchmarks))
+        return null;
+    let component = null;
+    let componentKey = null;
+    for (const value of benchmarks) {
+        const benchmark = objectRecord(value);
+        const config = objectRecord(benchmark?.config);
+        if (!benchmark || !config)
+            continue;
+        if (suiteLookupKey(config.benchmark_name) !== requestedAlias)
+            continue;
+        const selector = suiteBenchmarkSelector(benchmark);
+        if (!selector)
+            return null;
+        const selectorKey = selector.toLocaleLowerCase('en-US');
+        if (componentKey !== null && selectorKey !== componentKey)
+            return null;
+        if (component === null)
+            component = selector;
+        componentKey = selectorKey;
+    }
+    return component ? { suite, component } : null;
+}
 function quotePosixShellArgument(value) {
     if (/^[A-Za-z0-9_./:@%+=,-]+$/.test(value))
         return value;

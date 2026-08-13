@@ -1,5 +1,5 @@
 import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
-import { buildMetriqGymDispatchInstructions, sortPlatformScoreComponents, } from './platform-components.js';
+import { buildMetriqGymDispatchInstructions, resolveMetriqGymSuiteDispatch, sortPlatformScoreComponents, } from './platform-components.js';
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
 const UPDATES_JSON = "./data/updates.json";
@@ -46,6 +46,7 @@ let allMetricDefs = [];
 let currentMetricId = null;
 let appConfigPromise;
 let appConfigCache = null;
+let metriqGymSuitePromise;
 let benchmarksPromise;
 let rawBenchmarks = [];
 let platformsPromise;
@@ -2041,6 +2042,7 @@ async function showPlatformDetailPage(provider, device) {
         await initPlatformsView(true);
         return;
     }
+    const suiteDefinitionPromise = loadMetriqGymSuiteDefinition();
     container.innerHTML = '<div class="meta">Loading platform…</div>';
     try {
         if (!Array.isArray(platformsIndexCache) || platformsIndexCache.length === 0) {
@@ -2056,17 +2058,20 @@ async function showPlatformDetailPage(provider, device) {
             await loadBenchmarks();
         }
         catch { }
-        const json = await loadPlatformDetail(provider, device);
-        renderPlatformDetailPage(json);
+        const [json, suiteDefinition] = await Promise.all([
+            loadPlatformDetail(provider, device),
+            suiteDefinitionPromise,
+        ]);
+        renderPlatformDetailPage(json, suiteDefinition);
         scrollToPlatformsLead();
     }
     catch (err) {
         console.error('[platforms] detail load failed:', err);
-        renderPlatformDetailPage({ provider, device, error: String(err) });
+        renderPlatformDetailPage({ provider, device, error: String(err) }, null);
         scrollToPlatformsLead();
     }
 }
-function renderPlatformDetailPage(detail) {
+function renderPlatformDetailPage(detail, suiteDefinition = null) {
     const container = document.getElementById('platforms-container');
     if (!container)
         return;
@@ -2107,6 +2112,7 @@ function renderPlatformDetailPage(detail) {
             ?? detail?.current?.device_metadata?.runtime_device_id;
         const detailDeviceQubits = deviceMetadataNumQubits(detail);
         let unsupportedCount = 0;
+        let dispatchUnavailableCount = 0;
         const rows = components.map(([name, c]) => {
             const benchmark = typeof c?.group === 'string' ? String(c.group).trim() : '';
             const wRaw = c?.weight;
@@ -2134,15 +2140,21 @@ function renderPlatformDetailPage(detail) {
             const href = hasResult && benchmark
                 ? buildResultsHash(String(provider), String(device), benchmark, String(c?.timestamp || ''), 'table')
                 : '';
-            const instructions = !hasResult && !isUnsupported && !isRetiredPlatform
+            const dispatch = !hasResult && !isUnsupported && !isRetiredPlatform
+                ? resolveMetriqGymSuiteDispatch(suiteDefinition, benchmark)
+                : null;
+            const instructions = dispatch
                 ? buildMetriqGymDispatchInstructions({
                     provider: String(provider),
                     device: String(device),
-                    suite: c?.dispatch?.suite,
-                    component: c?.dispatch?.component,
+                    suite: dispatch.suite,
+                    component: dispatch.component,
                     runtimeDeviceId,
                 })
                 : null;
+            if (!hasResult && !isUnsupported && !isRetiredPlatform && !instructions) {
+                dispatchUnavailableCount += 1;
+            }
             let statusHtml = hasResult
                 ? '<span class="component-status component-status--ok">Submitted</span>'
                 : isUnsupported
@@ -2184,7 +2196,7 @@ function renderPlatformDetailPage(detail) {
         <div class="meta" style="margin-top:8px;">${unsupportedCount} component${unsupportedCount === 1 ? '' : 's'} require${unsupportedCount === 1 ? 's' : ''} more qubits than this device has and cannot be run. Their weight still counts in the Metriq Score denominator, so the score reflects the full benchmark suite rather than only what this device supports.</div>
       ` : ''}
       ${components.length ? `
-        <div class="meta" style="margin-top:12px;">Submitted rows open their matching Results run.${submissionActions.length > 0 ? ' Select an available “No submission” status for a Metriq-Gym dispatch command.' : ''}</div>
+        <div class="meta" style="margin-top:12px;">Submitted rows open their matching Results run.${submissionActions.length > 0 ? ' Select an available “No submission” status for a Metriq-Gym dispatch command.' : ''}${dispatchUnavailableCount > 0 ? ` Dispatch instructions are unavailable for ${dispatchUnavailableCount} missing component${dispatchUnavailableCount === 1 ? '' : 's'}.` : ''}</div>
         <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
           <table class="smart-table" style="width:100%;min-width:720px;">
             <thead>
@@ -2981,6 +2993,38 @@ function loadAppConfig() {
         })();
     }
     return appConfigPromise;
+}
+function loadMetriqGymSuiteDefinition() {
+    if (!metriqGymSuitePromise) {
+        metriqGymSuitePromise = (async () => {
+            const config = await loadAppConfig();
+            const url = typeof config?.metriqGymSuiteUrl === 'string'
+                ? config.metriqGymSuiteUrl.trim()
+                : '';
+            if (!url)
+                return null;
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), 8000);
+            try {
+                const resp = await fetch(url, { cache: 'force-cache', signal: controller.signal });
+                if (!resp.ok)
+                    throw new Error(`HTTP ${resp.status}`);
+                const definition = await resp.json();
+                if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
+                    throw new Error('expected a suite object');
+                }
+                return definition;
+            }
+            catch (err) {
+                console.warn(`[platforms] failed to load Metriq-Gym suite definition from ${url}:`, err);
+                return null;
+            }
+            finally {
+                window.clearTimeout(timeout);
+            }
+        })();
+    }
+    return metriqGymSuitePromise;
 }
 function appendCacheBust(url) {
     const bust = `_=${Date.now()}`;
