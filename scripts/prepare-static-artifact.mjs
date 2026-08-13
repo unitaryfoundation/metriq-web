@@ -13,6 +13,7 @@ const staticFiles = [
   "styles.css",
   "tour.css",
   "main.js",
+  "platform-components.js",
   "records.js",
   "tour.js",
   "feed.xml",
