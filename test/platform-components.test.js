@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildMetriqGymDispatchInstructions,
+  isSameMetriqGymSuiteRelease,
   resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
@@ -104,6 +105,31 @@ test('suite display metadata rejects malformed definitions', () => {
     }),
     { name: 'metriq_score_1_0', version: '1.0', description: null },
     'optional description metadata must not hide a valid suite version',
+  );
+});
+
+test('suite releases match only when both name and version agree', () => {
+  const configured = {
+    name: 'metriq_score_1_0',
+    version: '1.0',
+    description: 'Locally configured description',
+  };
+
+  assert.equal(
+    isSameMetriqGymSuiteRelease(configured, {
+      ...configured,
+      description: 'Description from the pinned definition',
+    }),
+    true,
+    'description differences do not identify a different release',
+  );
+  assert.equal(
+    isSameMetriqGymSuiteRelease(configured, { ...configured, version: '2.0' }),
+    false,
+  );
+  assert.equal(
+    isSameMetriqGymSuiteRelease(configured, { ...configured, name: 'another_suite' }),
+    false,
   );
 });
 

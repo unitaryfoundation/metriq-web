@@ -70,6 +70,13 @@ export function resolveMetriqGymSuiteMetadata(
   return { name, version, description };
 }
 
+export function isSameMetriqGymSuiteRelease(
+  left: MetriqGymSuiteMetadata,
+  right: MetriqGymSuiteMetadata,
+) {
+  return left.name === right.name && left.version === right.version;
+}
+
 function suiteLookupKey(value: unknown) {
   const normalized = commandArgument(value);
   return normalized?.toLocaleLowerCase('en-US') ?? null;

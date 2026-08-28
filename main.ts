@@ -1,6 +1,7 @@
 import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
 import {
   buildMetriqGymDispatchInstructions,
+  isSameMetriqGymSuiteRelease,
   MetriqGymDispatchInstructions,
   MetriqGymSuiteMetadata,
   resolveMetriqGymSuiteMetadata,
@@ -1008,20 +1009,22 @@ function setMetriqGymSuiteMetadata(suiteDefinition: unknown) {
   return metadata;
 }
 
-function metriqScoreSuiteLabel() {
-  return metriqGymSuiteMetadata
-    ? `Metriq Score suite ${metriqGymSuiteMetadata.version}`
-    : 'Metriq Score suite';
+function invalidateMetriqGymSuiteMetadata() {
+  metriqGymSuiteMetadata = null;
+  document.querySelectorAll<HTMLElement>('[data-suite-version-context]').forEach((element) => {
+    element.remove();
+  });
 }
 
-function renderSuiteReleaseHtml() {
+function renderSuiteVersionControlHtml() {
   if (!metriqGymSuiteMetadata) return '';
   return `
-    <div class="suite-release" role="note" aria-label="Current Metriq benchmark suite version">
-      <span class="suite-release__eyebrow">Current benchmark suite</span>
-      <strong class="suite-release__name">${escapeHtml(metriqScoreSuiteLabel())}</strong>
-      <span class="suite-release__note">Suite definitions are versioned; later releases will have their own number. Device scores identify a separate data series.</span>
-    </div>
+    <label class="suite-version-control" data-suite-version-context>
+      <span class="suite-version-control__label">Suite version</span>
+      <select class="suite-version-control__select" aria-label="Metriq Score suite version" title="Only suite version ${escapeAttr(metriqGymSuiteMetadata.version)} is currently available">
+        <option value="${escapeAttr(metriqGymSuiteMetadata.version)}" selected>${escapeHtml(metriqGymSuiteMetadata.version)}</option>
+      </select>
+    </label>
   `.trim();
 }
 
@@ -1034,14 +1037,14 @@ function renderMetriqScoreHelp() {
       <div class="meta"><a href="${escapeAttr(buildPlatformsListHash())}" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <h3 style="margin:0;">Metriq Score</h3>
-        <div class="meta">What the “Metriq Score” column means${suiteVersion ? ` · Current benchmark suite ${escapeHtml(suiteVersion)}` : ''}</div>
+        <div class="meta">What the “Metriq Score” column means${suiteVersion ? ` <span data-suite-version-context>· Current benchmark suite ${escapeHtml(suiteVersion)}</span>` : ''}</div>
       </div>
       <div style="background:#fff;border:1px solid #dbeafe;border-radius:14px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06);">
         <p style="margin:0 0 10px;line-height:1.55;">
           Metriq Score is an aggregate score computed from benchmark results. It is intended as a single number that summarizes device performance.
         </p>
         ${suiteVersion ? `
-          <p style="margin:0 0 10px;line-height:1.55;">
+          <p data-suite-version-context style="margin:0 0 10px;line-height:1.55;">
             This view is configured with benchmark suite version <strong>${escapeHtml(suiteVersion)}</strong>. Suite definitions are versioned, and later releases may change their benchmark composition or weights. A suite version is distinct from the data series shown for an individual device score.
           </p>
         ` : ''}
@@ -2063,7 +2066,7 @@ function renderPlatformComparePage(left: any, right: any) {
           <p class="meta">Explore side-by-side differences in metadata and available suite results without ranking devices.</p>
         </div>
       </div>
-      ${renderSuiteReleaseHtml()}
+      ${renderSuiteVersionControlHtml()}
       ${renderComparePickerHtml(leftProvider, leftDevice, rightProvider, rightDevice)}
       <div class="compare-cards" aria-label="Selected devices">
         <article class="compare-card">
@@ -2273,7 +2276,7 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
     }).join('');
     scoreHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        ${metriqGymSuiteMetadata ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;" title="Current benchmark suite definition; distinct from the score data series">Current suite: ${escapeHtml(metriqGymSuiteMetadata.version)}</span>` : ''}
+        ${metriqGymSuiteMetadata ? `<span data-suite-version-context style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;" title="Current benchmark suite definition; distinct from the score data series">Current suite: ${escapeHtml(metriqGymSuiteMetadata.version)}</span>` : ''}
         <span style="display:inline-flex;align-items:center;gap:6px;background:#f8fafc;color:#334155;padding:4px 10px;border-radius:999px;font-weight:600;">Data series: ${escapeHtml(series || '')}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;" title="Which record is used when a benchmark has multiple submissions">Records: ${recordAggMode === 'all-time' ? 'All-time best' : 'Latest'}</span>
@@ -2720,7 +2723,7 @@ function renderPlatformsTable() {
 		    container.innerHTML = '';
 		    const platformControls = document.createElement('div');
 		    platformControls.className = 'platform-controls';
-		    platformControls.insertAdjacentHTML('beforeend', renderSuiteReleaseHtml());
+		    platformControls.insertAdjacentHTML('beforeend', renderSuiteVersionControlHtml());
 		    const retiredDevicesToggle = document.createElement('label');
 		    retiredDevicesToggle.className = 'retired-devices-toggle';
 		    retiredDevicesToggle.innerHTML = `
@@ -3109,12 +3112,14 @@ function loadMetriqGymSuiteDefinition() {
         const fetchedMetadata = resolveMetriqGymSuiteMetadata(definition);
         if (!fetchedMetadata) {
           console.warn(`[platforms] Metriq-Gym suite definition from ${url} has no valid display metadata.`);
+          invalidateMetriqGymSuiteMetadata();
+          return null;
         } else if (
           metriqGymSuiteMetadata
-          && (metriqGymSuiteMetadata.name !== fetchedMetadata.name
-            || metriqGymSuiteMetadata.version !== fetchedMetadata.version)
+          && !isSameMetriqGymSuiteRelease(metriqGymSuiteMetadata, fetchedMetadata)
         ) {
-          console.warn(`[platforms] configured suite metadata does not match the definition at ${url}; keeping the configured label.`);
+          console.warn(`[platforms] configured suite metadata does not match the definition at ${url}; hiding the configured label.`);
+          invalidateMetriqGymSuiteMetadata();
           return null;
         } else {
           metriqGymSuiteMetadata = fetchedMetadata;
