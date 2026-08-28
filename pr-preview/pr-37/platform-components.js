@@ -41,6 +41,9 @@ export function resolveMetriqGymSuiteMetadata(suiteDefinition) {
     }
     return { name, version, description };
 }
+export function isSameMetriqGymSuiteRelease(left, right) {
+    return left.name === right.name && left.version === right.version;
+}
 function suiteLookupKey(value) {
     const normalized = commandArgument(value);
     return normalized?.toLocaleLowerCase('en-US') ?? null;

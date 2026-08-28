@@ -40,7 +40,7 @@ class MetriqTour {
                 element: '#view-platforms-btn',
                 popover: {
                     title: 'Platform Leaderboard',
-                    description: 'Compare global quantum systems using the Metriq Score—a normalized performance metric across diverse architectures. Benchmark suite definitions are versioned, while individual device scores may use different data series. <a href="#view=platforms&help=metriq-score">Learn more</a>',
+                    description: 'Compare global quantum systems using the Metriq Score—a normalized performance metric across diverse architectures. Suite versions and device data series are shown separately. <a href="#view=platforms&help=metriq-score">Learn more</a>',
                     side: 'bottom',
                     align: 'center'
                 },
