@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildMetriqGymDispatchInstructions,
+  isSameMetriqGymSuiteRelease,
+  resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
 } from '../platform-components.js';
@@ -57,6 +59,77 @@ test('platform score component sorting falls back to the label for missing group
   assert.deepEqual(
     sortPlatformScoreComponents(components).map(([name]) => name),
     ['Component 20', 'Component 100'],
+  );
+});
+
+test('reads display metadata from a versioned Metriq-Gym suite definition', () => {
+  assert.deepEqual(
+    resolveMetriqGymSuiteMetadata({
+      name: ' metriq_score_1_0 ',
+      version: ' 1.0 ',
+      description: ' Version 1.0 of the canonical Metriq benchmark suite. ',
+    }),
+    {
+      name: 'metriq_score_1_0',
+      version: '1.0',
+      description: 'Version 1.0 of the canonical Metriq benchmark suite.',
+    },
+  );
+
+  assert.deepEqual(
+    resolveMetriqGymSuiteMetadata({ name: 'metriq_score_2_0', version: '2.0' }),
+    { name: 'metriq_score_2_0', version: '2.0', description: null },
+    'future releases must be displayed from metadata rather than a hard-coded version',
+  );
+});
+
+test('suite display metadata rejects malformed definitions', () => {
+  for (const definition of [
+    null,
+    [],
+    {},
+    { name: '', version: '1.0' },
+    { name: 'metriq_score_1_0', version: '' },
+    { name: 'metriq_score_1_0', version: 1 },
+    { name: 'bad\nsuite', version: '1.0' },
+    { name: 'metriq_score_1_0', version: '1.0\n2.0' },
+  ]) {
+    assert.equal(resolveMetriqGymSuiteMetadata(definition), null);
+  }
+
+  assert.deepEqual(
+    resolveMetriqGymSuiteMetadata({
+      name: 'metriq_score_1_0',
+      version: '1.0',
+      description: {},
+    }),
+    { name: 'metriq_score_1_0', version: '1.0', description: null },
+    'optional description metadata must not hide a valid suite version',
+  );
+});
+
+test('suite releases match only when both name and version agree', () => {
+  const configured = {
+    name: 'metriq_score_1_0',
+    version: '1.0',
+    description: 'Locally configured description',
+  };
+
+  assert.equal(
+    isSameMetriqGymSuiteRelease(configured, {
+      ...configured,
+      description: 'Description from the pinned definition',
+    }),
+    true,
+    'description differences do not identify a different release',
+  );
+  assert.equal(
+    isSameMetriqGymSuiteRelease(configured, { ...configured, version: '2.0' }),
+    false,
+  );
+  assert.equal(
+    isSameMetriqGymSuiteRelease(configured, { ...configured, name: 'another_suite' }),
+    false,
   );
 });
 

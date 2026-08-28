@@ -12,6 +12,12 @@ export type MetriqGymSuiteDispatch = {
   component: string;
 };
 
+export type MetriqGymSuiteMetadata = {
+  name: string;
+  version: string;
+  description: string | null;
+};
+
 const platformComponentCollator = new Intl.Collator('en', {
   numeric: true,
   sensitivity: 'base',
@@ -44,6 +50,31 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+export function resolveMetriqGymSuiteMetadata(
+  suiteDefinition: unknown,
+): MetriqGymSuiteMetadata | null {
+  const definition = objectRecord(suiteDefinition);
+  if (!definition) return null;
+
+  const name = commandArgument(definition.name);
+  const version = commandArgument(definition.version);
+  if (!name || !version) return null;
+
+  let description: string | null = null;
+  if (definition.description !== undefined && definition.description !== null) {
+    description = commandArgument(definition.description);
+  }
+
+  return { name, version, description };
+}
+
+export function isSameMetriqGymSuiteRelease(
+  left: MetriqGymSuiteMetadata,
+  right: MetriqGymSuiteMetadata,
+) {
+  return left.name === right.name && left.version === right.version;
 }
 
 function suiteLookupKey(value: unknown) {
