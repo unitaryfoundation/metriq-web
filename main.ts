@@ -2,6 +2,8 @@ import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSum
 import {
   buildMetriqGymDispatchInstructions,
   MetriqGymDispatchInstructions,
+  MetriqGymSuiteMetadata,
+  resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
 } from './platform-components.js';
@@ -65,6 +67,7 @@ let currentMetricId = null;
 let appConfigPromise;
 let appConfigCache = null;
 let metriqGymSuitePromise;
+let metriqGymSuiteMetadata: MetriqGymSuiteMetadata | null = null;
 let benchmarksPromise;
 let rawBenchmarks = [];
 let platformsPromise;
@@ -999,20 +1002,49 @@ function renderDisplayMath(tex: string) {
   return `<pre style="white-space:pre-wrap;margin:8px 0;background:#f8fafc;border:1px solid #eef2ff;border-radius:8px;padding:10px;overflow:auto;">$$\n${escapeHtml(tex)}\n$$</pre>`;
 }
 
+function setMetriqGymSuiteMetadata(suiteDefinition: unknown) {
+  const metadata = resolveMetriqGymSuiteMetadata(suiteDefinition);
+  if (metadata) metriqGymSuiteMetadata = metadata;
+  return metadata;
+}
+
+function metriqScoreSuiteLabel() {
+  return metriqGymSuiteMetadata
+    ? `Metriq Score suite ${metriqGymSuiteMetadata.version}`
+    : 'Metriq Score suite';
+}
+
+function renderSuiteReleaseHtml() {
+  if (!metriqGymSuiteMetadata) return '';
+  return `
+    <div class="suite-release" role="note" aria-label="Current Metriq benchmark suite version">
+      <span class="suite-release__eyebrow">Current benchmark suite</span>
+      <strong class="suite-release__name">${escapeHtml(metriqScoreSuiteLabel())}</strong>
+      <span class="suite-release__note">Suite definitions are versioned; later releases will have their own number. Device scores identify a separate data series.</span>
+    </div>
+  `.trim();
+}
+
 function renderMetriqScoreHelp() {
   const container = document.getElementById('platforms-container');
   if (!container) return;
+  const suiteVersion = metriqGymSuiteMetadata?.version || '';
   container.innerHTML = `
     <div class="detail-page" style="display:flex;flex-direction:column;gap:18px;padding-top:4px;">
       <div class="meta"><a href="${escapeAttr(buildPlatformsListHash())}" style="color:#2563eb;text-decoration:none;">← Back to Platforms</a></div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <h3 style="margin:0;">Metriq Score</h3>
-        <div class="meta">What the “Metriq Score” column means</div>
+        <div class="meta">What the “Metriq Score” column means${suiteVersion ? ` · Current benchmark suite ${escapeHtml(suiteVersion)}` : ''}</div>
       </div>
       <div style="background:#fff;border:1px solid #dbeafe;border-radius:14px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06);">
         <p style="margin:0 0 10px;line-height:1.55;">
           Metriq Score is an aggregate score computed from benchmark results. It is intended as a single number that summarizes device performance.
         </p>
+        ${suiteVersion ? `
+          <p style="margin:0 0 10px;line-height:1.55;">
+            This view is configured with benchmark suite version <strong>${escapeHtml(suiteVersion)}</strong>. Suite definitions are versioned, and later releases may change their benchmark composition or weights. A suite version is distinct from the data series shown for an individual device score.
+          </p>
+        ` : ''}
         <p style="margin:0 0 8px;line-height:1.55;">
           In broad strokes, the composite score is calculated as:
         </p>
@@ -1106,6 +1138,15 @@ async function rerenderPlatformsRoute(h: Record<string, string> = parseHash()) {
   const helpTopic = String((h as any).help || '');
   if (helpTopic === 'metriq-score') {
     renderMetriqScoreHelp();
+    void loadAppConfig().then(() => {
+      if (parseHash().help === 'metriq-score') renderMetriqScoreHelp();
+      const needsRemoteMetadata = !metriqGymSuiteMetadata;
+      void loadMetriqGymSuiteDefinition().then((definition) => {
+        if (needsRemoteMetadata && definition && parseHash().help === 'metriq-score') {
+          renderMetriqScoreHelp();
+        }
+      });
+    });
     return;
   }
   if (helpTopic === 'overlap-metriq-score') {
@@ -1712,6 +1753,7 @@ function sortCompareComponentNames(leftComponents: Record<string, any>, rightCom
 async function showPlatformComparePage(providerA: string, deviceA: string, providerB: string, deviceB: string) {
   const container = document.getElementById('platforms-container');
   if (!container) return;
+  const suiteDefinitionPromise = loadMetriqGymSuiteDefinition();
   container.innerHTML = '<div class="meta">Loading comparison…</div>';
   try {
     const data = await loadPlatformsIndex();
@@ -1745,6 +1787,18 @@ async function showPlatformComparePage(providerA: string, deviceA: string, provi
       loadPlatformDetail(rightProvider, rightDevice).catch((err) => ({ provider: rightProvider, device: rightDevice, error: String(err) })),
     ]);
     renderPlatformComparePage(withAdjustedMetriqScore(leftDetail), withAdjustedMetriqScore(rightDetail));
+    if (!metriqGymSuiteMetadata) {
+      void suiteDefinitionPromise.then((definition) => {
+        const route = parseHash();
+        const sameComparison = route.compare_provider_a === providerA
+          && route.compare_device_a === deviceA
+          && route.compare_provider_b === providerB
+          && route.compare_device_b === deviceB;
+        if (definition && sameComparison) {
+          renderPlatformComparePage(withAdjustedMetriqScore(leftDetail), withAdjustedMetriqScore(rightDetail));
+        }
+      });
+    }
   } catch (err) {
     console.error('[platforms] compare load failed:', err);
     container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load comparison.</div>';
@@ -2009,6 +2063,7 @@ function renderPlatformComparePage(left: any, right: any) {
           <p class="meta">Explore side-by-side differences in metadata and available suite results without ranking devices.</p>
         </div>
       </div>
+      ${renderSuiteReleaseHtml()}
       ${renderComparePickerHtml(leftProvider, leftDevice, rightProvider, rightDevice)}
       <div class="compare-cards" aria-label="Selected devices">
         <article class="compare-card">
@@ -2033,7 +2088,7 @@ function renderPlatformComparePage(left: any, right: any) {
       </section>
       <section class="compare-section">
         <h4>At a glance</h4>
-        <p class="meta">Score values summarize the currently published benchmark suite.</p>
+        <p class="meta">Score values summarize the available benchmark results. A device's score series is separate from the current benchmark suite version shown above.</p>
         <div class="compare-table-wrap"><table class="compare-table">${renderCompareThreeColumnColgroup()}<thead><tr><th>Metric</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${summaryRows}</tbody></table></div>
       </section>
       <section class="compare-section">
@@ -2130,7 +2185,7 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
   }).join('') : '<li>No metadata history</li>';
 
   const submissionActions: PlatformSubmissionAction[] = [];
-  let scoreHtml = '<div class="meta">No Metriq score available.</div>';
+  let scoreHtml = '<div class="meta">No Metriq Score available.</div>';
   if (metriqScore && typeof metriqScore === 'object') {
     const valRaw = (metriqScore as any).value;
     const val = (valRaw === null || valRaw === undefined) ? null : Number(valRaw);
@@ -2218,7 +2273,8 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
     }).join('');
     scoreHtml = `
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;">Series: ${escapeHtml(series || '')}</span>
+        ${metriqGymSuiteMetadata ? `<span style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;" title="Current benchmark suite definition; distinct from the score data series">Current suite: ${escapeHtml(metriqGymSuiteMetadata.version)}</span>` : ''}
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#f8fafc;color:#334155;padding:4px 10px;border-radius:999px;font-weight:600;">Data series: ${escapeHtml(series || '')}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;" title="Which record is used when a benchmark has multiple submissions">Records: ${recordAggMode === 'all-time' ? 'All-time best' : 'Latest'}</span>
       </div>
@@ -2258,7 +2314,7 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
       ${error}
       <div class="detail-grid" style="display:flex;flex-direction:column;gap:24px;">
         <section class="detail-section" style="padding:8px 0;">
-          <h5 style="margin:0 0 12px;">Metriq score</h5>
+          <h5 style="margin:0 0 12px;">Metriq Score</h5>
           ${scoreHtml}
         </section>
         <section class="detail-section" style="padding:8px 0;">
@@ -2314,6 +2370,7 @@ async function initPlatformsView(forceRender = false) {
   if (platformsLoaded && !forceRender) return;
   const container = document.getElementById('platforms-container');
   if (!container) return;
+  const suiteDefinitionPromise = loadMetriqGymSuiteDefinition();
   if (!platformsLoaded || !container.querySelector('#platforms-table-wrap')) {
     container.innerHTML = '<div class="meta">Loading platforms…</div>';
   }
@@ -2329,6 +2386,20 @@ async function initPlatformsView(forceRender = false) {
       deviceSeriesCache = computeDeviceSeries(Array.isArray(runs) ? runs : []);
     } catch {}
     renderPlatformsTable();
+    if (!metriqGymSuiteMetadata) {
+      void suiteDefinitionPromise.then((definition) => {
+        const route = parseHash();
+        const isPlatformsList = String(route.view || 'platforms') === 'platforms'
+          && !route.help
+          && !route.provider
+          && !route.device
+          && !route.compare_provider_a
+          && !route.compare_device_a
+          && !route.compare_provider_b
+          && !route.compare_device_b;
+        if (definition && isPlatformsList) renderPlatformsTable();
+      });
+    }
   } catch (err) {
     console.error('[platforms] init failed:', err);
     container.innerHTML = '<div style="padding:12px;color:#f88">Failed to load platforms.</div>';
@@ -2505,7 +2576,7 @@ function ensurePlatformsHeaderTooltipsBound(table: HTMLTableElement) {
       return `Share of the benchmarks this device can run that have a submitted result. Benchmarks the device cannot run, because it has fewer qubits than the benchmark requires, are left out of the ratio. Hover a row for the underlying counts.`;
     }
     if (which === 'platforms-score') {
-      return `Aggregate score for the device. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
+      return `Aggregate score for the device. The current benchmark suite version is shown above the table; each device detail identifies its separate data series. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
     }
     return '';
   };
@@ -2649,6 +2720,7 @@ function renderPlatformsTable() {
 		    container.innerHTML = '';
 		    const platformControls = document.createElement('div');
 		    platformControls.className = 'platform-controls';
+		    platformControls.insertAdjacentHTML('beforeend', renderSuiteReleaseHtml());
 		    const retiredDevicesToggle = document.createElement('label');
 		    retiredDevicesToggle.className = 'retired-devices-toggle';
 		    retiredDevicesToggle.innerHTML = `
@@ -2829,7 +2901,7 @@ function renderPlatformsTable() {
         <td><a href="${href}">${deviceLabel}</a></td>
         <td>${numQubits !== undefined && numQubits !== null ? escapeHtml(String(numQubits)) : '—'}</td>
         <td title="${escapeAttr(provider)}">${escapeHtml(provider)}</td>
-        <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
+        <td class="num metriq-score" data-provider="${escapeAttr(provider)}" data-device="${escapeAttr(device)}" title="View Metriq Score breakdown"><div class="scorecell"><span class="scorecell__value">${scoreText}</span><span class="scorebar" aria-hidden="true"><span class="scorebar__fill" style="width:${scorePct.toFixed(1)}%"></span></span></div></td>
         <td class="num"${coverageTitle ? ` title="${escapeAttr(coverageTitle)}"` : ''}>${escapeHtml(coverageText)}</td>
         <td class="num">${escapeHtml(lastTs || '')}</td>
         <td class="activity-col">${spark}</td>
@@ -3005,6 +3077,7 @@ function loadAppConfig() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const cfg = await resp.json();
         appConfigCache = cfg && typeof cfg === 'object' ? cfg : {};
+        setMetriqGymSuiteMetadata((appConfigCache as any).metriqGymSuite);
         return appConfigCache;
       } catch (err) {
         console.warn('[config] failed to load config.json, using defaults:', err);
@@ -3033,9 +3106,23 @@ function loadMetriqGymSuiteDefinition() {
         if (!definition || typeof definition !== 'object' || Array.isArray(definition)) {
           throw new Error('expected a suite object');
         }
+        const fetchedMetadata = resolveMetriqGymSuiteMetadata(definition);
+        if (!fetchedMetadata) {
+          console.warn(`[platforms] Metriq-Gym suite definition from ${url} has no valid display metadata.`);
+        } else if (
+          metriqGymSuiteMetadata
+          && (metriqGymSuiteMetadata.name !== fetchedMetadata.name
+            || metriqGymSuiteMetadata.version !== fetchedMetadata.version)
+        ) {
+          console.warn(`[platforms] configured suite metadata does not match the definition at ${url}; keeping the configured label.`);
+          return null;
+        } else {
+          metriqGymSuiteMetadata = fetchedMetadata;
+        }
         return definition;
       } catch (err) {
         console.warn(`[platforms] failed to load Metriq-Gym suite definition from ${url}:`, err);
+        metriqGymSuitePromise = null;
         return null;
       } finally {
         window.clearTimeout(timeout);
