@@ -86,7 +86,7 @@ function renderDatasetGeneratedDateHtml() {
     return `
     <p class="dataset-generated-at">
       <i class="fa-regular fa-calendar-check" aria-hidden="true"></i>
-      <span>Dataset generated <time datetime="${escapeAttr(datasetGeneratedDateIso)}">${escapeHtml(label)}</time></span>
+      <span>Scoreboard generated <time datetime="${escapeAttr(datasetGeneratedDateIso)}">${escapeHtml(label)}</time></span>
     </p>
   `.trim();
 }
