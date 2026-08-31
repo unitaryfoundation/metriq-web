@@ -1,4 +1,5 @@
 import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
+import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
 import {
   buildMetriqGymDispatchInstructions,
   isSameMetriqGymSuiteRelease,
@@ -40,6 +41,8 @@ const viewBenchmarks = document.getElementById('view-benchmarks') as HTMLElement
 const heroResultsLead = document.getElementById('hero-results-lead') as HTMLElement | null;
 const heroPlatformsLead = document.getElementById('hero-platforms-lead') as HTMLElement | null;
 const heroBenchmarksLead = document.getElementById('hero-benchmarks-lead') as HTMLElement | null;
+const datasetGeneratedAt = document.getElementById('dataset-generated-at') as HTMLElement | null;
+const datasetGeneratedDate = document.getElementById('dataset-generated-date') as HTMLTimeElement | null;
 const benchmarksDocsIframe = document.getElementById('benchmarks-docs') as HTMLIFrameElement | null;
 
 // No extra filters for Platforms
@@ -109,8 +112,25 @@ let filtersInitialized = false;
 let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+const datasetDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 // Canonical scoring baseline published by metriq-data (highlighted in chart/table).
 let baselinePlatform: BaselinePlatform | null = null;
+
+function renderDatasetGeneratedDate(value: unknown) {
+  if (!datasetGeneratedAt || !datasetGeneratedDate) return;
+  const isoDate = normalizeDatasetGeneratedDate(value);
+  if (!isoDate) {
+    datasetGeneratedAt.hidden = true;
+    datasetGeneratedAt.removeAttribute('data-ready');
+    datasetGeneratedDate.removeAttribute('datetime');
+    datasetGeneratedDate.textContent = '';
+    return;
+  }
+  datasetGeneratedDate.dateTime = isoDate;
+  datasetGeneratedDate.textContent = datasetDateFormatter.format(new Date(`${isoDate}T00:00:00Z`));
+  datasetGeneratedAt.setAttribute('data-ready', 'true');
+  datasetGeneratedAt.hidden = Boolean(viewBenchmarks && !viewBenchmarks.hidden);
+}
 
 function setPublishedBaseline(value: any) {
   const provider = typeof value?.provider === 'string' ? value.provider.trim() : '';
@@ -595,6 +615,9 @@ function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate 
   if (heroResultsLead) heroResultsLead.hidden = !isResults;
   if (heroPlatformsLead) heroPlatformsLead.hidden = !isPlatforms;
   if (heroBenchmarksLead) heroBenchmarksLead.hidden = !isBenchmarks;
+  if (datasetGeneratedAt?.getAttribute('data-ready') === 'true') {
+    datasetGeneratedAt.hidden = isBenchmarks;
+  }
   if (viewResults) viewResults.hidden = !isResults;
   if (viewPlatforms) viewPlatforms.hidden = !isPlatforms;
   if (viewBenchmarks) viewBenchmarks.hidden = !isBenchmarks;
@@ -1206,17 +1229,20 @@ async function loadPlatformsIndex() {
         if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
         const json = await resp.json();
         if (json && Array.isArray(json.platforms)) {
+          renderDatasetGeneratedDate(json.generated_at);
           setPublishedBaseline(json.baseline);
           const platforms = withoutHiddenProviders(json.platforms, config);
           setPlatformsIndexCache(platforms);
           warnIfPublishedBaselineMissing(json.platforms);
           return { ...json, platforms };
         }
+        renderDatasetGeneratedDate(null);
         setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
       } catch (err) {
         console.warn('[platforms] failed to load index:', err);
+        renderDatasetGeneratedDate(null);
         setPublishedBaseline(null);
         setPlatformsIndexCache([]);
         return { generated_at: null, platforms: [] };
@@ -2750,12 +2776,12 @@ function renderPlatformsTable() {
 		    table.innerHTML = `
 		      <colgroup>
 		        <col style="width: 18%;" />
-		        <col style="width: 7%;" />
+		        <col style="width: 10%;" />
 		        <col style="width: 14%;" />
 		        <col style="width: 21%;" />
 		        <col style="width: 9%;" />
 		        <col style="width: 13%;" />
-		        <col style="width: 18%;" />
+		        <col style="width: 15%;" />
 		      </colgroup>
 		      <thead>
 		        <tr>
