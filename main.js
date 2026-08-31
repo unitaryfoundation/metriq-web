@@ -1,4 +1,5 @@
 import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
+import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
 import { buildMetriqGymDispatchInstructions, isSameMetriqGymSuiteRelease, resolveMetriqGymSuiteMetadata, resolveMetriqGymSuiteDispatch, sortPlatformScoreComponents, } from './platform-components.js';
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
@@ -71,8 +72,24 @@ let filtersInitialized = false;
 let renderSequence = 0;
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const dateOnlyFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+const datasetDateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
+let datasetGeneratedDateIso = null;
 // Canonical scoring baseline published by metriq-data (highlighted in chart/table).
 let baselinePlatform = null;
+function setDatasetGeneratedDate(value) {
+    datasetGeneratedDateIso = normalizeDatasetGeneratedDate(value);
+}
+function renderDatasetGeneratedDateHtml() {
+    if (!datasetGeneratedDateIso)
+        return '';
+    const label = datasetDateFormatter.format(new Date(`${datasetGeneratedDateIso}T00:00:00Z`));
+    return `
+    <p class="dataset-generated-at">
+      <i class="fa-regular fa-calendar-check" aria-hidden="true"></i>
+      <span>Scoreboard generated <time datetime="${escapeAttr(datasetGeneratedDateIso)}">${escapeHtml(label)}</time></span>
+    </p>
+  `.trim();
+}
 function setPublishedBaseline(value) {
     const provider = typeof value?.provider === 'string' ? value.provider.trim() : '';
     const device = typeof value?.device === 'string' ? value.device.trim() : '';
@@ -1154,18 +1171,21 @@ async function loadPlatformsIndex() {
                     throw new Error(`HTTP ${resp.status} loading ${url}`);
                 const json = await resp.json();
                 if (json && Array.isArray(json.platforms)) {
+                    setDatasetGeneratedDate(json.generated_at);
                     setPublishedBaseline(json.baseline);
                     const platforms = withoutHiddenProviders(json.platforms, config);
                     setPlatformsIndexCache(platforms);
                     warnIfPublishedBaselineMissing(json.platforms);
                     return { ...json, platforms };
                 }
+                setDatasetGeneratedDate(null);
                 setPublishedBaseline(null);
                 setPlatformsIndexCache([]);
                 return { generated_at: null, platforms: [] };
             }
             catch (err) {
                 console.warn('[platforms] failed to load index:', err);
+                setDatasetGeneratedDate(null);
                 setPublishedBaseline(null);
                 setPlatformsIndexCache([]);
                 return { generated_at: null, platforms: [] };
@@ -2678,7 +2698,13 @@ function renderPlatformsTable() {
         container.innerHTML = '';
         const platformControls = document.createElement('div');
         platformControls.className = 'platform-controls';
-        platformControls.insertAdjacentHTML('beforeend', renderSuiteVersionControlHtml());
+        const platformContextHtml = `${renderSuiteVersionControlHtml()}${renderDatasetGeneratedDateHtml()}`;
+        if (platformContextHtml) {
+            const platformContext = document.createElement('div');
+            platformContext.className = 'platform-context';
+            platformContext.insertAdjacentHTML('beforeend', platformContextHtml);
+            platformControls.appendChild(platformContext);
+        }
         const retiredDevicesToggle = document.createElement('label');
         retiredDevicesToggle.className = 'retired-devices-toggle';
         retiredDevicesToggle.innerHTML = `
@@ -2704,13 +2730,13 @@ function renderPlatformsTable() {
         table.className = 'smart-table';
         table.innerHTML = `
 		      <colgroup>
-		        <col style="width: 18%;" />
-		        <col style="width: 7%;" />
-		        <col style="width: 14%;" />
-		        <col style="width: 21%;" />
-		        <col style="width: 9%;" />
-		        <col style="width: 13%;" />
-		        <col style="width: 18%;" />
+		        <col style="width: 15%;" />
+		        <col style="width: 10%;" />
+		        <col style="width: 16%;" />
+		        <col style="width: 15%;" />
+		        <col style="width: 12%;" />
+		        <col style="width: 16%;" />
+		        <col style="width: 16%;" />
 		      </colgroup>
 		      <thead>
 		        <tr>
