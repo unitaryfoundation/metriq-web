@@ -2,6 +2,7 @@ import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSum
 import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
 import {
   buildMetriqGymDispatchInstructions,
+  classifyPlatformScoreComponent,
   isSameMetriqGymSuiteRelease,
   MetriqGymDispatchInstructions,
   MetriqGymSuiteMetadata,
@@ -1290,17 +1291,12 @@ function extractPlatformCoverage(detail: any): PlatformCoverage | null {
   if (!comps || typeof comps !== 'object') return null;
   const values = Object.values(comps as Record<string, any>);
   if (!values.length) return null;
-  const hasFinite = (value: any) => value !== null && value !== undefined && Number.isFinite(Number(value));
   const deviceQubits = deviceMetadataNumQubits(detail);
   let covered = 0;
   let unsupported = 0;
   values.forEach((value: any) => {
-    const hasResult = value?.normalized_available === true
-      || value?.raw_available === true
-      || hasFinite(value?.normalized)
-      || hasFinite(value?.raw)
-      || Boolean(value?.timestamp || value?.normalized_timestamp || value?.raw_timestamp);
-    if (hasResult) {
+    const availability = classifyPlatformScoreComponent(value, deviceQubits);
+    if (availability.status === 'submitted') {
       covered += 1;
       return;
     }
@@ -1309,8 +1305,7 @@ function extractPlatformCoverage(detail: any): PlatformCoverage | null {
     // runnable benchmark still awaiting a submission. When the requirement or
     // the device's reported qubit count is unknown, treat it as runnable
     // rather than guess.
-    const required = parseNumQubits(value?.required_num_qubits);
-    if (required !== null && deviceQubits !== null && deviceQubits < required) {
+    if (availability.status === 'unsupported') {
       unsupported += 1;
     }
   });
@@ -2234,19 +2229,10 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
       const raw = rawRaw === null || rawRaw === undefined ? null : formatPlatformComponentRawValue(rawRaw);
       const n = (nRaw === null || nRaw === undefined) ? null : Number(nRaw);
       const ts = c?.timestamp ? dateOnlyFormatter.format(new Date(c.timestamp)) : '';
-      // Same classification as extractPlatformCoverage: a component with no
-      // result is unsupported when the device has fewer qubits than the
-      // component requires, otherwise it is runnable but not yet submitted.
-      const hasResult = c?.normalized_available === true
-        || c?.raw_available === true
-        || raw !== null
-        || (n !== null && Number.isFinite(n))
-        || Boolean(c?.timestamp || c?.normalized_timestamp || c?.raw_timestamp);
-      const required = parseNumQubits(c?.required_num_qubits);
-      const isUnsupported = !hasResult
-        && required !== null
-        && detailDeviceQubits !== null
-        && detailDeviceQubits < required;
+      const availability = classifyPlatformScoreComponent(c, detailDeviceQubits);
+      const hasResult = availability.hasResult;
+      const required = availability.requiredNumQubits;
+      const isUnsupported = availability.status === 'unsupported';
       if (isUnsupported) unsupportedCount += 1;
       const href = hasResult && benchmark
         ? buildResultsHash(String(provider), String(device), benchmark, String(c?.timestamp || ''), 'table')

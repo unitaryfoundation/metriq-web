@@ -1,5 +1,13 @@
 export type PlatformScoreComponentEntry = [string, any];
 
+export type PlatformScoreComponentStatus = 'submitted' | 'unsupported' | 'missing';
+
+export type PlatformScoreComponentAvailability = {
+  status: PlatformScoreComponentStatus;
+  hasResult: boolean;
+  requiredNumQubits: number | null;
+};
+
 export type MetriqGymDispatchInstructions = {
   command: string;
   suite: string;
@@ -37,6 +45,35 @@ export function sortPlatformScoreComponents(entries: PlatformScoreComponentEntry
     if (groupDiff !== 0) return groupDiff;
     return platformComponentCollator.compare(a[0], b[0]);
   });
+}
+
+function finiteNumber(value: unknown) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+export function classifyPlatformScoreComponent(
+  component: any,
+  deviceNumQubits: number | null,
+): PlatformScoreComponentAvailability {
+  const hasResult = component?.normalized_available === true
+    || component?.raw_available === true
+    || finiteNumber(component?.normalized) !== null
+    || finiteNumber(component?.raw) !== null
+    || Boolean(component?.timestamp || component?.normalized_timestamp || component?.raw_timestamp);
+  const requiredNumQubits = finiteNumber(component?.required_num_qubits);
+  const unsupported = !hasResult
+    && requiredNumQubits !== null
+    && deviceNumQubits !== null
+    && deviceNumQubits < requiredNumQubits;
+
+  return {
+    status: hasResult ? 'submitted' : unsupported ? 'unsupported' : 'missing',
+    hasResult,
+    requiredNumQubits,
+  };
 }
 
 function commandArgument(value: unknown) {

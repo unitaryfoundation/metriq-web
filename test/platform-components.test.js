@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildMetriqGymDispatchInstructions,
+  classifyPlatformScoreComponent,
   isSameMetriqGymSuiteRelease,
   resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
@@ -59,6 +60,47 @@ test('platform score component sorting falls back to the label for missing group
   assert.deepEqual(
     sortPlatformScoreComponents(components).map(([name]) => name),
     ['Component 20', 'Component 100'],
+  );
+});
+
+test('classifies submitted platform score components from values or timestamps', () => {
+  for (const component of [
+    { normalized_available: true },
+    { raw_available: true },
+    { normalized: 0 },
+    { raw: '0.25' },
+    { timestamp: '2026-09-03T00:00:00Z' },
+    { normalized_timestamp: '2026-09-03T00:00:00Z' },
+    { raw_timestamp: '2026-09-03T00:00:00Z' },
+  ]) {
+    assert.deepEqual(
+      classifyPlatformScoreComponent(component, 5),
+      { status: 'submitted', hasResult: true, requiredNumQubits: null },
+    );
+  }
+});
+
+test('distinguishes unsupported components from missing submissions', () => {
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: '20' }, 10),
+    { status: 'unsupported', hasResult: false, requiredNumQubits: 20 },
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: 10 }, 10),
+    { status: 'missing', hasResult: false, requiredNumQubits: 10 },
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: 20 }, null),
+    { status: 'missing', hasResult: false, requiredNumQubits: 20 },
+    'unknown device capacity must not be guessed as unsupported',
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ normalized: 'not-a-number', raw: Infinity }, 10),
+    { status: 'missing', hasResult: false, requiredNumQubits: null },
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: true }, 0),
+    { status: 'missing', hasResult: false, requiredNumQubits: null },
   );
 });
 
