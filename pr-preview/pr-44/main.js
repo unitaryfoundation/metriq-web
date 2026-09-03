@@ -1,6 +1,6 @@
 import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
 import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
-import { buildMetriqGymDispatchInstructions, classifyPlatformScoreComponent, isSameMetriqGymSuiteRelease, mergePlatformScoreComponents, resolveMetriqGymSuiteMetadata, resolveMetriqGymSuiteDispatch, sortPlatformScoreComponents, } from './platform-components.js';
+import { buildMetriqGymDispatchInstructions, classifyPlatformScoreComponent, comparePlatformScoreValues, isSameMetriqGymSuiteRelease, mergePlatformScoreComponents, resolveMetriqGymSuiteMetadata, resolveMetriqGymSuiteDispatch, sortPlatformScoreComponents, } from './platform-components.js';
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
 const UPDATES_JSON = "./data/updates.json";
@@ -1668,45 +1668,17 @@ function renderCompareComponentRowHtml(labelHtml, weightHtml, aHtml, bHtml, diff
     return `<tr${classAttr}><th scope="row">${labelHtml}</th><td class="num">${weightHtml}</td>${renderCompareComponentValueCellHtml(aHtml, aHref)}${renderCompareComponentValueCellHtml(bHtml, bHref)}<td class="compare-component-difference">${differenceHtml}</td></tr>`;
 }
 function renderCompareComponentRatioHtml(leftValue, rightValue, includeRatioLabel = false) {
-    if (leftValue === null || rightValue === null || !Number.isFinite(leftValue) || !Number.isFinite(rightValue) || rightValue === 0)
+    const comparison = comparePlatformScoreValues(leftValue, rightValue);
+    if (!comparison)
         return '–';
-    const ratio = (leftValue / rightValue) * 100;
-    if (!Number.isFinite(ratio))
-        return '–';
-    const roundedRatio = Number(ratio.toFixed(1));
-    const ratioLabel = roundedRatio.toFixed(1);
-    let symbol = '=';
-    let tone = 'equal';
-    if (roundedRatio < 50) {
-        symbol = '&lt;&lt;&lt;';
-        tone = 'low';
-    }
-    else if (roundedRatio < 75) {
-        symbol = '&lt;&lt;';
-        tone = 'low';
-    }
-    else if (roundedRatio < 100) {
-        symbol = '&lt;';
-        tone = 'low';
-    }
-    else if (roundedRatio === 100) {
-        symbol = '=';
-        tone = 'equal';
-    }
-    else if (roundedRatio < 150) {
-        symbol = '&gt;';
-        tone = 'high';
-    }
-    else if (roundedRatio < 200) {
-        symbol = '&gt;&gt;';
-        tone = 'high';
-    }
-    else {
-        symbol = '&gt;&gt;&gt;';
-        tone = 'high';
-    }
-    const labelHtml = includeRatioLabel ? `<span class="compare-ratio-value">${escapeHtml(ratioLabel)}%</span>` : '';
-    return `<span class="compare-ratio-wrap"><span class="compare-ratio compare-ratio--${tone}" title="Normalized ratio: ${escapeAttr(ratioLabel)}%" aria-label="Normalized ratio ${escapeAttr(ratioLabel)} percent">${symbol}</span>${labelHtml}</span>`;
+    const ratioLabel = comparison.ratioPercent === null
+        ? leftValue === rightValue ? 'both zero' : '∞'
+        : `${comparison.ratioPercent.toFixed(1)}%`;
+    const ratioDescription = comparison.ratioPercent === null
+        ? leftValue === rightValue ? 'Both normalized values are zero' : 'Normalized ratio is infinite because Device B is zero'
+        : `Normalized ratio: ${comparison.ratioPercent.toFixed(1)}%`;
+    const labelHtml = includeRatioLabel ? `<span class="compare-ratio-value">${escapeHtml(ratioLabel)}</span>` : '';
+    return `<span class="compare-ratio-wrap"><span class="compare-ratio compare-ratio--${comparison.tone}" title="${escapeAttr(ratioDescription)}" aria-label="${escapeAttr(ratioDescription)}">${escapeHtml(comparison.symbol)}</span>${labelHtml}</span>`;
 }
 function getCompareComponentRawNumber(component) {
     if (component?.raw === null || component?.raw === undefined || component?.raw === '')
