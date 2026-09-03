@@ -47,6 +47,21 @@ export function sortPlatformScoreComponents(entries: PlatformScoreComponentEntry
   });
 }
 
+export function mergePlatformScoreComponents(
+  componentSets: Array<Record<string, any>>,
+) {
+  const merged = new Map<string, any>();
+  componentSets.forEach((components) => {
+    Object.entries(components).forEach(([name, component]) => {
+      const current = merged.get(name);
+      const currentGroup = typeof current?.group === 'string' ? current.group.trim() : '';
+      const nextGroup = typeof component?.group === 'string' ? component.group.trim() : '';
+      if (!merged.has(name) || (!currentGroup && nextGroup)) merged.set(name, component);
+    });
+  });
+  return sortPlatformScoreComponents(Array.from(merged.entries()));
+}
+
 function finiteNumber(value: unknown) {
   if (typeof value === 'number') return Number.isFinite(value) ? value : null;
   if (typeof value !== 'string' || !value.trim()) return null;

@@ -4,6 +4,7 @@ import {
   buildMetriqGymDispatchInstructions,
   classifyPlatformScoreComponent,
   isSameMetriqGymSuiteRelease,
+  mergePlatformScoreComponents,
   resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
@@ -60,6 +61,28 @@ test('platform score component sorting falls back to the label for missing group
   assert.deepEqual(
     sortPlatformScoreComponents(components).map(([name]) => name),
     ['Component 20', 'Component 100'],
+  );
+});
+
+test('merges component sets before applying the platform detail order', () => {
+  const first = {
+    'QMLK-10:accuracy_score': { weight: 0.04 },
+    'EPLG-100': { group: 'EPLG', weight: 0.01 },
+  };
+  const second = {
+    'QMLK-10:accuracy_score': { group: 'QML Kernel', weight: 0.04 },
+    'EPLG-20': { group: 'EPLG', weight: 0.08 },
+  };
+
+  const merged = mergePlatformScoreComponents([first, second]);
+  assert.deepEqual(
+    merged.map(([name]) => name),
+    ['EPLG-20', 'EPLG-100', 'QMLK-10:accuracy_score'],
+  );
+  assert.equal(
+    merged.at(-1)[1],
+    second['QMLK-10:accuracy_score'],
+    'a component with grouping metadata should be used as the sort representative',
   );
 });
 

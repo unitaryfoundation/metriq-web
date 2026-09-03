@@ -4,8 +4,10 @@ import {
   buildMetriqGymDispatchInstructions,
   classifyPlatformScoreComponent,
   isSameMetriqGymSuiteRelease,
+  mergePlatformScoreComponents,
   MetriqGymDispatchInstructions,
   MetriqGymSuiteMetadata,
+  PlatformScoreComponentAvailability,
   resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
@@ -1632,6 +1634,23 @@ function renderCompareMaybeBetterNumber(value: number | null, otherValue: number
   return isBetter ? `<strong class="compare-better-value">${escapeHtml(valueHtml)}</strong>` : escapeHtml(valueHtml);
 }
 
+function renderPlatformComponentStatusHtml(
+  availability: PlatformScoreComponentAvailability,
+  deviceNumQubits: number | null,
+) {
+  if (availability.status === 'submitted') {
+    return '<span class="component-status component-status--ok">Submitted</span>';
+  }
+  if (availability.status === 'unsupported') {
+    const required = availability.requiredNumQubits;
+    const detail = required !== null && deviceNumQubits !== null
+      ? ` title="${escapeAttr(`Requires ${required} qubits; this device has ${deviceNumQubits}`)}"`
+      : '';
+    return `<span class="component-status component-status--na"${detail}>Not supported</span>`;
+  }
+  return '<span class="component-status component-status--missing">No submission</span>';
+}
+
 function renderCompareOverlapScoreLabelHtml() {
   return `<span class="compare-score-help" tabindex="0" data-tip="compare-overlap-score">Overlap Score</span>`;
 }
@@ -1757,16 +1776,12 @@ function renderCompareComponentValueHtml(value: number | null, component: any, i
   return `${emphasizedValueHtml}${rawHtml}`;
 }
 
-function sortCompareComponentNames(leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
-  return Array.from(new Set([...Object.keys(leftComponents), ...Object.keys(rightComponents)])).sort((a, b) => {
-    const availabilityDiff = getCompareComponentNormalizedAvailability(b, leftComponents, rightComponents) - getCompareComponentNormalizedAvailability(a, leftComponents, rightComponents);
-    if (availabilityDiff !== 0) return availabilityDiff;
-
-    const weightDiff = getCompareComponentSortWeight(b, leftComponents, rightComponents) - getCompareComponentSortWeight(a, leftComponents, rightComponents);
-    if (weightDiff !== 0) return weightDiff;
-
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-  });
+function renderCompareComponentDeviceHtml(
+  valueHtml: string,
+  availability: PlatformScoreComponentAvailability,
+  deviceNumQubits: number | null,
+) {
+  return `<div class="compare-component-device"><div>${renderPlatformComponentStatusHtml(availability, deviceNumQubits)}</div><div class="compare-component-device__values">${valueHtml}</div></div>`;
 }
 
 async function showPlatformComparePage(providerA: string, deviceA: string, providerB: string, deviceB: string) {
@@ -1834,10 +1849,13 @@ function renderComparePickerHtml(leftProvider: string, leftDevice: string, right
     const style = getProviderCompareOptionStyle(provider);
     return `<option class="compare-picker__option compare-picker__option--${theme}" style="${escapeAttr(style)}" value="${escapeAttr(`${provider}||${device}`)}"${selected}>${escapeHtml(renderPlatformOptionLabel(p))}</option>`;
   }).join('');
+  const comparisonPeers = platforms.filter((platform: any) => (
+    String(platform.provider || '') !== leftProvider || String(platform.device || '') !== leftDevice
+  ));
   return `
     <form class="compare-picker" id="compare-picker">
       <label><span>Device A</span><select id="compare-a" class="compare-picker__select">${optionHtml(platforms, leftProvider, leftDevice)}</select></label>
-      <label><span>Compare with</span><select id="compare-b" class="compare-picker__select">${optionHtml(platforms, rightProvider, rightDevice)}</select></label>
+      <label><span>Compare with</span><select id="compare-b" class="compare-picker__select">${optionHtml(comparisonPeers, rightProvider, rightDevice)}</select></label>
     </form>
   `.trim();
 }
@@ -2016,7 +2034,9 @@ function renderPlatformComparePage(left: any, right: any) {
   const rightCoverage = extractPlatformCoverage(right);
   const leftComponents = left?.metriq_score?.components && typeof left?.metriq_score?.components === 'object' ? left.metriq_score.components : {};
   const rightComponents = right?.metriq_score?.components && typeof right?.metriq_score?.components === 'object' ? right.metriq_score.components : {};
-  const componentNames = sortCompareComponentNames(leftComponents, rightComponents);
+  const componentNames = mergePlatformScoreComponents([leftComponents, rightComponents]).map(([name]) => name);
+  const leftDeviceQubits = deviceMetadataNumQubits(left);
+  const rightDeviceQubits = deviceMetadataNumQubits(right);
   const overlapComponentNames = componentNames.filter((name) => getCompareComponentNormalizedAvailability(name, leftComponents, rightComponents) === 2);
   const leftOverlapScore = overlapComponentNames.length ? calculateOverlapMetriqScore(leftComponents, overlapComponentNames, leftComponents, rightComponents) : null;
   const rightOverlapScore = overlapComponentNames.length ? calculateOverlapMetriqScore(rightComponents, overlapComponentNames, leftComponents, rightComponents) : null;
@@ -2052,8 +2072,12 @@ function renderPlatformComparePage(left: any, right: any) {
     const rightRawIsBetter = hasComparableRawValues && (lowerRawIsBetter ? rightRaw < leftRaw : rightRaw > leftRaw);
     const leftResultsHref = buildCompareComponentResultsHash(leftProvider, leftDevice, name, lc);
     const rightResultsHref = buildCompareComponentResultsHash(rightProvider, rightDevice, name, rc);
-    const leftCell = renderCompareComponentValueHtml(ln, lc, leftHasNumericValue && rightHasNumericValue && ln > rn, leftRawIsBetter);
-    const rightCell = renderCompareComponentValueHtml(rn, rc, leftHasNumericValue && rightHasNumericValue && rn > ln, rightRawIsBetter);
+    const leftAvailability = classifyPlatformScoreComponent(lc, leftDeviceQubits);
+    const rightAvailability = classifyPlatformScoreComponent(rc, rightDeviceQubits);
+    const leftValue = renderCompareComponentValueHtml(ln, lc, leftHasNumericValue && rightHasNumericValue && ln > rn, leftRawIsBetter);
+    const rightValue = renderCompareComponentValueHtml(rn, rc, leftHasNumericValue && rightHasNumericValue && rn > ln, rightRawIsBetter);
+    const leftCell = renderCompareComponentDeviceHtml(leftValue, leftAvailability, leftDeviceQubits);
+    const rightCell = renderCompareComponentDeviceHtml(rightValue, rightAvailability, rightDeviceQubits);
     return renderCompareComponentRow(name, weightCell, leftCell, rightCell, leftHasNumericValue ? leftResultsHref : '', rightHasNumericValue ? rightResultsHref : '');
   }).join('') : renderCompareComponentRow('Components', '–', '–', '–');
 
@@ -2231,7 +2255,6 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
       const ts = c?.timestamp ? dateOnlyFormatter.format(new Date(c.timestamp)) : '';
       const availability = classifyPlatformScoreComponent(c, detailDeviceQubits);
       const hasResult = availability.hasResult;
-      const required = availability.requiredNumQubits;
       const isUnsupported = availability.status === 'unsupported';
       if (isUnsupported) unsupportedCount += 1;
       const href = hasResult && benchmark
@@ -2252,11 +2275,7 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
       if (!hasResult && !isUnsupported && !isRetiredPlatform && !instructions) {
         dispatchUnavailableCount += 1;
       }
-      let statusHtml = hasResult
-        ? '<span class="component-status component-status--ok">Submitted</span>'
-        : isUnsupported
-          ? `<span class="component-status component-status--na" title="Requires ${required} qubits; this device has ${detailDeviceQubits}">Not supported</span>`
-          : '<span class="component-status component-status--missing">No submission</span>';
+      let statusHtml = renderPlatformComponentStatusHtml(availability, detailDeviceQubits);
       const rowClasses = ['platform-component-row'];
       if (isUnsupported) rowClasses.push('platform-component-row--unsupported');
       let rowAttrs = ` class="${rowClasses.join(' ')}"`;
