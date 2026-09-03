@@ -8,6 +8,12 @@ export type PlatformScoreComponentAvailability = {
   requiredNumQubits: number | null;
 };
 
+export type PlatformScoreComparison = {
+  symbol: '=' | '<' | '<<' | '<<<' | '>' | '>>' | '>>>';
+  tone: 'equal' | 'low' | 'high';
+  ratioPercent: number | null;
+};
+
 export type MetriqGymDispatchInstructions = {
   command: string;
   suite: string;
@@ -88,6 +94,30 @@ export function classifyPlatformScoreComponent(
     status: hasResult ? 'submitted' : unsupported ? 'unsupported' : 'missing',
     hasResult,
     requiredNumQubits,
+  };
+}
+
+export function comparePlatformScoreValues(
+  leftValue: unknown,
+  rightValue: unknown,
+): PlatformScoreComparison | null {
+  const left = finiteNumber(leftValue);
+  const right = finiteNumber(rightValue);
+  if (left === null || right === null || left < 0 || right < 0) return null;
+
+  const ratioPercent = right === 0 ? null : (left / right) * 100;
+  if (left === right) return { symbol: '=', tone: 'equal', ratioPercent };
+
+  const smaller = Math.min(left, right);
+  const magnitude = smaller === 0 ? Number.POSITIVE_INFINITY : Math.max(left, right) / smaller;
+  if (magnitude <= 1.05) return { symbol: '=', tone: 'equal', ratioPercent };
+
+  const symbolCount = magnitude < 1.5 ? 1 : magnitude < 2 ? 2 : 3;
+  const pointsHigh = left > right;
+  return {
+    symbol: (pointsHigh ? '>'.repeat(symbolCount) : '<'.repeat(symbolCount)) as PlatformScoreComparison['symbol'],
+    tone: pointsHigh ? 'high' : 'low',
+    ratioPercent,
   };
 }
 

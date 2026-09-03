@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildMetriqGymDispatchInstructions,
   classifyPlatformScoreComponent,
+  comparePlatformScoreValues,
   isSameMetriqGymSuiteRelease,
   mergePlatformScoreComponents,
   resolveMetriqGymSuiteMetadata,
@@ -125,6 +126,42 @@ test('distinguishes unsupported components from missing submissions', () => {
     classifyPlatformScoreComponent({ required_num_qubits: true }, 0),
     { status: 'missing', hasResult: false, requiredNumQubits: null },
   );
+});
+
+test('compares platform scores with symmetric magnitude bands', () => {
+  const cases = [
+    [104.9, 100, '=', 'equal'],
+    [130.3, 100, '>', 'high'],
+    [150, 100, '>>', 'high'],
+    [200, 100, '>>>', 'high'],
+  ];
+
+  for (const [larger, smaller, symbol, tone] of cases) {
+    const forward = comparePlatformScoreValues(larger, smaller);
+    const reverse = comparePlatformScoreValues(smaller, larger);
+    assert.equal(forward?.symbol, symbol);
+    assert.equal(forward?.tone, tone);
+    assert.equal(reverse?.symbol, symbol.replaceAll('>', '<'));
+    assert.equal(reverse?.tone, tone === 'equal' ? 'equal' : 'low');
+  }
+});
+
+test('handles zero and invalid platform score comparisons', () => {
+  assert.deepEqual(
+    comparePlatformScoreValues(0, 0),
+    { symbol: '=', tone: 'equal', ratioPercent: null },
+  );
+  assert.deepEqual(
+    comparePlatformScoreValues(10, 0),
+    { symbol: '>>>', tone: 'high', ratioPercent: null },
+  );
+  assert.deepEqual(
+    comparePlatformScoreValues(0, 10),
+    { symbol: '<<<', tone: 'low', ratioPercent: 0 },
+  );
+  for (const values of [[null, 10], [10, undefined], [-1, 10], [10, Infinity]]) {
+    assert.equal(comparePlatformScoreValues(...values), null);
+  }
 });
 
 test('reads display metadata from a versioned Metriq-Gym suite definition', () => {
