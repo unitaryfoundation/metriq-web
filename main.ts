@@ -1,5 +1,6 @@
 import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
 import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
+import { bindCaptionLinks, syncCaptionRecordMode } from './caption-links.js';
 import { parsePlatformListRoute, serializePlatformListRoute } from './platform-route.js';
 import type { PlatformSortDirection, PlatformSortKey } from './platform-route.js';
 import {
@@ -44,6 +45,7 @@ const heroResultsLead = document.getElementById('hero-results-lead') as HTMLElem
 const heroPlatformsLead = document.getElementById('hero-platforms-lead') as HTMLElement | null;
 const heroBenchmarksLead = document.getElementById('hero-benchmarks-lead') as HTMLElement | null;
 const benchmarksDocsIframe = document.getElementById('benchmarks-docs') as HTMLIFrameElement | null;
+const captionLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.view-caption a[href^="#"]'));
 
 // No extra filters for Platforms
 
@@ -538,6 +540,7 @@ function dedupeRunsForDisplayWithMetric(runs: any[], metricId: string): any[] {
 }
 
 function syncRecordModeToggle() {
+  syncCaptionRecordMode(captionLinks, recordAggMode);
   document.querySelectorAll<HTMLButtonElement>('[data-record-mode]').forEach((btn) => {
     const isCurrent = btn.getAttribute('data-record-mode') === recordAggMode;
     btn.classList.toggle('is-current', isCurrent);
@@ -1243,6 +1246,12 @@ async function rerenderPlatformsRoute(h: Record<string, string> = parseHash()) {
   await initPlatformsView(true);
 }
 
+bindCaptionLinks(captionLinks, (hash) => {
+  suppressHashHandler = false;
+  // The regular Graph/Table tabs can change panels without changing the URL.
+  if (location.hash === hash) void applyHashRouting();
+  else location.hash = hash;
+});
 window.addEventListener('hashchange', () => { applyHashRouting(); });
 applyHashRouting();
 
