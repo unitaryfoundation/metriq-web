@@ -14,6 +14,57 @@ export function sortPlatformScoreComponents(entries) {
         return platformComponentCollator.compare(a[0], b[0]);
     });
 }
+export function mergePlatformScoreComponents(componentSets) {
+    const merged = new Map();
+    componentSets.forEach((components) => {
+        Object.entries(components).forEach(([name, component]) => {
+            const current = merged.get(name);
+            const currentGroup = typeof current?.group === 'string' ? current.group.trim() : '';
+            const nextGroup = typeof component?.group === 'string' ? component.group.trim() : '';
+            if (!merged.has(name) || (!currentGroup && nextGroup))
+                merged.set(name, component);
+        });
+    });
+    return sortPlatformScoreComponents(Array.from(merged.entries()));
+}
+function finiteNumber(value) {
+    if (typeof value === 'number')
+        return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string' || !value.trim())
+        return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+export function classifyPlatformScoreComponent(component, deviceNumQubits) {
+    const hasResult = component?.normalized_available === true
+        || component?.raw_available === true
+        || finiteNumber(component?.normalized) !== null
+        || finiteNumber(component?.raw) !== null
+        || Boolean(component?.timestamp || component?.normalized_timestamp || component?.raw_timestamp);
+    const requiredNumQubits = finiteNumber(component?.required_num_qubits);
+    const unsupported = !hasResult
+        && requiredNumQubits !== null
+        && deviceNumQubits !== null
+        && deviceNumQubits < requiredNumQubits;
+    return {
+        status: hasResult ? 'submitted' : unsupported ? 'unsupported' : 'missing',
+        hasResult,
+        requiredNumQubits,
+    };
+}
+export function comparePlatformScoreValues(leftValue, rightValue) {
+    const left = finiteNumber(leftValue);
+    const right = finiteNumber(rightValue);
+    if (left === null || right === null || left < 0 || right < 0)
+        return null;
+    const changePercent = left === right ? 0 : right === 0 ? null : ((left - right) / right) * 100;
+    if (changePercent !== null && !Number.isFinite(changePercent))
+        return null;
+    return {
+        tone: left === right ? 'equal' : left > right ? 'high' : 'low',
+        changePercent,
+    };
+}
 function commandArgument(value) {
     if (typeof value !== 'string')
         return null;
