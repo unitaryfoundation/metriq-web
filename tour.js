@@ -14,6 +14,18 @@ class MetriqTour {
             closeBtnText: 'Close',
             nextBtnText: 'Next',
             prevBtnText: 'Previous',
+            // Driver.js 1.0.1 names this hook onPopoverRendered.
+            onPopoverRendered: ({ description }) => {
+                const link = description.querySelector('a[data-tour-exit]');
+                link?.addEventListener('click', (event) => {
+                    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                        return;
+                    event.preventDefault();
+                    const destination = link.hash;
+                    this.driverObj.destroy();
+                    window.location.hash = destination;
+                });
+            },
         });
     }
     getSteps() {
@@ -40,7 +52,7 @@ class MetriqTour {
                 element: '#view-platforms-btn',
                 popover: {
                     title: 'Platform Leaderboard',
-                    description: 'Compare global quantum systems using the Metriq Score—a normalized performance metric across diverse architectures. Suite versions and device data series are shown separately. <a href="#view=platforms&help=metriq-score">Learn more</a>',
+                    description: 'Compare global quantum systems using the Metriq Score—a normalized performance metric across diverse architectures. Suite versions and device data series are shown separately. <a href="#view=platforms&help=metriq-score" data-tour-exit>Learn more</a>',
                     side: 'bottom',
                     align: 'center'
                 },
