@@ -7,10 +7,14 @@ build/
 # generated javascript files
 main.js
 main.js.map
+caption-links.js
+caption-links.js.map
 dataset-metadata.js
 dataset-metadata.js.map
 platform-components.js
 platform-components.js.map
+platform-route.js
+platform-route.js.map
 records.js
 records.js.map
 feed.xml

@@ -1,5 +1,8 @@
 import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
 import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
+import { bindCaptionLinks, syncCaptionRecordMode } from './caption-links.js';
+import { parsePlatformListRoute, serializePlatformListRoute } from './platform-route.js';
+import type { PlatformSortDirection, PlatformSortKey } from './platform-route.js';
 import {
   buildMetriqGymDispatchInstructions,
   classifyPlatformScoreComponent,
@@ -46,6 +49,7 @@ const heroResultsLead = document.getElementById('hero-results-lead') as HTMLElem
 const heroPlatformsLead = document.getElementById('hero-platforms-lead') as HTMLElement | null;
 const heroBenchmarksLead = document.getElementById('hero-benchmarks-lead') as HTMLElement | null;
 const benchmarksDocsIframe = document.getElementById('benchmarks-docs') as HTMLIFrameElement | null;
+const captionLinks = Array.from(document.querySelectorAll<HTMLAnchorElement>('.view-caption a[href^="#"]'));
 
 // No extra filters for Platforms
 
@@ -102,8 +106,8 @@ type PlatformSubmissionAction = {
 };
 let platformCoverageCache: Map<string, PlatformCoverage> | null = null;
 let platformDetailsCache: Map<string, any> | null = null;
-let platformSortKey: 'score' | 'coverage' | 'num_qubits' | 'provider' | 'device' | 'last_seen' = 'score';
-let platformSortDir: 'asc' | 'desc' = 'desc';
+let platformSortKey: PlatformSortKey = 'score';
+let platformSortDir: PlatformSortDirection = 'desc';
 let platformProviderFilter = '';
 let showRetiredDevices = true;
 let deviceSeriesCache: Map<string, number[]> | null = null;
@@ -540,6 +544,7 @@ function dedupeRunsForDisplayWithMetric(runs: any[], metricId: string): any[] {
 }
 
 function syncRecordModeToggle() {
+  syncCaptionRecordMode(captionLinks, recordAggMode);
   document.querySelectorAll<HTMLButtonElement>('[data-record-mode]').forEach((btn) => {
     const isCurrent = btn.getAttribute('data-record-mode') === recordAggMode;
     btn.classList.toggle('is-current', isCurrent);
@@ -626,7 +631,10 @@ function activateView(which: 'results'|'platforms'|'benchmarks', skipHashUpdate 
     if (isPlatforms) initPlatformsView(true);
     if (isBenchmarks) void initBenchmarksDocsView();
   }
-  if (!skipHashUpdate) updateHash({ view: which });
+  if (!skipHashUpdate) {
+    if (isPlatforms) updatePlatformsListHash();
+    else updateHash({ view: which });
+  }
 }
 
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
@@ -847,6 +855,54 @@ function parseHash(): Record<string, string> {
   return o;
 }
 
+const PLATFORM_LIST_ROUTE_KEYS = [
+  'platform_provider',
+  'show_retired',
+  'platform_sort',
+  'platform_sort_dir',
+] as const;
+
+const PLATFORM_SUBVIEW_ROUTE_KEYS = [
+  'provider',
+  'device',
+  'help',
+  'compare_provider_a',
+  'compare_device_a',
+  'compare_provider_b',
+  'compare_device_b',
+] as const;
+
+function currentPlatformListRoute() {
+  return {
+    provider: platformProviderFilter,
+    showRetiredDevices,
+    sortKey: platformSortKey,
+    sortDirection: platformSortDir,
+  };
+}
+
+function platformListHashUpdate() {
+  return {
+    platform_provider: '',
+    show_retired: '',
+    platform_sort: '',
+    platform_sort_dir: '',
+    ...serializePlatformListRoute(currentPlatformListRoute()),
+  };
+}
+
+function updatePlatformsListHash() {
+  updateHash({ view: 'platforms', ...platformListHashUpdate() });
+}
+
+function applyPlatformListRoute(route: Record<string, string>) {
+  const state = parsePlatformListRoute(route);
+  platformProviderFilter = state.provider;
+  showRetiredDevices = state.showRetiredDevices;
+  platformSortKey = state.sortKey;
+  platformSortDir = state.sortDirection;
+}
+
 function updateHash(next: Record<string, string>) {
   try {
     suppressHashHandler = true;
@@ -854,21 +910,18 @@ function updateHash(next: Record<string, string>) {
     const merged = { ...cur, ...next };
     if ('view' in next) {
       if (next.view !== 'platforms') {
-        delete merged.provider;
-        delete merged.device;
-        delete merged.help;
-        delete merged.compare_provider_a;
-        delete merged.compare_device_a;
-        delete merged.compare_provider_b;
-        delete merged.compare_device_b;
-      } else if (!('provider' in next) && !('device' in next) && !('help' in next) && !('compare_provider_a' in next) && !('compare_device_a' in next) && !('compare_provider_b' in next) && !('compare_device_b' in next)) {
-        delete merged.provider;
-        delete merged.device;
-        delete merged.help;
-        delete merged.compare_provider_a;
-        delete merged.compare_device_a;
-        delete merged.compare_provider_b;
-        delete merged.compare_device_b;
+        PLATFORM_SUBVIEW_ROUTE_KEYS.forEach((key) => { delete merged[key]; });
+        PLATFORM_LIST_ROUTE_KEYS.forEach((key) => { delete merged[key]; });
+      } else {
+        const opensPlatformSubview = PLATFORM_SUBVIEW_ROUTE_KEYS.some((key) => Boolean(next[key]));
+        if (opensPlatformSubview) {
+          PLATFORM_LIST_ROUTE_KEYS.forEach((key) => { delete merged[key]; });
+        } else {
+          PLATFORM_SUBVIEW_ROUTE_KEYS.forEach((key) => { delete merged[key]; });
+          PLATFORM_LIST_ROUTE_KEYS.forEach((key) => {
+            if (!(key in next)) delete merged[key];
+          });
+        }
       }
       if (next.view !== 'results') {
         delete merged.results_provider;
@@ -892,6 +945,10 @@ function updateHash(next: Record<string, string>) {
       || merged.compare_device_a
       || merged.compare_provider_b
       || merged.compare_device_b
+      || merged.platform_provider
+      || merged.show_retired
+      || merged.platform_sort
+      || merged.platform_sort_dir
       || merged.results_provider
       || merged.results_device
       || merged.results_benchmark
@@ -915,7 +972,10 @@ function appendRecordModeParam(params: URLSearchParams) {
 }
 
 function buildPlatformsListHash() {
-  const params = new URLSearchParams({ view: 'platforms' });
+  const params = new URLSearchParams({
+    view: 'platforms',
+    ...serializePlatformListRoute(currentPlatformListRoute()),
+  });
   appendRecordModeParam(params);
   return '#' + params.toString();
 }
@@ -1186,9 +1246,16 @@ async function rerenderPlatformsRoute(h: Record<string, string> = parseHash()) {
     await showPlatformDetailPage(h.provider, h.device);
     return;
   }
+  applyPlatformListRoute(h);
   await initPlatformsView(true);
 }
 
+bindCaptionLinks(captionLinks, (hash) => {
+  suppressHashHandler = false;
+  // The regular Graph/Table tabs can change panels without changing the URL.
+  if (location.hash === hash) void applyHashRouting();
+  else location.hash = hash;
+});
 window.addEventListener('hashchange', () => { applyHashRouting(); });
 applyHashRouting();
 
@@ -2619,6 +2686,7 @@ function ensurePlatformsProviderFilterBound(table: HTMLTableElement) {
         b.addEventListener('click', (e) => {
           e.preventDefault();
           platformProviderFilter = b.getAttribute('data-provider') || '';
+          updatePlatformsListHash();
           renderPlatformsTable();
           closeGlobalPopover();
         });
@@ -2679,6 +2747,7 @@ function renderPlatformsTable() {
 		    const retiredDevicesCheckbox = retiredDevicesToggle.querySelector('input') as HTMLInputElement | null;
 		    retiredDevicesCheckbox?.addEventListener('change', () => {
 		      showRetiredDevices = retiredDevicesCheckbox.checked;
+		      updatePlatformsListHash();
 		      renderPlatformsTable();
 		    });
 		    platformControls.appendChild(retiredDevicesToggle);
@@ -2735,10 +2804,11 @@ function renderPlatformsTable() {
 		        const clickCol = String(th.getAttribute('data-col')) as typeof platformSortKey;
 		        if (platformSortKey === clickCol) {
 		          platformSortDir = platformSortDir === 'asc' ? 'desc' : 'asc';
-			        } else {
-			          platformSortKey = clickCol;
+		        } else {
+		          platformSortKey = clickCol;
 		          platformSortDir = (clickCol === 'device') ? 'asc' : 'desc';
 		        }
+	        updatePlatformsListHash();
 	        renderPlatformsTable();
 	      });
 	    });

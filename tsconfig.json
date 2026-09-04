@@ -14,9 +14,11 @@
     "rootDir": "."
   },
   "include": [
+    "caption-links.ts",
     "dataset-metadata.ts",
     "main.ts",
     "platform-components.ts",
+    "platform-route.ts",
     "records.ts",
     "tour.ts"
   ],
