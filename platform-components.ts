@@ -1,5 +1,18 @@
 export type PlatformScoreComponentEntry = [string, any];
 
+export type PlatformScoreComponentStatus = 'submitted' | 'unsupported' | 'missing';
+
+export type PlatformScoreComponentAvailability = {
+  status: PlatformScoreComponentStatus;
+  hasResult: boolean;
+  requiredNumQubits: number | null;
+};
+
+export type PlatformScoreComparison = {
+  tone: 'equal' | 'low' | 'high';
+  changePercent: number | null;
+};
+
 export type MetriqGymDispatchInstructions = {
   command: string;
   suite: string;
@@ -37,6 +50,67 @@ export function sortPlatformScoreComponents(entries: PlatformScoreComponentEntry
     if (groupDiff !== 0) return groupDiff;
     return platformComponentCollator.compare(a[0], b[0]);
   });
+}
+
+export function mergePlatformScoreComponents(
+  componentSets: Array<Record<string, any>>,
+) {
+  const merged = new Map<string, any>();
+  componentSets.forEach((components) => {
+    Object.entries(components).forEach(([name, component]) => {
+      const current = merged.get(name);
+      const currentGroup = typeof current?.group === 'string' ? current.group.trim() : '';
+      const nextGroup = typeof component?.group === 'string' ? component.group.trim() : '';
+      if (!merged.has(name) || (!currentGroup && nextGroup)) merged.set(name, component);
+    });
+  });
+  return sortPlatformScoreComponents(Array.from(merged.entries()));
+}
+
+function finiteNumber(value: unknown) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+export function classifyPlatformScoreComponent(
+  component: any,
+  deviceNumQubits: number | null,
+): PlatformScoreComponentAvailability {
+  const hasResult = component?.normalized_available === true
+    || component?.raw_available === true
+    || finiteNumber(component?.normalized) !== null
+    || finiteNumber(component?.raw) !== null
+    || Boolean(component?.timestamp || component?.normalized_timestamp || component?.raw_timestamp);
+  const requiredNumQubits = finiteNumber(component?.required_num_qubits);
+  const unsupported = !hasResult
+    && requiredNumQubits !== null
+    && deviceNumQubits !== null
+    && deviceNumQubits < requiredNumQubits;
+
+  return {
+    status: hasResult ? 'submitted' : unsupported ? 'unsupported' : 'missing',
+    hasResult,
+    requiredNumQubits,
+  };
+}
+
+export function comparePlatformScoreValues(
+  leftValue: unknown,
+  rightValue: unknown,
+): PlatformScoreComparison | null {
+  const left = finiteNumber(leftValue);
+  const right = finiteNumber(rightValue);
+  if (left === null || right === null || left < 0 || right < 0) return null;
+
+  const changePercent = left === right ? 0 : right === 0 ? null : ((left - right) / right) * 100;
+  if (changePercent !== null && !Number.isFinite(changePercent)) return null;
+
+  return {
+    tone: left === right ? 'equal' : left > right ? 'high' : 'low',
+    changePercent,
+  };
 }
 
 function commandArgument(value: unknown) {

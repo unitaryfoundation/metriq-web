@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildMetriqGymDispatchInstructions,
+  classifyPlatformScoreComponent,
+  comparePlatformScoreValues,
   isSameMetriqGymSuiteRelease,
+  mergePlatformScoreComponents,
   resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
@@ -60,6 +63,107 @@ test('platform score component sorting falls back to the label for missing group
     sortPlatformScoreComponents(components).map(([name]) => name),
     ['Component 20', 'Component 100'],
   );
+});
+
+test('merges component sets before applying the platform detail order', () => {
+  const first = {
+    'QMLK-10:accuracy_score': { weight: 0.04 },
+    'EPLG-100': { group: 'EPLG', weight: 0.01 },
+  };
+  const second = {
+    'QMLK-10:accuracy_score': { group: 'QML Kernel', weight: 0.04 },
+    'EPLG-20': { group: 'EPLG', weight: 0.08 },
+  };
+
+  const merged = mergePlatformScoreComponents([first, second]);
+  assert.deepEqual(
+    merged.map(([name]) => name),
+    ['EPLG-20', 'EPLG-100', 'QMLK-10:accuracy_score'],
+  );
+  assert.equal(
+    merged.at(-1)[1],
+    second['QMLK-10:accuracy_score'],
+    'a component with grouping metadata should be used as the sort representative',
+  );
+});
+
+test('classifies submitted platform score components from values or timestamps', () => {
+  for (const component of [
+    { normalized_available: true },
+    { raw_available: true },
+    { normalized: 0 },
+    { raw: '0.25' },
+    { timestamp: '2026-09-03T00:00:00Z' },
+    { normalized_timestamp: '2026-09-03T00:00:00Z' },
+    { raw_timestamp: '2026-09-03T00:00:00Z' },
+  ]) {
+    assert.deepEqual(
+      classifyPlatformScoreComponent(component, 5),
+      { status: 'submitted', hasResult: true, requiredNumQubits: null },
+    );
+  }
+});
+
+test('distinguishes unsupported components from missing submissions', () => {
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: '20' }, 10),
+    { status: 'unsupported', hasResult: false, requiredNumQubits: 20 },
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: 10 }, 10),
+    { status: 'missing', hasResult: false, requiredNumQubits: 10 },
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: 20 }, null),
+    { status: 'missing', hasResult: false, requiredNumQubits: 20 },
+    'unknown device capacity must not be guessed as unsupported',
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ normalized: 'not-a-number', raw: Infinity }, 10),
+    { status: 'missing', hasResult: false, requiredNumQubits: null },
+  );
+  assert.deepEqual(
+    classifyPlatformScoreComponent({ required_num_qubits: true }, 0),
+    { status: 'missing', hasResult: false, requiredNumQubits: null },
+  );
+});
+
+test('compares left device scores using the right device as the percentage baseline', () => {
+  const cases = [
+    [125, 100, 25, 'high'],
+    [100, 125, -20, 'low'],
+    [100, 100, 0, 'equal'],
+    [101, 100, 1, 'high'],
+    [99, 100, -1, 'low'],
+    [200, 100, 100, 'high'],
+    ['125', '100', 25, 'high'],
+  ];
+
+  for (const [left, right, changePercent, tone] of cases) {
+    assert.deepEqual(comparePlatformScoreValues(left, right), { changePercent, tone });
+  }
+});
+
+test('handles zero and invalid platform score comparisons', () => {
+  assert.deepEqual(
+    comparePlatformScoreValues(0, 0),
+    { tone: 'equal', changePercent: 0 },
+  );
+  assert.deepEqual(
+    comparePlatformScoreValues(10, 0),
+    { tone: 'high', changePercent: null },
+  );
+  assert.deepEqual(
+    comparePlatformScoreValues(0, 10),
+    { tone: 'low', changePercent: -100 },
+  );
+  for (const values of [
+    [null, 10], [10, undefined], [-1, 10], [10, -1], [10, Infinity],
+    [NaN, 10], ['', 10], [10, 'not-a-number'], [false, 10],
+    [Number.MAX_VALUE, Number.MIN_VALUE],
+  ]) {
+    assert.equal(comparePlatformScoreValues(...values), null);
+  }
 });
 
 test('reads display metadata from a versioned Metriq-Gym suite definition', () => {
