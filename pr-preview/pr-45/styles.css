@@ -706,25 +706,17 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .compare-subvalue{margin-top:3px;color:var(--muted);font-size:12px}
 .compare-better-value{font-weight:600}
 .compare-component-value-cell{color:inherit;text-align:right!important}
+.compare-component-table{min-width:900px}
+.compare-component-table tbody th{white-space:normal;overflow-wrap:anywhere}
+.compare-table tbody tr.compare-component-row--overlap{background:#eef6ff}
+.compare-table tbody tr.compare-component-row--overlap th,.compare-table tbody tr.compare-component-row--overlap td{border-top:0;border-bottom:1px solid #bfdbfe}
+.compare-table tbody tr.compare-component-row--overlap th{font-weight:700;color:#1e3a5f}
+.compare-component-difference{text-align:center!important;font-weight:600;white-space:nowrap}
 .compare-component-result-cell{cursor:pointer}
 .compare-component-result-cell:hover,.compare-component-result-cell:focus-visible{background:rgba(37,99,235,.06);outline:2px solid rgba(37,99,235,.28);outline-offset:-2px}
-.compare-ratio-wrap{display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px}
-.compare-ratio{display:inline-block;font-family:"Trebuchet MS","Avenir Next",Arial,sans-serif;font-size:32px;font-weight:900;letter-spacing:-.08em;line-height:.9}
-.compare-ratio-value{font-size:15px;font-weight:700;color:#64748b;letter-spacing:0}
-.compare-ratio--low{color:#dc2626}
-.compare-ratio--equal{color:#2563eb}
-.compare-ratio--high{color:#16a34a}
-.compare-graph-wrap{margin-top:12px}
-.compare-graph-table tbody th{white-space:normal}
-.compare-graph-table tbody th strong{display:block;margin-bottom:8px;font-weight:700;color:#1f2937}
-.compare-graph-bars{display:flex;flex-direction:column;gap:7px}
-.compare-graph-bar-row{display:grid;grid-template-columns:minmax(110px,38%) 1fr;gap:10px;align-items:center;color:var(--muted);font-weight:500}
-.compare-graph-bar{display:block;height:18px;border-radius:5px}
-.compare-graph-bar--left{background:linear-gradient(90deg,#2563eb,#38bdf8)}
-.compare-graph-bar--right{background:#c7c7c7}
-.compare-graph-value{font-size:18px;font-weight:400;color:#1f2937;font-family:inherit}
-.compare-graph-value--better{font-weight:600;font-family:inherit}
-.compare-graph-difference{text-align:right!important;font-weight:800;font-size:20px}
+.compare-change--low{color:#b91c1c}
+.compare-change--equal{color:var(--muted)}
+.compare-change--high{color:#15803d}
 
 @media (max-width: 760px){
   .compare-picker{grid-template-columns:1fr}
