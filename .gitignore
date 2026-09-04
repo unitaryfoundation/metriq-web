@@ -11,6 +11,8 @@ dataset-metadata.js
 dataset-metadata.js.map
 platform-components.js
 platform-components.js.map
+platform-route.js
+platform-route.js.map
 records.js
 records.js.map
 feed.xml
