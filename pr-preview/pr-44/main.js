@@ -1613,7 +1613,7 @@ function renderCompareThreeColumnColgroup() {
     return '<colgroup><col style="width:34%" /><col style="width:33%" /><col style="width:33%" /></colgroup>';
 }
 function renderCompareComponentColgroup() {
-    return '<colgroup><col style="width:24%" /><col style="width:6%" /><col style="width:25%" /><col style="width:25%" /><col style="width:20%" /></colgroup>';
+    return '<colgroup><col style="width:32%" /><col style="width:8%" /><col style="width:23%" /><col style="width:14%" /><col style="width:23%" /></colgroup>';
 }
 function hasCompareComponent(components, name) {
     return Object.prototype.hasOwnProperty.call(components, name);
@@ -1665,20 +1665,21 @@ function renderCompareComponentRow(label, weightHtml, aHtml, bHtml, differenceHt
 }
 function renderCompareComponentRowHtml(labelHtml, weightHtml, aHtml, bHtml, differenceHtml, aHref = '', bHref = '', rowClass = '') {
     const classAttr = rowClass ? ` class="${escapeAttr(rowClass)}"` : '';
-    return `<tr${classAttr}><th scope="row">${labelHtml}</th><td class="num">${weightHtml}</td>${renderCompareComponentValueCellHtml(aHtml, aHref)}${renderCompareComponentValueCellHtml(bHtml, bHref)}<td class="compare-component-difference">${differenceHtml}</td></tr>`;
+    return `<tr${classAttr}><th scope="row">${labelHtml}</th><td class="num">${weightHtml}</td>${renderCompareComponentValueCellHtml(aHtml, aHref)}<td class="compare-component-difference">${differenceHtml}</td>${renderCompareComponentValueCellHtml(bHtml, bHref)}</tr>`;
 }
-function renderCompareComponentRatioHtml(leftValue, rightValue, includeRatioLabel = false) {
+function renderCompareComponentDifferenceHtml(leftValue, rightValue) {
     const comparison = comparePlatformScoreValues(leftValue, rightValue);
     if (!comparison)
         return '–';
-    const ratioLabel = comparison.ratioPercent === null
-        ? leftValue === rightValue ? 'both zero' : '∞'
-        : `${comparison.ratioPercent.toFixed(1)}%`;
-    const ratioDescription = comparison.ratioPercent === null
-        ? leftValue === rightValue ? 'Both normalized values are zero' : 'Normalized ratio is infinite because Device B is zero'
-        : `Normalized ratio: ${comparison.ratioPercent.toFixed(1)}%`;
-    const labelHtml = includeRatioLabel ? `<span class="compare-ratio-value">${escapeHtml(ratioLabel)}</span>` : '';
-    return `<span class="compare-ratio-wrap"><span class="compare-ratio compare-ratio--${comparison.tone}" title="${escapeAttr(ratioDescription)}" aria-label="${escapeAttr(ratioDescription)}">${escapeHtml(comparison.symbol)}</span>${labelHtml}</span>`;
+    if (comparison.changePercent === null) {
+        return '<span class="compare-change--equal" title="Percentage comparison is unavailable when the right device’s score is zero.">N/A</span>';
+    }
+    const roundedChange = Number(comparison.changePercent.toFixed(1));
+    const sign = roundedChange > 0 ? '+' : roundedChange < 0 ? '−' : '';
+    const label = `${sign}${Math.abs(roundedChange).toFixed(1)}%`;
+    const tone = roundedChange === 0 ? 'equal' : comparison.tone;
+    const description = `Left device's normalized score relative to the right device: ${label}`;
+    return `<span class="compare-change--${tone}" title="${escapeAttr(description)}" aria-label="${escapeAttr(description)}">${escapeHtml(label)}</span>`;
 }
 function getCompareComponentRawNumber(component) {
     if (component?.raw === null || component?.raw === undefined || component?.raw === '')
@@ -1708,8 +1709,8 @@ function renderCompareComponentValueHtml(value, component, isBetter, rawIsBetter
     const rawHtml = rawValueHtml ? `<div class="compare-subvalue">raw ${emphasizedRawValueHtml}</div>` : '';
     return `${emphasizedValueHtml}${rawHtml}`;
 }
-function renderCompareComponentDeviceHtml(valueHtml, availability, deviceNumQubits, barHtml = '') {
-    return `<div class="compare-component-device"><div class="compare-component-device__summary"><div>${renderPlatformComponentStatusHtml(availability, deviceNumQubits)}</div><div class="compare-component-device__values">${valueHtml}</div></div>${barHtml}</div>`;
+function renderCompareComponentDeviceHtml(valueHtml, availability, deviceNumQubits, hasNumericValue) {
+    return hasNumericValue ? valueHtml : renderPlatformComponentStatusHtml(availability, deviceNumQubits);
 }
 async function showPlatformComparePage(providerA, deviceA, providerB, deviceB) {
     const container = document.getElementById('platforms-container');
@@ -1815,54 +1816,6 @@ function bindComparePicker() {
     a.addEventListener('change', navigate);
     b.addEventListener('change', navigate);
     form.addEventListener('submit', (ev) => { ev.preventDefault(); });
-}
-const COMPARE_GRAPH_LOG_SCALE = 100;
-const COMPARE_GRAPH_FULL_SCALE = 8000;
-const COMPARE_GRAPH_BASELINE = 100;
-const COMPARE_GRAPH_BASELINE_WIDTH = 50;
-const COMPARE_GRAPH_MIN_WIDTH = 4;
-const COMPARE_GRAPH_MAX_WIDTH = 95;
-const COMPARE_GRAPH_MIN_ROW_MAX_WIDTH = 62;
-function getCompareGraphRowMaxWidth(scaleValue) {
-    const scaleRatio = Math.max(1, scaleValue / COMPARE_GRAPH_BASELINE);
-    const maxRatio = Math.max(1, COMPARE_GRAPH_FULL_SCALE / COMPARE_GRAPH_BASELINE);
-    const progress = maxRatio > 1 ? Math.log(scaleRatio) / Math.log(maxRatio) : 1;
-    const width = COMPARE_GRAPH_MIN_ROW_MAX_WIDTH + (COMPARE_GRAPH_MAX_WIDTH - COMPARE_GRAPH_MIN_ROW_MAX_WIDTH) * progress;
-    return Math.max(COMPARE_GRAPH_MIN_ROW_MAX_WIDTH, Math.min(COMPARE_GRAPH_MAX_WIDTH, width));
-}
-function getCompareGraphLogWidth(value, scaleValue = COMPARE_GRAPH_LOG_SCALE) {
-    if (value === null || !Number.isFinite(value) || value <= 0)
-        return 0;
-    const scale = Number.isFinite(scaleValue) && scaleValue > 0
-        ? Math.max(scaleValue, value, COMPARE_GRAPH_BASELINE)
-        : Math.max(value, COMPARE_GRAPH_BASELINE);
-    if (value === COMPARE_GRAPH_BASELINE)
-        return COMPARE_GRAPH_BASELINE_WIDTH;
-    let width = COMPARE_GRAPH_BASELINE_WIDTH;
-    if (value > COMPARE_GRAPH_BASELINE) {
-        const rowMaxWidth = getCompareGraphRowMaxWidth(scale);
-        const valueRatio = value / COMPARE_GRAPH_BASELINE;
-        const scaleRatio = scale / COMPARE_GRAPH_BASELINE;
-        const progress = scaleRatio > 1 ? Math.log(valueRatio) / Math.log(scaleRatio) : 1;
-        width = COMPARE_GRAPH_BASELINE_WIDTH + (rowMaxWidth - COMPARE_GRAPH_BASELINE_WIDTH) * progress;
-    }
-    else {
-        const progress = Math.log1p(value) / Math.log1p(COMPARE_GRAPH_BASELINE);
-        width = COMPARE_GRAPH_BASELINE_WIDTH * progress;
-    }
-    return Math.max(COMPARE_GRAPH_MIN_WIDTH, Math.min(100, width));
-}
-function renderCompareComponentBar(value, side, scaleValue) {
-    if (value === null || !Number.isFinite(value))
-        return '';
-    const scale = scaleValue !== undefined && Number.isFinite(scaleValue) && scaleValue > 0
-        ? scaleValue
-        : Math.max(COMPARE_GRAPH_LOG_SCALE, value);
-    const width = getCompareGraphLogWidth(value, scale);
-    return `<span class="compare-component-bar" aria-hidden="true"><i class="compare-component-bar__fill compare-component-bar__fill--${side}" style="width:${width.toFixed(1)}%"></i></span>`;
-}
-function renderCompareOverlapDeviceHtml(value, otherValue, side, scaleValue) {
-    return `<div class="compare-overlap-device"><div class="compare-overlap-device__value">${renderCompareMaybeBetterNumber(value, otherValue, 2)}</div>${renderCompareComponentBar(value, side, scaleValue)}</div>`;
 }
 function bindCompareComponentResultCells(root) {
     root.querySelectorAll('.compare-component-result-cell[data-results-href]').forEach((cell) => {
@@ -1970,16 +1923,14 @@ function renderPlatformComparePage(left, right) {
         const rightAvailability = classifyPlatformScoreComponent(rc, rightDeviceQubits);
         const leftValue = renderCompareComponentValueHtml(ln, lc, leftHasNumericValue && rightHasNumericValue && ln > rn, leftRawIsBetter);
         const rightValue = renderCompareComponentValueHtml(rn, rc, leftHasNumericValue && rightHasNumericValue && rn > ln, rightRawIsBetter);
-        const rowScale = Math.max(COMPARE_GRAPH_LOG_SCALE, ...[ln, rn].filter((value) => value !== null && Number.isFinite(value) && value > 0));
-        const leftCell = renderCompareComponentDeviceHtml(leftValue, leftAvailability, leftDeviceQubits, renderCompareComponentBar(ln, 'left', rowScale));
-        const rightCell = renderCompareComponentDeviceHtml(rightValue, rightAvailability, rightDeviceQubits, renderCompareComponentBar(rn, 'right', rowScale));
-        return renderCompareComponentRow(name, weightCell, leftCell, rightCell, renderCompareComponentRatioHtml(ln, rn, true), leftHasNumericValue ? leftResultsHref : '', rightHasNumericValue ? rightResultsHref : '');
+        const leftCell = renderCompareComponentDeviceHtml(leftValue, leftAvailability, leftDeviceQubits, leftHasNumericValue || leftRaw !== null);
+        const rightCell = renderCompareComponentDeviceHtml(rightValue, rightAvailability, rightDeviceQubits, rightHasNumericValue || rightRaw !== null);
+        return renderCompareComponentRow(name, weightCell, leftCell, rightCell, renderCompareComponentDifferenceHtml(ln, rn), leftHasNumericValue ? leftResultsHref : '', rightHasNumericValue ? rightResultsHref : '');
     }).join('') : renderCompareComponentRow('Components', '–', '–', '–', '–');
-    const overlapScale = Math.max(COMPARE_GRAPH_LOG_SCALE, ...[leftOverlapScore, rightOverlapScore].filter((value) => value !== null && Number.isFinite(value) && value > 0));
     const overlapCountLabel = overlapComponentNames.length
         ? `${overlapComponentNames.length} shared component${overlapComponentNames.length === 1 ? '' : 's'}`
         : 'No shared components';
-    const overlapRow = renderCompareComponentRowHtml(`${renderCompareOverlapScoreLabelHtml()}<div class="compare-subvalue">${escapeHtml(overlapCountLabel)}</div>`, '–', renderCompareOverlapDeviceHtml(leftOverlapScore, rightOverlapScore, 'left', overlapScale), renderCompareOverlapDeviceHtml(rightOverlapScore, leftOverlapScore, 'right', overlapScale), renderCompareComponentRatioHtml(leftOverlapScore, rightOverlapScore, true), '', '', 'compare-component-row--overlap');
+    const overlapRow = renderCompareComponentRowHtml(`${renderCompareOverlapScoreLabelHtml()}<div class="compare-subvalue">${escapeHtml(overlapCountLabel)}</div>`, '–', renderCompareMaybeBetterNumber(leftOverlapScore, rightOverlapScore, 2), renderCompareMaybeBetterNumber(rightOverlapScore, leftOverlapScore, 2), renderCompareComponentDifferenceHtml(leftOverlapScore, rightOverlapScore), '', '', 'compare-component-row--overlap');
     container.innerHTML = `
     <div class="compare-view">
       <div class="meta"><a id="compare-back" href="${escapeAttr(buildPlatformsListHash())}">← Back to Platforms</a></div>
@@ -2023,8 +1974,8 @@ function renderPlatformComparePage(left, right) {
       </section>
       <section class="compare-section" id="compare-benchmark-components">
         <h4>Benchmark components</h4>
-        <p class="meta">Bars and differences compare normalized values; raw values appear beneath them. Submitted cells open their matching Results run.</p>
-        <div class="compare-table-wrap"><table class="compare-table compare-component-table">${renderCompareComponentColgroup()}<thead><tr><th>Component</th><th>Weight</th><th>${leftHeaderHtml}</th><th>${rightHeaderHtml}</th><th title="Device A normalized value as a percentage of Device B">Difference (A/B)</th></tr></thead><tbody>${overlapRow}${componentRows}</tbody></table></div>
+        <p class="meta">Normalized scores are shown above raw values. Percentages compare the left device against the right: positive means the left scores higher; negative means it scores lower. Score cells open their matching Results run.</p>
+        <div class="compare-table-wrap"><table class="compare-table compare-component-table">${renderCompareComponentColgroup()}<thead><tr><th>Component</th><th>Weight</th><th>${leftHeaderHtml}</th><th class="compare-component-difference" title="Percentage difference in normalized score, using the right device as the baseline: 100 × (left − right) / right">vs →</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${overlapRow}${componentRows}</tbody></table></div>
       </section>
     </div>
   `;
