@@ -704,28 +704,16 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .compare-better-value{font-weight:600}
 .compare-component-value-cell{color:inherit;text-align:right!important}
 .compare-component-table{min-width:900px}
-.compare-component-device{display:flex;flex-direction:column;gap:8px}
-.compare-component-device__summary{display:flex;align-items:flex-start;justify-content:flex-end;gap:10px}
-.compare-component-device__values{min-width:76px}
-.compare-component-bar{display:block;width:100%;height:8px;border-radius:999px;background:rgba(148,163,184,.18);overflow:hidden}
-.compare-component-bar__fill{display:block;height:100%;border-radius:inherit}
-.compare-component-bar__fill--left{background:linear-gradient(90deg,#2563eb,#38bdf8)}
-.compare-component-bar__fill--right{background:#94a3b8}
-.compare-overlap-device{display:flex;flex-direction:column;gap:8px}
-.compare-overlap-device__value{font-size:18px;color:#1f2937}
+.compare-component-table tbody th{white-space:normal;overflow-wrap:anywhere}
 .compare-table tbody tr.compare-component-row--overlap{background:#eef6ff}
 .compare-table tbody tr.compare-component-row--overlap th,.compare-table tbody tr.compare-component-row--overlap td{border-top:0;border-bottom:1px solid #bfdbfe}
 .compare-table tbody tr.compare-component-row--overlap th{font-weight:700;color:#1e3a5f}
-.compare-component-difference{text-align:center!important;font-weight:700;vertical-align:middle!important}
-.compare-component-difference .compare-ratio-wrap{align-items:center}
+.compare-component-difference{text-align:center!important;font-weight:600;white-space:nowrap}
 .compare-component-result-cell{cursor:pointer}
 .compare-component-result-cell:hover,.compare-component-result-cell:focus-visible{background:rgba(37,99,235,.06);outline:2px solid rgba(37,99,235,.28);outline-offset:-2px}
-.compare-ratio-wrap{display:inline-flex;flex-direction:column;align-items:flex-end;gap:2px}
-.compare-ratio{display:inline-block;font-family:"Trebuchet MS","Avenir Next",Arial,sans-serif;font-size:32px;font-weight:900;letter-spacing:-.08em;line-height:.9}
-.compare-ratio-value{font-size:15px;font-weight:700;color:#64748b;letter-spacing:0}
-.compare-ratio--low{color:#dc2626}
-.compare-ratio--equal{color:#2563eb}
-.compare-ratio--high{color:#16a34a}
+.compare-change--low{color:#b91c1c}
+.compare-change--equal{color:var(--muted)}
+.compare-change--high{color:#15803d}
 
 @media (max-width: 760px){
   .compare-picker{grid-template-columns:1fr}

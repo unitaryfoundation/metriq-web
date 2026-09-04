@@ -128,38 +128,40 @@ test('distinguishes unsupported components from missing submissions', () => {
   );
 });
 
-test('compares platform scores with symmetric magnitude bands', () => {
+test('compares left device scores using the right device as the percentage baseline', () => {
   const cases = [
-    [104.9, 100, '=', 'equal'],
-    [130.3, 100, '>', 'high'],
-    [150, 100, '>>', 'high'],
-    [200, 100, '>>>', 'high'],
+    [125, 100, 25, 'high'],
+    [100, 125, -20, 'low'],
+    [100, 100, 0, 'equal'],
+    [101, 100, 1, 'high'],
+    [99, 100, -1, 'low'],
+    [200, 100, 100, 'high'],
+    ['125', '100', 25, 'high'],
   ];
 
-  for (const [larger, smaller, symbol, tone] of cases) {
-    const forward = comparePlatformScoreValues(larger, smaller);
-    const reverse = comparePlatformScoreValues(smaller, larger);
-    assert.equal(forward?.symbol, symbol);
-    assert.equal(forward?.tone, tone);
-    assert.equal(reverse?.symbol, symbol.replaceAll('>', '<'));
-    assert.equal(reverse?.tone, tone === 'equal' ? 'equal' : 'low');
+  for (const [left, right, changePercent, tone] of cases) {
+    assert.deepEqual(comparePlatformScoreValues(left, right), { changePercent, tone });
   }
 });
 
 test('handles zero and invalid platform score comparisons', () => {
   assert.deepEqual(
     comparePlatformScoreValues(0, 0),
-    { symbol: '=', tone: 'equal', ratioPercent: null },
+    { tone: 'equal', changePercent: 0 },
   );
   assert.deepEqual(
     comparePlatformScoreValues(10, 0),
-    { symbol: '>>>', tone: 'high', ratioPercent: null },
+    { tone: 'high', changePercent: null },
   );
   assert.deepEqual(
     comparePlatformScoreValues(0, 10),
-    { symbol: '<<<', tone: 'low', ratioPercent: 0 },
+    { tone: 'low', changePercent: -100 },
   );
-  for (const values of [[null, 10], [10, undefined], [-1, 10], [10, Infinity]]) {
+  for (const values of [
+    [null, 10], [10, undefined], [-1, 10], [10, -1], [10, Infinity],
+    [NaN, 10], ['', 10], [10, 'not-a-number'], [false, 10],
+    [Number.MAX_VALUE, Number.MIN_VALUE],
+  ]) {
     assert.equal(comparePlatformScoreValues(...values), null);
   }
 });

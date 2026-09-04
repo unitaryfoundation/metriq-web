@@ -9,9 +9,8 @@ export type PlatformScoreComponentAvailability = {
 };
 
 export type PlatformScoreComparison = {
-  symbol: '=' | '<' | '<<' | '<<<' | '>' | '>>' | '>>>';
   tone: 'equal' | 'low' | 'high';
-  ratioPercent: number | null;
+  changePercent: number | null;
 };
 
 export type MetriqGymDispatchInstructions = {
@@ -105,19 +104,12 @@ export function comparePlatformScoreValues(
   const right = finiteNumber(rightValue);
   if (left === null || right === null || left < 0 || right < 0) return null;
 
-  const ratioPercent = right === 0 ? null : (left / right) * 100;
-  if (left === right) return { symbol: '=', tone: 'equal', ratioPercent };
+  const changePercent = left === right ? 0 : right === 0 ? null : ((left - right) / right) * 100;
+  if (changePercent !== null && !Number.isFinite(changePercent)) return null;
 
-  const smaller = Math.min(left, right);
-  const magnitude = smaller === 0 ? Number.POSITIVE_INFINITY : Math.max(left, right) / smaller;
-  if (magnitude <= 1.05) return { symbol: '=', tone: 'equal', ratioPercent };
-
-  const symbolCount = magnitude < 1.5 ? 1 : magnitude < 2 ? 2 : 3;
-  const pointsHigh = left > right;
   return {
-    symbol: (pointsHigh ? '>'.repeat(symbolCount) : '<'.repeat(symbolCount)) as PlatformScoreComparison['symbol'],
-    tone: pointsHigh ? 'high' : 'low',
-    ratioPercent,
+    tone: left === right ? 'equal' : left > right ? 'high' : 'low',
+    changePercent,
   };
 }
 
