@@ -2140,8 +2140,8 @@ function renderPlatformComparePage(left: any, right: any) {
       leftCell,
       rightCell,
       renderCompareComponentDifferenceHtml(ln, rn),
-      leftHasNumericValue ? leftResultsHref : buildCompareComponentOutcomeHash(leftProvider, leftDevice, name, lc, leftAvailability),
-      rightHasNumericValue ? rightResultsHref : buildCompareComponentOutcomeHash(rightProvider, rightDevice, name, rc, rightAvailability),
+      leftHasNumericValue || leftRaw !== null ? leftResultsHref : buildCompareComponentOutcomeHash(leftProvider, leftDevice, name, lc, leftAvailability),
+      rightHasNumericValue || rightRaw !== null ? rightResultsHref : buildCompareComponentOutcomeHash(rightProvider, rightDevice, name, rc, rightAvailability),
     );
   }).join('') : renderCompareComponentRow('Components', '–', '–', '–', '–');
   const overlapCountLabel = overlapComponentNames.length
