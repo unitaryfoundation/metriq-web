@@ -2050,8 +2050,8 @@ function renderPlatformComparePage(left, right) {
         const rightAvailability = classifyPlatformScoreComponent(rc, rightDeviceQubits);
         const leftValue = renderCompareComponentValueHtml(ln, lc, leftHasNumericValue && rightHasNumericValue && ln > rn, leftRawIsBetter);
         const rightValue = renderCompareComponentValueHtml(rn, rc, leftHasNumericValue && rightHasNumericValue && rn > ln, rightRawIsBetter);
-        const leftContext = { provider: leftProvider, device: leftDevice, group: String(lc?.group || '') };
-        const rightContext = { provider: rightProvider, device: rightDevice, group: String(rc?.group || '') };
+        const leftContext = { provider: leftProvider, device: leftDevice, group: typeof lc?.group === 'string' && lc.group.trim() ? lc.group.trim() : name };
+        const rightContext = { provider: rightProvider, device: rightDevice, group: typeof rc?.group === 'string' && rc.group.trim() ? rc.group.trim() : name };
         const leftCell = renderCompareComponentDeviceHtml(leftValue, leftAvailability, leftDeviceQubits, leftHasNumericValue || leftRaw !== null, leftContext);
         const rightCell = renderCompareComponentDeviceHtml(rightValue, rightAvailability, rightDeviceQubits, rightHasNumericValue || rightRaw !== null, rightContext);
         return renderCompareComponentRow(name, weightCell, leftCell, rightCell, renderCompareComponentDifferenceHtml(ln, rn), leftHasNumericValue ? leftResultsHref : buildCompareComponentOutcomeHash(leftProvider, leftDevice, name, lc, leftAvailability), rightHasNumericValue ? rightResultsHref : buildCompareComponentOutcomeHash(rightProvider, rightDevice, name, rc, rightAvailability));
