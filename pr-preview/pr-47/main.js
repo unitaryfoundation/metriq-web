@@ -2054,7 +2054,7 @@ function renderPlatformComparePage(left, right) {
         const rightContext = { provider: rightProvider, device: rightDevice, group: typeof rc?.group === 'string' && rc.group.trim() ? rc.group.trim() : name };
         const leftCell = renderCompareComponentDeviceHtml(leftValue, leftAvailability, leftDeviceQubits, leftHasNumericValue || leftRaw !== null, leftContext);
         const rightCell = renderCompareComponentDeviceHtml(rightValue, rightAvailability, rightDeviceQubits, rightHasNumericValue || rightRaw !== null, rightContext);
-        return renderCompareComponentRow(name, weightCell, leftCell, rightCell, renderCompareComponentDifferenceHtml(ln, rn), leftHasNumericValue ? leftResultsHref : buildCompareComponentOutcomeHash(leftProvider, leftDevice, name, lc, leftAvailability), rightHasNumericValue ? rightResultsHref : buildCompareComponentOutcomeHash(rightProvider, rightDevice, name, rc, rightAvailability));
+        return renderCompareComponentRow(name, weightCell, leftCell, rightCell, renderCompareComponentDifferenceHtml(ln, rn), leftHasNumericValue || leftRaw !== null ? leftResultsHref : buildCompareComponentOutcomeHash(leftProvider, leftDevice, name, lc, leftAvailability), rightHasNumericValue || rightRaw !== null ? rightResultsHref : buildCompareComponentOutcomeHash(rightProvider, rightDevice, name, rc, rightAvailability));
     }).join('') : renderCompareComponentRow('Components', '–', '–', '–', '–');
     const overlapCountLabel = overlapComponentNames.length
         ? `${overlapComponentNames.length} shared component${overlapComponentNames.length === 1 ? '' : 's'}`
