@@ -2,7 +2,7 @@
 // Runs against the compiled records.js: `npm test` builds first.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dedupeRunsForDisplay, isProviderHidden, recordInstanceSig, variantParamSummaries, withoutHiddenProviders } from '../records.js';
+import { dedupeRunsForDisplay, isProviderHidden, normalizeRecordOutcome, normalizeRecordOutcomeDetail, recordInstanceSig, variantParamSummaries, withoutHiddenProviders } from '../records.js';
 
 const getScore = (run) => {
   const v = run?.metrics?.score;
@@ -107,4 +107,69 @@ test('provider visibility is configurable', () => {
   assert.equal(isProviderHidden('local', {}), true, 'local stays hidden if production config fails to load');
   assert.equal(isProviderHidden('local', { hiddenProviders: [] }), false);
   assert.equal(isProviderHidden('ibm', { hiddenProviders: ['local'] }), false);
+});
+
+// ---- Record outcomes (metriq-data #518) ----
+
+test('normalizeRecordOutcome accepts only the strict lowercase vocabulary', () => {
+  for (const value of ['error', 'unsupported', 'not_applicable']) {
+    assert.equal(normalizeRecordOutcome(value), value);
+  }
+  for (const value of ['completed', 'Unsupported', 'ERROR', ' error', 'not-applicable', '', null, undefined, 1, true, ['error'], { outcome: 'error' }]) {
+    assert.equal(normalizeRecordOutcome(value), null, `${JSON.stringify(value)} is not a reported outcome`);
+  }
+});
+
+test('normalizeRecordOutcomeDetail keeps the documented fields and drops blanks', () => {
+  assert.deepEqual(
+    normalizeRecordOutcomeDetail({
+      reason: '  Compiler rejects 100-qubit circuits ',
+      error_message: 'RuntimeError: too many qubits in routing',
+      source: 'dispatch',
+      source_url: 'https://example.test/job/1',
+      unexpected: 'ignored',
+    }),
+    {
+      reason: 'Compiler rejects 100-qubit circuits',
+      errorMessage: 'RuntimeError: too many qubits in routing',
+      source: 'dispatch',
+      sourceUrl: 'https://example.test/job/1',
+    },
+  );
+  // metriq-gym emits `outcome_detail: null` for plain failed-job uploads and
+  // may omit any subset of fields.
+  assert.deepEqual(
+    normalizeRecordOutcomeDetail({ error_message: 'FAILED - query task failed', source: 'poll' }),
+    { reason: null, errorMessage: 'FAILED - query task failed', source: 'poll', sourceUrl: null },
+  );
+  for (const empty of [null, undefined, {}, { reason: '   ' }, { reason: 7 }, [], 'reason']) {
+    assert.equal(normalizeRecordOutcomeDetail(empty), null, `${JSON.stringify(empty)} carries no detail`);
+  }
+});
+
+test('a completed record supersedes an outcome record for the same instance in both modes', () => {
+  const completed = makeRun({ timestamp: '2026-07-01T00:00:00Z', metrics: { score: 12 } });
+  const laterError = makeRun({ timestamp: '2026-09-04T11:50:40Z', metrics: {}, outcome: 'error' });
+  for (const mode of ['all-time', 'latest']) {
+    assert.deepEqual(dedupeRunsForDisplay([completed, laterError], mode, getScore), [completed], `${mode}: older completed run wins`);
+    assert.deepEqual(dedupeRunsForDisplay([laterError, completed], mode, getScore), [completed], `${mode}: order does not matter`);
+  }
+});
+
+test('among outcome records for the same instance the latest wins in both modes', () => {
+  const older = makeRun({ timestamp: '2026-08-01T00:00:00Z', metrics: {}, outcome: 'error' });
+  const newer = makeRun({ timestamp: '2026-09-04T11:50:40Z', metrics: {}, outcome: 'unsupported' });
+  for (const mode of ['all-time', 'latest']) {
+    assert.deepEqual(dedupeRunsForDisplay([older, newer], mode, getScore), [newer], `${mode}: newest claim wins`);
+    assert.deepEqual(dedupeRunsForDisplay([newer, older], mode, getScore), [newer], `${mode}: order does not matter`);
+  }
+});
+
+test('outcome records for a different benchmark instance stay visible', () => {
+  const completed50 = makeRun({ metrics: { score: 40 }, rawParams: { benchmark_name: 'Linear Ramp QAOA', num_qubits: 50, shots: 1000 } });
+  const error100 = makeRun({ timestamp: '2026-09-04T11:50:40Z', metrics: {}, outcome: 'error', rawParams: { benchmark_name: 'Linear Ramp QAOA', num_qubits: 100, shots: 1000 } });
+  for (const mode of ['all-time', 'latest']) {
+    const kept = dedupeRunsForDisplay([completed50, error100], mode, getScore);
+    assert.equal(kept.length, 2, `${mode}: a 50q result must not hide the 100q outcome`);
+  }
 });
