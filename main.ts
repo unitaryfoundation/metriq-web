@@ -1920,7 +1920,7 @@ function buildCompareComponentOutcomeHash(
   component: any,
   availability: PlatformScoreComponentAvailability,
 ) {
-  if (!availability.reportedOutcome || !availability.reportedOutcomeTimestamp) return '';
+  if (!availability.reportedOutcome) return '';
   return buildCompareComponentResultsHash(provider, device, componentName, {
     group: component?.group,
     timestamp: availability.reportedOutcomeTimestamp,
