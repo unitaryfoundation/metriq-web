@@ -1832,7 +1832,7 @@ function renderCompareComponentDeviceHtml(valueHtml, availability, deviceNumQubi
 }
 // Reported-outcome cells open the raw record the way scored cells open their run.
 function buildCompareComponentOutcomeHash(provider, device, componentName, component, availability) {
-    if (!availability.reportedOutcome || !availability.reportedOutcomeTimestamp)
+    if (!availability.reportedOutcome)
         return '';
     return buildCompareComponentResultsHash(provider, device, componentName, {
         group: component?.group,
