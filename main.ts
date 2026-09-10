@@ -2,6 +2,8 @@ import { RecordAggMode, recordInstanceSig, dedupeRunsForDisplay, variantParamSum
 import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
 import { bindCaptionLinks, syncCaptionRecordMode } from './caption-links.js';
 import { parsePlatformListRoute, serializePlatformListRoute } from './platform-route.js';
+import { calculateOverlapScores } from './platform-scoring.js';
+import { adjustMetriqScoreForRecords } from './platform-records.js';
 import type { PlatformSortDirection, PlatformSortKey } from './platform-route.js';
 import {
   buildMetriqGymDispatchInstructions,
@@ -1135,10 +1137,10 @@ function renderMetriqScoreHelp() {
         </p>
         <ol style="margin:0 0 10px;padding-left:18px;line-height:1.55;">
           <li>
-            For each benchmark, individual run scores are normalized against the corresponding benchmark score of a baseline device.
+            Measurements at different circuit widths are combined using each benchmark's scoring rule. Most benchmarks aggregate raw measurements first, then normalize against the same aggregate for the baseline device. EPLG uses a harmonic mean of normalized scores.
           </li>
           <li>
-            Those normalized values are then summed using benchmark weights defined in
+            Missing measurements receive the existing coverage penalty; their weights are retained. The benchmark subscores are then combined using the suite weights defined in
             <a href="https://github.com/unitaryfoundation/metriq-data/blob/main/scripts/scoring.json" target="_blank" rel="noopener" style="color:#2563eb;text-decoration:none;font-weight:600;">scoring.json</a>.
           </li>
         </ol>
@@ -1158,10 +1160,7 @@ function renderOverlapMetriqScoreHelp() {
   const backLabel = compareBackHash ? 'Back to comparison' : 'Back to Platforms';
   const metriqScoreLink = `<a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}" style="color:#2563eb;text-decoration:none;font-weight:600;">Metriq Score</a>`;
   const metriqFormula = renderDisplayMath('\\mathrm{MS}(d,s) = \\sum_{b \\in B} w_b\\mathrm{BS}_b(d,s)');
-  const overlapFormula = renderDisplayMath('\\mathrm{OMS}(d_1, d_2, s_1, s_2) = \\sum_{c \\in C} w_c\\mathrm{BS}_c(d_1, d_2, s_1, s_2)');
-  const sharedSetFormula = renderInlineMath('C = B_1 \\cap B_2');
-  const deviceOne = renderInlineMath('d_1');
-  const deviceTwo = renderInlineMath('d_2');
+  const overlapFormula = renderDisplayMath('\\mathrm{OS}(d,s;C) = \\sum_{b \\in B} w_b\\mathrm{BS}_b(d,s;C)');
   container.innerHTML = `
     <div class="detail-page" style="display:flex;flex-direction:column;gap:18px;padding-top:4px;">
       <div class="meta"><a href="${escapeAttr(backHash)}" style="color:#2563eb;text-decoration:none;">← ${escapeHtml(backLabel)}</a></div>
@@ -1171,22 +1170,21 @@ function renderOverlapMetriqScoreHelp() {
       </div>
       <div style="background:#fff;border:1px solid #dbeafe;border-radius:14px;padding:16px;box-shadow:0 12px 28px rgba(15,23,42,.06);">
         <p style="margin:0 0 10px;line-height:1.55;">
-          Overlap Score is an aggregate score computed from benchmark results that exist in both of the two devices. It is intended as a single number that compare two devices' performance.
+          Overlap Score uses the same scoring rules as ${metriqScoreLink}, with a shared set of measurements for the two devices.
         </p>
         <p style="margin:0 0 10px;line-height:1.55;">
-          The standard ${metriqScoreLink} is a weighted composite over the full benchmark suite, where each benchmark subscore is normalized and weighted:
-        </p>
-        ${metriqFormula}
-        <p style="margin:0 0 10px;line-height:1.55;">
-          In a pairwise comparison, that full-suite score can include benchmark components that only one of the two devices has.
+          The standard Metriq Score combines benchmark subscores using the suite's weights:
         </p>
         ${metriqFormula}
         <p style="margin:0 0 10px;line-height:1.55;">
-          The Overlap Score restricts the calculation to the shared benchmark set, ${sharedSetFormula}. For compared devices ${deviceOne} and ${deviceTwo}, it sums only the weighted normalized subscores for components present on both devices:
+          Most benchmark subscores aggregate raw measurements across circuit widths before normalizing against the baseline. EPLG uses a harmonic mean of normalized scores.
+        </p>
+        <p style="margin:0 0 10px;line-height:1.55;">
+          For Overlap Score, a measurement is used only when it is available for both devices. Otherwise it is treated as missing on both sides, using the same missing-measurement rule and coverage penalty as Metriq Score. Each device keeps its original suite and component weights; excluded weights are not redistributed.
         </p>
         ${overlapFormula}
         <p style="margin:0;line-height:1.55;">
-          This makes the side-by-side result more apples-to-apples: the regular score remains useful as a full-suite reference, while the overlap score better answers which device looks stronger on the directly comparable subset.
+          Here, C is the shared measurement set. With complete overlap and coverage, each device's Overlap Score equals its Metriq Score. With partial overlap it can still be higher, because the measurements used in a benchmark's aggregate have changed. The Weight column shows both devices' weights when their score series use different configurations.
         </p>
       </div>
     </div>
@@ -1443,7 +1441,7 @@ async function loadPlatformScores() {
 // The published platform score is built from the latest record per benchmark
 // instance. In 'all-time' mode, replace each component's normalized value with
 // the best one among duplicate records of the same benchmark instance in the
-// suite data, then recompute the score as the weighted sum of components.
+// suite data, then recompute using the canonical benchmark aggregation.
 // Duplicate records are identified by matching benchmark params, ignoring
 // sampling-effort settings (recordInstanceSig in records.ts).
 
@@ -1462,61 +1460,8 @@ function buildBenchmarkRunIndex(runs: any[]) {
 }
 
 function withAdjustedMetriqScore(detail: any): any {
-  if (recordAggMode !== 'all-time') return detail;
-  const score = detail?.metriq_score;
-  const components = (score && typeof score.components === 'object') ? score.components : null;
-  const runsIndex = benchmarkRunsByGroup;
-  if (!components || !runsIndex || !runsIndex.size) return detail;
-  const provider = String(detail?.provider || '');
-  const device = String(detail?.device || '');
-
-  const parseFinite = (value: any): number | null => {
-    if (value === null || value === undefined) return null;
-    const num = Number(value);
-    return Number.isFinite(num) ? num : null;
-  };
-
-  let changed = false;
-  const adjustedComponents: Record<string, any> = {};
-  Object.entries(components as Record<string, any>).forEach(([name, c]) => {
-    adjustedComponents[name] = c;
-    const anchorTs = c?.normalized_timestamp ?? c?.timestamp ?? c?.raw_timestamp;
-    if (!anchorTs) return;
-    const groupEntries = runsIndex.get(getRunGroupKey(provider, device, String(c?.group || ''))) || [];
-    const anchor = groupEntries.find((e) => e.run?.timestamp === anchorTs);
-    if (!anchor) return;
-    const sig = anchor.sig;
-    const officialValue = parseFinite(c?.normalized);
-    let bestValue = officialValue;
-    let bestTs = c?.normalized_timestamp ?? c?.timestamp ?? null;
-    groupEntries.forEach((e) => {
-      if (e.sig !== sig) return;
-      const v = parseFinite(e.run?.normalizedScores?.[String(c?.metric || '')]);
-      if (v !== null && (bestValue === null || v > bestValue)) {
-        bestValue = v;
-        bestTs = e.run?.timestamp ?? bestTs;
-      }
-    });
-    if (bestValue !== null && (officialValue === null || bestValue > officialValue)) {
-      changed = true;
-      adjustedComponents[name] = {
-        ...c,
-        normalized: bestValue,
-        normalized_available: true,
-        timestamp: bestTs,
-        normalized_timestamp: bestTs,
-      };
-    }
-  });
-  if (!changed) return detail;
-
-  let total = 0;
-  Object.values(adjustedComponents).forEach((c: any) => {
-    const w = Number(c?.weight);
-    const n = Number(c?.normalized);
-    if (Number.isFinite(w) && Number.isFinite(n)) total += w * n;
-  });
-  return { ...detail, metriq_score: { ...score, value: total, components: adjustedComponents } };
+  if (recordAggMode !== 'all-time' || !benchmarkRunsByGroup) return detail;
+  return adjustMetriqScoreForRecords(detail, benchmarkRunsByGroup);
 }
 
 function getPlatformsBaseUrl(indexUrl: string) {
@@ -1740,47 +1685,13 @@ function renderCompareComponentColgroup() {
   return '<colgroup><col style="width:32%" /><col style="width:8%" /><col style="width:23%" /><col style="width:14%" /><col style="width:23%" /></colgroup>';
 }
 
-function hasCompareComponent(components: Record<string, any>, name: string) {
-  return Object.prototype.hasOwnProperty.call(components, name);
-}
-
-function isFiniteCompareComponentNumber(value: any) {
-  if (value === null || value === undefined || value === '') return false;
-  return Number.isFinite(Number(value));
-}
-
-function hasCompareComponentNormalizedValue(components: Record<string, any>, name: string) {
-  if (!hasCompareComponent(components, name)) return false;
-  return isFiniteCompareComponentNumber(components[name]?.normalized);
-}
-
-function getCompareComponentNormalizedAvailability(name: string, leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
-  return (hasCompareComponentNormalizedValue(leftComponents, name) ? 1 : 0) + (hasCompareComponentNormalizedValue(rightComponents, name) ? 1 : 0);
-}
-
-function getCompareComponentDisplayWeight(name: string, leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
-  const weights = [leftComponents[name], rightComponents[name]]
-    .map((component) => Number(component?.weight))
-    .filter((weight) => Number.isFinite(weight));
-  return weights.length ? Math.max(...weights) : null;
-}
-
-function getCompareComponentSortWeight(name: string, leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
-  return getCompareComponentDisplayWeight(name, leftComponents, rightComponents) ?? 0;
-}
-
-function getCompareComponentNormalized(component: any) {
-  const normalized = Number(component?.normalized);
-  return Number.isFinite(normalized) ? normalized : null;
-}
-
-function calculateOverlapMetriqScore(components: Record<string, any>, overlapNames: string[], leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
-  const score = overlapNames.reduce((total, name) => {
-    const normalized = getCompareComponentNormalized(components[name]);
-    if (normalized === null) return total;
-    return total + getCompareComponentSortWeight(name, leftComponents, rightComponents) * normalized;
-  }, 0);
-  return Number.isFinite(score) ? score : null;
+function renderCompareComponentWeights(name: string, leftComponents: Record<string, any>, rightComponents: Record<string, any>) {
+  const weights = [leftComponents[name]?.weight, rightComponents[name]?.weight].map((value) =>
+    value !== null && value !== undefined && Number.isFinite(Number(value)) ? Number(value) : null,
+  );
+  const format = (value: number | null) => value === null ? '–' : value.toFixed(4);
+  if (weights[0] === weights[1]) return format(weights[0]);
+  return 'A: ' + format(weights[0]) + '<br>B: ' + format(weights[1]);
 }
 
 function renderCompareComponentValueCellHtml(valueHtml: string, resultsHref: string) {
@@ -1980,7 +1891,7 @@ function bindCompareComponentResultCells(root: HTMLElement) {
 function bindCompareHelpTooltips(root: HTMLElement) {
   const tipHtmlFor = (which: string) => {
     if (which === 'compare-overlap-score') {
-      return `A comparison score calculated only from benchmark components both devices share. <a href="${escapeAttr(buildOverlapScoreHelpHashFromRoute(parseHash()))}">Learn more</a>`;
+      return `Uses the Metriq Score calculation and original weights. Measurements without overlap are treated as missing for both devices, with the usual coverage penalty. <a href="${escapeAttr(buildOverlapScoreHelpHashFromRoute(parseHash()))}">Learn more</a>`;
     }
     return '';
   };
@@ -2018,9 +1929,10 @@ function renderPlatformComparePage(left: any, right: any) {
   const componentNames = mergePlatformScoreComponents([leftComponents, rightComponents]).map(([name]) => name);
   const leftDeviceQubits = deviceMetadataNumQubits(left);
   const rightDeviceQubits = deviceMetadataNumQubits(right);
-  const overlapComponentNames = componentNames.filter((name) => getCompareComponentNormalizedAvailability(name, leftComponents, rightComponents) === 2);
-  const leftOverlapScore = overlapComponentNames.length ? calculateOverlapMetriqScore(leftComponents, overlapComponentNames, leftComponents, rightComponents) : null;
-  const rightOverlapScore = overlapComponentNames.length ? calculateOverlapMetriqScore(rightComponents, overlapComponentNames, leftComponents, rightComponents) : null;
+  const overlap = calculateOverlapScores(leftComponents, rightComponents);
+  const overlapComponentNames = overlap.sharedNames;
+  const leftOverlapScore = overlap.left;
+  const rightOverlapScore = overlap.right;
   const metadataRows = extractDeviceMetadataRows([left, right]);
   const leftHeaderHtml = renderCompareDeviceHeaderLink(leftProvider, leftDevice);
   const rightHeaderHtml = renderCompareDeviceHeaderLink(rightProvider, rightDevice);
@@ -2040,8 +1952,7 @@ function renderPlatformComparePage(left: any, right: any) {
     const rc = rightComponents[name] || {};
     const ln = lc?.normalized === null || lc?.normalized === undefined ? null : Number(lc.normalized);
     const rn = rc?.normalized === null || rc?.normalized === undefined ? null : Number(rc.normalized);
-    const weight = getCompareComponentDisplayWeight(name, leftComponents, rightComponents);
-    const weightCell = weight !== null ? weight.toFixed(2) : '–';
+    const weightCell = renderCompareComponentWeights(name, leftComponents, rightComponents);
     const leftHasNumericValue = ln !== null && Number.isFinite(ln);
     const rightHasNumericValue = rn !== null && Number.isFinite(rn);
     const leftRaw = getCompareComponentRawNumber(lc);
@@ -2068,7 +1979,9 @@ function renderPlatformComparePage(left: any, right: any) {
       rightHasNumericValue ? rightResultsHref : '',
     );
   }).join('') : renderCompareComponentRow('Components', '–', '–', '–', '–');
-  const overlapCountLabel = overlapComponentNames.length
+  const overlapCountLabel = leftOverlapScore === null || rightOverlapScore === null
+    ? 'Overlap score unavailable for this data version'
+    : overlapComponentNames.length
     ? `${overlapComponentNames.length} shared component${overlapComponentNames.length === 1 ? '' : 's'}`
     : 'No shared components';
   const overlapRow = renderCompareComponentRowHtml(
@@ -2125,7 +2038,7 @@ function renderPlatformComparePage(left: any, right: any) {
       </section>
       <section class="compare-section" id="compare-benchmark-components">
         <h4>Benchmark components</h4>
-        <p class="meta">Normalized scores are shown above raw values. Percentages compare the left device against the right: positive means the left scores higher; negative means it scores lower. Score cells open their matching Results run.</p>
+        <p class="meta">Measurements without overlap contribute nothing to either Overlap Score; their suite weights are retained. Normalized scores are shown above raw values. Percentages compare the left device against the right: positive means the left scores higher; negative means it scores lower. Score cells open their matching Results run.</p>
         <div class="compare-table-wrap"><table class="compare-table compare-component-table">${renderCompareComponentColgroup()}<thead><tr><th>Component</th><th>Weight</th><th>${leftHeaderHtml}</th><th class="compare-component-difference" title="Percentage difference in normalized score, using the right device as the baseline: 100 × (left − right) / right">vs →</th><th>${rightHeaderHtml}</th></tr></thead><tbody>${overlapRow}${componentRows}</tbody></table></div>
       </section>
     </div>
@@ -2988,6 +2901,7 @@ function adaptMetriqEtlRow(row: any) {
   const rawErrors = (row && typeof row.errors === 'object' && row.errors != null) ? row.errors : {};
   const rawDirections = (row && typeof row.directions === 'object' && row.directions != null) ? row.directions : {};
   const rawParams = params;
+  const normalizationBaselines = row?.normalization_baselines ?? {};
   const normalizedScores = (row && typeof row.normalized_scores === 'object' && row.normalized_scores != null)
     ? (row.normalized_scores as Record<string, unknown>)
     : {};
@@ -3023,7 +2937,7 @@ function adaptMetriqEtlRow(row: any) {
     metrics = {};
   }
   const errors: Record<string, number> = {};
-  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams, num_qubits, normalizedScores };
+  return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams, num_qubits, normalizedScores, normalizationBaselines };
 }
 
 function normalizeRun(run: any) {

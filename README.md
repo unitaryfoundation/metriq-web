@@ -92,6 +92,33 @@ Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish th
 - Raw benchmark results (per-metric values, errors, directions) are still available in the run detail modal under "Raw results".
 - `config.json` can declare `metrics` definitions (id, label, unit, scale, format). Any `metriq_score` id in config is normalized to `score`; otherwise the app falls back to whatever metrics exist in `metrics` for legacy datasets.
 
+## Comparison scoring
+
+The browser calculates Overlap Score for the two selected devices; `metriq-data`
+does not precompute device pairs. `platform-scoring.ts` reproduces the canonical
+benchmark aggregation using the measurements, baselines, directions, and weights
+published in each device's component breakdown.
+
+A measurement is included only when both devices have the inputs required by
+that benchmark's aggregation. Otherwise it is treated as missing on both sides.
+The calculation retains each device's original weights and the full suite
+denominator, including the existing within-benchmark coverage penalty. It never
+redistributes excluded weights or inserts a literal zero into a harmonic mean.
+The full Metriq Score uses all of that device's own measurements, independently
+of the comparison peer.
+
+Arithmetic benchmark groups aggregate raw values before baseline normalization;
+harmonic groups combine normalized values. This order is also used when All-time
+mode selects a better record: its raw result, baseline, and direction move
+together before the full score and overlap are calculated separately.
+
+The data feed must expose component `baseline` and `direction` fields, plus
+`baseline_is_self` and row `normalization_baselines` for All-time selection.
+Deploy that additive data update before this frontend. Older payloads without
+enough inputs show an unavailable Overlap Score and retain their published full
+score; the client does not approximate the missing calculation with a sum of
+individual normalized ratios.
+
 ## Baseline highlighting
 
 - The baseline is read from the `baseline` object published at the root of the platforms index JSON served at the

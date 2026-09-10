@@ -34,6 +34,10 @@ jobs:
         if: github.event.pull_request.head.repo.fork == false && github.event.action != 'closed'
         run: npm ci --no-audit --no-fund
 
+      - name: Run tests
+        if: github.event.pull_request.head.repo.fork == false && github.event.action != 'closed'
+        run: npm test
+
       - name: Build preview site
         if: github.event.pull_request.head.repo.fork == false && github.event.action != 'closed'
         run: npm run build:site
