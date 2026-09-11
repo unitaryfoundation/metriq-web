@@ -147,6 +147,9 @@
         <p class="lead" id="hero-benchmarks-lead" hidden>
 	          Browse the <strong>metriq-gym</strong> documentation for benchmark definitions, how to run them, and how to interpret the results.
         </p>
+        <p class="lead" id="hero-news-lead" hidden>
+          News and updates from across Metriq, newest first. <a href="feed.xml">Subscribe via RSS</a>.
+        </p>
       </div>
 
       
@@ -258,11 +261,18 @@
         </div>
       </section>
 
+      <!-- News archive -->
+      <section id="view-news" aria-labelledby="news-heading" hidden>
+        <h2 class="news-heading" id="news-heading" tabindex="-1">What's new</h2>
+        <p class="news-status" id="news-status" role="status">Loading updates…</p>
+        <div class="news-list" id="news-list" role="list" aria-label="All news updates"></div>
+      </section>
+
       <!-- Insights -->
       <section class="insights" aria-labelledby="insights-heading">
         <div class="insights__stack">
           <article class="insight-card updates" id="updates-section" hidden>
-            <h3 id="updates-heading">What's new</h3>
+            <h3 id="updates-heading"><a href="#view=news" data-news-link>What's new <span aria-hidden="true">→</span></a></h3>
             <div class="updates__viewport" id="updates-viewport" role="region" aria-label="What's new" tabindex="0">
               <div class="updates__track" id="updates-track" role="list"></div>
             </div>
