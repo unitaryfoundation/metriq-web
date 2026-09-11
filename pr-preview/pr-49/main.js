@@ -25,7 +25,6 @@ let detailModalReturnFocus = null;
 const viewResultsBtn = document.getElementById('view-results-btn');
 const viewPlatformsBtn = document.getElementById('view-platforms-btn');
 const viewBenchmarksBtn = document.getElementById('view-benchmarks-btn');
-const viewNewsBtn = document.getElementById('view-news-btn');
 const viewResults = document.getElementById('view-results');
 const viewPlatforms = document.getElementById('view-platforms');
 const viewBenchmarks = document.getElementById('view-benchmarks');
@@ -592,8 +591,6 @@ function activateView(which, skipHashUpdate = false) {
     viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
     viewBenchmarksBtn?.classList.toggle('is-active', isBenchmarks);
     viewBenchmarksBtn?.setAttribute('aria-selected', String(isBenchmarks));
-    viewNewsBtn?.classList.toggle('is-active', isNews);
-    viewNewsBtn?.setAttribute('aria-selected', String(isNews));
     if (heroResultsLead)
         heroResultsLead.hidden = !isResults;
     if (heroPlatformsLead)
@@ -630,7 +627,6 @@ function activateView(which, skipHashUpdate = false) {
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
 viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
 viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
-viewNewsBtn?.addEventListener('click', () => activateView('news'));
 let benchmarkPages = [];
 function stableHash(input) {
     let hash = 0;
