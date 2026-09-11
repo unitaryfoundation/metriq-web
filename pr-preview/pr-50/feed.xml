@@ -20,7 +20,7 @@
             <pubDate>Fri, 11 Sep 2026 00:00:00 GMT</pubDate>
             <description><![CDATA[Version 1.0 of the Metriq suite now provides a stable, versioned baseline for evaluating quantum devices. The new device comparison view lets you explore Metriq Scores, benchmark coverage, and individual results side by side. To compare devices, open a device in Platforms and choose «Compare with another device».
 
-Example comparison: IBM Boston vs. IBM Torino: https://metriq.info/#view=platforms&compare_provider_a=ibm&compare_device_a=ibm_boston&compare_provider_b=ibm&compare_device_b=ibm_torino]]></description>
+Example comparison: IBM Kingston vs. IBM Miami: https://metriq.info/#view=platforms&compare_provider_a=ibm&compare_device_a=ibm_kingston&compare_provider_b=ibm&compare_device_b=ibm_miami]]></description>
         </item>
         <item>
             <title><![CDATA[Data from new IBM and OriginQ devices]]></title>
