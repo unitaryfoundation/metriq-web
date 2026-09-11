@@ -3,9 +3,9 @@
     "id": "2026-09-11-metriq-out-of-beta",
     "date": "2026-09-11",
     "title": "Metriq is out of beta",
-    "body": "Version 1.0 of the Metriq benchmark suite now provides a stable, versioned baseline for evaluating quantum devices. The new device comparison view lets you explore Metriq Scores, benchmark coverage, and individual results side by side. To compare devices, open a device in Platforms and choose “Compare with another device”.",
-    "href": "https://metriq.info/#view=platforms",
-    "linkText": "Explore devices"
+    "body": "Version 1.0 of the Metriq suite now provides a stable, versioned baseline for evaluating quantum devices. The new device comparison view lets you explore Metriq Scores, benchmark coverage, and individual results side by side. To compare devices, open a device in Platforms and choose «Compare with another device».",
+    "href": "https://metriq.info/#view=platforms&compare_provider_a=ibm&compare_device_a=ibm_boston&compare_provider_b=ibm&compare_device_b=ibm_torino",
+    "linkText": "Example comparison: IBM Boston vs. IBM Torino"
   },
   {
     "id": "2026-04-19-new-devices",
