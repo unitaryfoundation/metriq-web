@@ -46,7 +46,6 @@ let detailModalReturnFocus: HTMLElement | null = null;
 const viewResultsBtn = document.getElementById('view-results-btn') as HTMLButtonElement | null;
 const viewPlatformsBtn = document.getElementById('view-platforms-btn') as HTMLButtonElement | null;
 const viewBenchmarksBtn = document.getElementById('view-benchmarks-btn') as HTMLButtonElement | null;
-const viewNewsBtn = document.getElementById('view-news-btn') as HTMLButtonElement | null;
 const viewResults = document.getElementById('view-results') as HTMLElement | null;
 const viewPlatforms = document.getElementById('view-platforms') as HTMLElement | null;
 const viewBenchmarks = document.getElementById('view-benchmarks') as HTMLElement | null;
@@ -631,8 +630,6 @@ function activateView(which: 'results'|'platforms'|'benchmarks'|'news', skipHash
   viewPlatformsBtn?.setAttribute('aria-selected', String(isPlatforms));
   viewBenchmarksBtn?.classList.toggle('is-active', isBenchmarks);
   viewBenchmarksBtn?.setAttribute('aria-selected', String(isBenchmarks));
-  viewNewsBtn?.classList.toggle('is-active', isNews);
-  viewNewsBtn?.setAttribute('aria-selected', String(isNews));
   if (heroResultsLead) heroResultsLead.hidden = !isResults;
   if (heroPlatformsLead) heroPlatformsLead.hidden = !isPlatforms;
   if (heroBenchmarksLead) heroBenchmarksLead.hidden = !isBenchmarks;
@@ -657,7 +654,6 @@ function activateView(which: 'results'|'platforms'|'benchmarks'|'news', skipHash
 viewResultsBtn?.addEventListener('click', () => activateView('results'));
 viewPlatformsBtn?.addEventListener('click', () => activateView('platforms'));
 viewBenchmarksBtn?.addEventListener('click', () => activateView('benchmarks'));
-viewNewsBtn?.addEventListener('click', () => activateView('news'));
 
 let benchmarkPages = [];
 
