@@ -18,6 +18,8 @@
     "dataset-metadata.ts",
     "main.ts",
     "platform-components.ts",
+    "platform-scoring.ts",
+    "platform-records.ts",
     "platform-route.ts",
     "records.ts",
     "tour.ts"

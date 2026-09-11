@@ -16,6 +16,8 @@ const staticFiles = [
   "caption-links.js",
   "dataset-metadata.js",
   "platform-components.js",
+  "platform-scoring.js",
+  "platform-records.js",
   "platform-route.js",
   "records.js",
   "tour.js",

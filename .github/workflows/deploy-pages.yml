@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Run tests
+        run: npm test
+
       - name: Build production site
         run: npm run build:site
         env:
