@@ -7,6 +7,30 @@
 // Records that differ in a meaningful parameter (e.g. num_qubits) are
 // distinct results and must all stay visible.
 export const DEFAULT_HIDDEN_PROVIDERS = ['local'];
+export const RECORD_OUTCOMES = ['error', 'unsupported', 'not_applicable'];
+export function normalizeRecordOutcome(value) {
+    return typeof value === 'string' && RECORD_OUTCOMES.includes(value)
+        ? value
+        : null;
+}
+function optionalText(value) {
+    if (typeof value !== 'string')
+        return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+}
+export function normalizeRecordOutcomeDetail(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value))
+        return null;
+    const detail = value;
+    const normalized = {
+        reason: optionalText(detail.reason),
+        errorMessage: optionalText(detail.error_message),
+        source: optionalText(detail.source),
+        sourceUrl: optionalText(detail.source_url),
+    };
+    return Object.values(normalized).some((v) => v !== null) ? normalized : null;
+}
 // Providers can remain in metriq-data as source-of-truth records while being
 // omitted from a particular UI deployment (for example, local simulators on
 // the production website). Matching is case-insensitive and whitespace-safe.

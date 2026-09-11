@@ -1,3 +1,4 @@
+import { normalizeRecordOutcome } from './records.js';
 const platformComponentCollator = new Intl.Collator('en', {
     numeric: true,
     sensitivity: 'base',
@@ -35,6 +36,12 @@ function finiteNumber(value) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
 }
+function optionalText(value) {
+    if (typeof value !== 'string')
+        return null;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+}
 export function classifyPlatformScoreComponent(component, deviceNumQubits) {
     const hasResult = component?.normalized_available === true
         || component?.raw_available === true
@@ -42,15 +49,67 @@ export function classifyPlatformScoreComponent(component, deviceNumQubits) {
         || finiteNumber(component?.raw) !== null
         || Boolean(component?.timestamp || component?.normalized_timestamp || component?.raw_timestamp);
     const requiredNumQubits = finiteNumber(component?.required_num_qubits);
-    const unsupported = !hasResult
+    // A completed record supersedes any reported outcome for the instance (the
+    // ETL never stamps both, but never show a stale claim next to a result).
+    const reportedOutcome = hasResult ? null : normalizeRecordOutcome(component?.reported_outcome);
+    const reportedOutcomeReason = reportedOutcome ? optionalText(component?.reported_outcome_reason) : null;
+    const reportedOutcomeTimestamp = reportedOutcome ? optionalText(component?.reported_outcome_timestamp) : null;
+    // The qubit-count heuristic only applies when nothing was reported: a
+    // reported outcome is evidence from an actual attempt and takes precedence
+    // in both directions (a device may have enough qubits but not enough
+    // connected ones, or a reported error may contradict a count-based guess).
+    const derivedUnsupported = !hasResult
+        && reportedOutcome === null
         && requiredNumQubits !== null
         && deviceNumQubits !== null
         && deviceNumQubits < requiredNumQubits;
+    let status;
+    if (hasResult)
+        status = 'submitted';
+    else if (reportedOutcome)
+        status = reportedOutcome;
+    else if (derivedUnsupported)
+        status = 'unsupported';
+    else
+        status = 'missing';
     return {
-        status: hasResult ? 'submitted' : unsupported ? 'unsupported' : 'missing',
+        status,
         hasResult,
         requiredNumQubits,
+        reportedOutcome,
+        reportedOutcomeReason,
+        reportedOutcomeTimestamp,
     };
+}
+// One resolution shared by the Coverage column, the compare view and the
+// per-component status chips, so the percentage always matches the chips.
+export function summarizePlatformCoverage(components, deviceNumQubits) {
+    if (!components || typeof components !== 'object' || Array.isArray(components))
+        return null;
+    const values = Object.values(components);
+    if (!values.length)
+        return null;
+    const coverage = {
+        covered: 0,
+        runnable: 0,
+        unsupported: 0,
+        notApplicable: 0,
+        errored: 0,
+        total: values.length,
+    };
+    values.forEach((component) => {
+        const { status } = classifyPlatformScoreComponent(component, deviceNumQubits);
+        if (status === 'submitted')
+            coverage.covered += 1;
+        else if (status === 'unsupported')
+            coverage.unsupported += 1;
+        else if (status === 'not_applicable')
+            coverage.notApplicable += 1;
+        else if (status === 'error')
+            coverage.errored += 1;
+    });
+    coverage.runnable = coverage.total - coverage.unsupported - coverage.notApplicable;
+    return coverage;
 }
 export function comparePlatformScoreValues(leftValue, rightValue) {
     const left = finiteNumber(leftValue);

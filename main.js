@@ -1,10 +1,10 @@
-import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders } from './records.js';
+import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders, normalizeRecordOutcome, normalizeRecordOutcomeDetail } from './records.js';
 import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
 import { bindCaptionLinks, syncCaptionRecordMode } from './caption-links.js';
 import { parsePlatformListRoute, serializePlatformListRoute } from './platform-route.js';
 import { calculateOverlapScores } from './platform-scoring.js';
 import { adjustMetriqScoreForRecords } from './platform-records.js';
-import { buildMetriqGymDispatchInstructions, classifyPlatformScoreComponent, comparePlatformScoreValues, isSameMetriqGymSuiteRelease, mergePlatformScoreComponents, resolveMetriqGymSuiteMetadata, resolveMetriqGymSuiteDispatch, sortPlatformScoreComponents, } from './platform-components.js';
+import { buildMetriqGymDispatchInstructions, classifyPlatformScoreComponent, comparePlatformScoreValues, isSameMetriqGymSuiteRelease, mergePlatformScoreComponents, resolveMetriqGymSuiteMetadata, resolveMetriqGymSuiteDispatch, summarizePlatformCoverage, sortPlatformScoreComponents, } from './platform-components.js';
 // ---- Config ----
 const CONFIG_PATH = "./data/config.json";
 const UPDATES_JSON = "./data/updates.json";
@@ -1297,42 +1297,36 @@ function deviceMetadataNumQubits(detail) {
     return null;
 }
 function extractPlatformCoverage(detail) {
-    const comps = detail?.metriq_score?.components;
-    if (!comps || typeof comps !== 'object')
-        return null;
-    const values = Object.values(comps);
-    if (!values.length)
-        return null;
-    const deviceQubits = deviceMetadataNumQubits(detail);
-    let covered = 0;
-    let unsupported = 0;
-    values.forEach((value) => {
-        const availability = classifyPlatformScoreComponent(value, deviceQubits);
-        if (availability.status === 'submitted') {
-            covered += 1;
-            return;
-        }
-        // A benchmark with no result is unsupported when the device has fewer
-        // qubits than the component structurally requires. Otherwise it is a
-        // runnable benchmark still awaiting a submission. When the requirement or
-        // the device's reported qubit count is unknown, treat it as runnable
-        // rather than guess.
-        if (availability.status === 'unsupported') {
-            unsupported += 1;
-        }
-    });
-    const total = values.length;
-    return { covered, runnable: total - unsupported, unsupported, total };
+    // Shares its resolution with the per-component status chips, so the Coverage
+    // percentage always matches what the detail page shows. Components that are
+    // unsupported (reported by an outcome record, or derived from the device
+    // having fewer qubits than required) or not applicable leave the runnable
+    // denominator; a reported error is a runnable benchmark without a result.
+    // When neither an outcome nor the device's qubit count is known, a component
+    // is treated as runnable rather than guessed.
+    return summarizePlatformCoverage(detail?.metriq_score?.components, deviceMetadataNumQubits(detail));
+}
+// Counts behind a coverage ratio, for tooltips and the compare view.
+function coverageExclusionNotes(coverage) {
+    const notes = [];
+    if (coverage.unsupported > 0)
+        notes.push(`${coverage.unsupported} not supported`);
+    if (coverage.notApplicable > 0)
+        notes.push(`${coverage.notApplicable} not applicable`);
+    if (coverage.errored > 0)
+        notes.push(`${coverage.errored} with a reported error`);
+    return notes;
 }
 function formatCompareCoverage(coverage) {
     if (!coverage)
         return '–';
+    const notes = coverageExclusionNotes(coverage);
     if (coverage.runnable <= 0) {
-        return coverage.unsupported > 0 ? `– (${coverage.unsupported} not supported)` : '–';
+        return notes.length ? `– (${notes.join(', ')})` : '–';
     }
     const pct = Math.round((coverage.covered / coverage.runnable) * 100);
     const base = `${pct}% (${coverage.covered} of ${coverage.runnable})`;
-    return coverage.unsupported > 0 ? `${base}, ${coverage.unsupported} not supported` : base;
+    return notes.length ? `${base}, ${notes.join(', ')}` : base;
 }
 async function loadPlatformScores() {
     if (platformScoresCache && platformQubitsCache && platformCoverageCache)
@@ -1592,9 +1586,66 @@ function renderCompareMaybeBetterNumber(value, otherValue, digits) {
     const isBetter = value !== null && otherValue !== null && Number.isFinite(value) && Number.isFinite(otherValue) && value > otherValue;
     return isBetter ? `<strong class="compare-better-value">${escapeHtml(valueHtml)}</strong>` : escapeHtml(valueHtml);
 }
-function renderPlatformComponentStatusHtml(availability, deviceNumQubits) {
+// ---- Reported outcomes ----
+// metriq-data records can report the outcome of an attempt instead of a
+// result (error / unsupported / not_applicable). The ETL stamps the winning
+// outcome onto the Metriq Score component when no completed record exists for
+// that benchmark instance; the raw record keeps the full detail.
+const REPORTED_OUTCOME_LABELS = {
+    unsupported: 'Not supported',
+    error: 'Error reported',
+    not_applicable: 'N/A',
+};
+const REPORTED_OUTCOME_DESCRIPTIONS = {
+    unsupported: 'reported as not supported by this device',
+    error: 'a run was attempted and failed',
+    not_applicable: 'reported as not applicable to this device',
+};
+function reportedOutcomeChipClass(outcome) {
+    return outcome === 'error' ? 'component-status--error' : 'component-status--na';
+}
+// The stamped component carries only outcome, reason and timestamp; the
+// verbatim error text stays on the raw record in benchmark.latest.json. Join
+// back to it by benchmark group and timestamp (the same anchor
+// withAdjustedMetriqScore uses for completed records).
+function findReportedOutcomeRun(context, timestamp) {
+    if (!context || !timestamp || !benchmarkRunsByGroup)
+        return null;
+    const entries = benchmarkRunsByGroup.get(getRunGroupKey(context.provider, context.device, context.group)) || [];
+    const match = entries.find((e) => e.run?.outcome && String(e.run?.timestamp || '') === timestamp);
+    return match ? match.run : null;
+}
+function truncateText(value, max = 240) {
+    return value.length > max ? `${value.slice(0, max - 1).trimEnd()}…` : value;
+}
+function reportedOutcomeTooltip(availability, context) {
+    const outcome = availability.reportedOutcome;
+    if (!outcome)
+        return '';
+    const date = availability.reportedOutcomeTimestamp ? formatDateOnly(availability.reportedOutcomeTimestamp) : 'an unknown date';
+    const lines = [`As of ${date}: ${REPORTED_OUTCOME_DESCRIPTIONS[outcome]}.`];
+    if (availability.reportedOutcomeReason)
+        lines.push(`Reason: ${availability.reportedOutcomeReason}`);
+    const run = findReportedOutcomeRun(context, availability.reportedOutcomeTimestamp);
+    const errorMessage = run?.outcomeDetail?.errorMessage;
+    if (errorMessage)
+        lines.push(`Error: ${truncateText(String(errorMessage))}`);
+    lines.push('A later successful run supersedes this outcome.');
+    return lines.join('\n');
+}
+function renderPlatformComponentStatusHtml(availability, deviceNumQubits, context = null, options = {}) {
     if (availability.status === 'submitted') {
         return '<span class="component-status component-status--ok">Submitted</span>';
+    }
+    const outcome = availability.reportedOutcome;
+    if (outcome) {
+        const chip = `<span class="component-status ${reportedOutcomeChipClass(outcome)}" title="${escapeAttr(reportedOutcomeTooltip(availability, context))}">${escapeHtml(REPORTED_OUTCOME_LABELS[outcome])}</span>`;
+        // Outcomes are point-in-time claims, so say when the claim was made where
+        // no Date column does it already.
+        const asOf = options.inlineDate && availability.reportedOutcomeTimestamp
+            ? `<span class="component-status-asof">as of ${escapeHtml(formatDateOnly(availability.reportedOutcomeTimestamp))}</span>`
+            : '';
+        return asOf ? `<span class="component-status-group">${chip}${asOf}</span>` : chip;
     }
     if (availability.status === 'unsupported') {
         const required = availability.requiredNumQubits;
@@ -1684,8 +1735,19 @@ function renderCompareComponentValueHtml(value, component, isBetter, rawIsBetter
     const rawHtml = rawValueHtml ? `<div class="compare-subvalue">raw ${emphasizedRawValueHtml}</div>` : '';
     return `${emphasizedValueHtml}${rawHtml}`;
 }
-function renderCompareComponentDeviceHtml(valueHtml, availability, deviceNumQubits, hasNumericValue) {
-    return hasNumericValue ? valueHtml : renderPlatformComponentStatusHtml(availability, deviceNumQubits);
+function renderCompareComponentDeviceHtml(valueHtml, availability, deviceNumQubits, hasNumericValue, context = null) {
+    return hasNumericValue
+        ? valueHtml
+        : renderPlatformComponentStatusHtml(availability, deviceNumQubits, context, { inlineDate: true });
+}
+// Reported-outcome cells open the raw record the way scored cells open their run.
+function buildCompareComponentOutcomeHash(provider, device, componentName, component, availability) {
+    if (!availability.reportedOutcome)
+        return '';
+    return buildCompareComponentResultsHash(provider, device, componentName, {
+        group: component?.group,
+        timestamp: availability.reportedOutcomeTimestamp,
+    });
 }
 async function showPlatformComparePage(providerA, deviceA, providerB, deviceB) {
     const container = document.getElementById('platforms-container');
@@ -1898,9 +1960,11 @@ function renderPlatformComparePage(left, right) {
         const rightAvailability = classifyPlatformScoreComponent(rc, rightDeviceQubits);
         const leftValue = renderCompareComponentValueHtml(ln, lc, leftHasNumericValue && rightHasNumericValue && ln > rn, leftRawIsBetter);
         const rightValue = renderCompareComponentValueHtml(rn, rc, leftHasNumericValue && rightHasNumericValue && rn > ln, rightRawIsBetter);
-        const leftCell = renderCompareComponentDeviceHtml(leftValue, leftAvailability, leftDeviceQubits, leftHasNumericValue || leftRaw !== null);
-        const rightCell = renderCompareComponentDeviceHtml(rightValue, rightAvailability, rightDeviceQubits, rightHasNumericValue || rightRaw !== null);
-        return renderCompareComponentRow(name, weightCell, leftCell, rightCell, renderCompareComponentDifferenceHtml(ln, rn), leftHasNumericValue ? leftResultsHref : '', rightHasNumericValue ? rightResultsHref : '');
+        const leftContext = { provider: leftProvider, device: leftDevice, group: typeof lc?.group === 'string' && lc.group.trim() ? lc.group.trim() : name };
+        const rightContext = { provider: rightProvider, device: rightDevice, group: typeof rc?.group === 'string' && rc.group.trim() ? rc.group.trim() : name };
+        const leftCell = renderCompareComponentDeviceHtml(leftValue, leftAvailability, leftDeviceQubits, leftHasNumericValue || leftRaw !== null, leftContext);
+        const rightCell = renderCompareComponentDeviceHtml(rightValue, rightAvailability, rightDeviceQubits, rightHasNumericValue || rightRaw !== null, rightContext);
+        return renderCompareComponentRow(name, weightCell, leftCell, rightCell, renderCompareComponentDifferenceHtml(ln, rn), leftHasNumericValue || leftRaw !== null ? leftResultsHref : buildCompareComponentOutcomeHash(leftProvider, leftDevice, name, lc, leftAvailability), rightHasNumericValue || rightRaw !== null ? rightResultsHref : buildCompareComponentOutcomeHash(rightProvider, rightDevice, name, rc, rightAvailability));
     }).join('') : renderCompareComponentRow('Components', '–', '–', '–', '–');
     const overlapCountLabel = leftOverlapScore === null || rightOverlapScore === null
         ? 'Overlap score unavailable for this data version'
@@ -2012,6 +2076,21 @@ async function showPlatformDetailPage(provider, device) {
         scrollToPlatformsLead();
     }
 }
+function renderPlatformComponentNotesHtml(derivedUnsupportedCount, reportedOutcomeCount) {
+    const notes = [];
+    if (derivedUnsupportedCount > 0) {
+        const one = derivedUnsupportedCount === 1;
+        notes.push(`${derivedUnsupportedCount} component${one ? '' : 's'} require${one ? 's' : ''} more qubits than this device has and cannot be run.`);
+    }
+    if (reportedOutcomeCount > 0) {
+        const one = reportedOutcomeCount === 1;
+        notes.push(`${reportedOutcomeCount} component${one ? '' : 's'} ${one ? 'carries' : 'carry'} a reported outcome (not supported, error, or N/A) from an attempted run, dated in the Date column. Hover the status for the reason, or open the row for the full record; a later successful submission supersedes it.`);
+    }
+    if (!notes.length)
+        return '';
+    notes.push('Their weight still counts in the Metriq Score denominator, so the score reflects the full benchmark suite rather than only what this device supports.');
+    return `<div class="meta" style="margin-top:8px;">${escapeHtml(notes.join(' '))}</div>`;
+}
 function renderPlatformDetailPage(detail, suiteDefinition = null) {
     const container = document.getElementById('platforms-container');
     if (!container)
@@ -2052,7 +2131,8 @@ function renderPlatformDetailPage(detail, suiteDefinition = null) {
             ?? detail?.current?.runtime_device_id
             ?? detail?.current?.device_metadata?.runtime_device_id;
         const detailDeviceQubits = deviceMetadataNumQubits(detail);
-        let unsupportedCount = 0;
+        let derivedUnsupportedCount = 0;
+        let reportedOutcomeCount = 0;
         let dispatchUnavailableCount = 0;
         const rows = components.map(([name, c]) => {
             const benchmark = typeof c?.group === 'string' ? String(c.group).trim() : '';
@@ -2062,16 +2142,23 @@ function renderPlatformDetailPage(detail, suiteDefinition = null) {
             const w = (wRaw === null || wRaw === undefined) ? null : Number(wRaw);
             const raw = rawRaw === null || rawRaw === undefined ? null : formatPlatformComponentRawValue(rawRaw);
             const n = (nRaw === null || nRaw === undefined) ? null : Number(nRaw);
-            const ts = c?.timestamp ? dateOnlyFormatter.format(new Date(c.timestamp)) : '';
             const availability = classifyPlatformScoreComponent(c, detailDeviceQubits);
             const hasResult = availability.hasResult;
+            const reportedOutcome = availability.reportedOutcome;
             const isUnsupported = availability.status === 'unsupported';
-            if (isUnsupported)
-                unsupportedCount += 1;
-            const href = hasResult && benchmark
-                ? buildResultsHash(String(provider), String(device), benchmark, String(c?.timestamp || ''), 'table')
+            const isMissing = availability.status === 'missing';
+            if (isUnsupported && !reportedOutcome)
+                derivedUnsupportedCount += 1;
+            if (reportedOutcome)
+                reportedOutcomeCount += 1;
+            // Date column: the result date for submitted rows, the claim date for a
+            // reported outcome (outcomes are point-in-time claims).
+            const rowTimestamp = hasResult ? c?.timestamp : availability.reportedOutcomeTimestamp;
+            const ts = rowTimestamp ? formatDateOnly(rowTimestamp) : '';
+            const href = (hasResult || reportedOutcome) && benchmark
+                ? buildResultsHash(String(provider), String(device), benchmark, String(rowTimestamp || ''), 'table')
                 : '';
-            const dispatch = !hasResult && !isUnsupported && !isRetiredPlatform
+            const dispatch = isMissing && !isRetiredPlatform
                 ? resolveMetriqGymSuiteDispatch(suiteDefinition, benchmark)
                 : null;
             const instructions = dispatch
@@ -2083,16 +2170,16 @@ function renderPlatformDetailPage(detail, suiteDefinition = null) {
                     runtimeDeviceId,
                 })
                 : null;
-            if (!hasResult && !isUnsupported && !isRetiredPlatform && !instructions) {
+            if (isMissing && !isRetiredPlatform && !instructions) {
                 dispatchUnavailableCount += 1;
             }
-            let statusHtml = renderPlatformComponentStatusHtml(availability, detailDeviceQubits);
+            let statusHtml = renderPlatformComponentStatusHtml(availability, detailDeviceQubits, { provider: String(provider), device: String(device), group: benchmark });
             const rowClasses = ['platform-component-row'];
-            if (isUnsupported)
+            if (isUnsupported || availability.status === 'not_applicable')
                 rowClasses.push('platform-component-row--unsupported');
             let rowAttrs = ` class="${rowClasses.join(' ')}"`;
             if (href) {
-                rowAttrs += ` data-results-href="${escapeAttr(href)}" tabindex="0" title="Open matching results"`;
+                rowAttrs += ` data-results-href="${escapeAttr(href)}" tabindex="0" title="${hasResult ? 'Open matching results' : 'Open the reported record'}"`;
             }
             else if (instructions) {
                 const actionIndex = submissionActions.push({
@@ -2120,11 +2207,9 @@ function renderPlatformDetailPage(detail, suiteDefinition = null) {
         <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;" title="Which record is used when a benchmark has multiple submissions">Records: ${recordAggMode === 'all-time' ? 'All-time best' : 'Latest'}</span>
       </div>
-      ${unsupportedCount > 0 ? `
-        <div class="meta" style="margin-top:8px;">${unsupportedCount} component${unsupportedCount === 1 ? '' : 's'} require${unsupportedCount === 1 ? 's' : ''} more qubits than this device has and cannot be run. Their weight still counts in the Metriq Score denominator, so the score reflects the full benchmark suite rather than only what this device supports.</div>
-      ` : ''}
+      ${renderPlatformComponentNotesHtml(derivedUnsupportedCount, reportedOutcomeCount)}
       ${components.length ? `
-        <div class="meta" style="margin-top:12px;">Submitted rows open their matching Results run.${submissionActions.length > 0 ? ' Select an available “No submission” status for a Metriq-Gym dispatch command.' : ''}${dispatchUnavailableCount > 0 ? ` Dispatch instructions are unavailable for ${dispatchUnavailableCount} missing component${dispatchUnavailableCount === 1 ? '' : 's'}.` : ''}</div>
+        <div class="meta" style="margin-top:12px;">Submitted and reported-outcome rows open their matching Results record.${submissionActions.length > 0 ? ' Select an available “No submission” status for a Metriq-Gym dispatch command.' : ''}${dispatchUnavailableCount > 0 ? ` Dispatch instructions are unavailable for ${dispatchUnavailableCount} missing component${dispatchUnavailableCount === 1 ? '' : 's'}.` : ''}</div>
         <div id="platform-detail-table" style="overflow:auto; margin-top:12px;">
           <table class="smart-table" style="width:100%;min-width:720px;">
             <thead>
@@ -2414,7 +2499,7 @@ function ensurePlatformsHeaderTooltipsBound(table) {
             return `Runs per week over the last 12 weeks (newest week on the right).`;
         }
         if (which === 'platforms-coverage') {
-            return `Share of the benchmarks this device can run that have a submitted result. Benchmarks the device cannot run, because it has fewer qubits than the benchmark requires, are left out of the ratio. Hover a row for the underlying counts.`;
+            return `Share of the benchmarks this device can run that have a submitted result. Benchmarks the device cannot run are left out of the ratio: those reported as not supported or not applicable after an attempted run, and those requiring more qubits than the device has. Runs reported as errors still count as runnable. Hover a row for the underlying counts.`;
         }
         if (which === 'platforms-score') {
             return `Aggregate score for the device. The current benchmark suite version is shown above the table; each device detail identifies its separate data series. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
@@ -2735,10 +2820,7 @@ function renderPlatformsTable() {
             ? `${Math.round((coverage.covered / coverage.runnable) * 100)}%`
             : '–';
         const coverageTitle = coverage
-            ? `${coverage.covered} of ${coverage.runnable} runnable benchmarks submitted`
-                + (coverage.unsupported > 0
-                    ? `, ${coverage.unsupported} not supported by this device`
-                    : '')
+            ? [`${coverage.covered} of ${coverage.runnable} runnable benchmarks submitted`, ...coverageExclusionNotes(coverage)].join(', ')
             : '';
         const scorePct = (scoreVal !== undefined && Number.isFinite(scoreVal) && Number.isFinite(maxScore) && maxScore > 0)
             ? Math.max(0, Math.min(100, (Number(scoreVal) / maxScore) * 100))
@@ -2857,7 +2939,11 @@ function adaptMetriqEtlRow(row) {
         metrics = {};
     }
     const errors = {};
-    return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams, num_qubits, normalizedScores, normalizationBaselines };
+    // Non-completed outcome records (error / unsupported / not_applicable) carry
+    // no results; keep the outcome and its detail so the UI can say why.
+    const outcome = normalizeRecordOutcome(row?.outcome);
+    const outcomeDetail = outcome ? normalizeRecordOutcomeDetail(row?.outcome_detail) : null;
+    return { provider, device, benchmark, timestamp, metrics, errors, rawResults, rawErrors, rawDirections, rawParams, num_qubits, normalizedScores, normalizationBaselines, outcome, outcomeDetail };
 }
 function normalizeRun(run) {
     const clone = { ...run };
@@ -3360,10 +3446,12 @@ function openRunDetail(run) {
         ? `${runMetric} ± ${formatMetricValue(runError, metricFormat, metric.unit)}`
         : runMetric;
     const lifecycleNote = renderLifecycleNoteHtml(String(run.provider || ''), String(run.device || ''));
+    const runOutcome = runMetricValue === null ? normalizeRecordOutcome(run.outcome) : null;
     detailTitle.textContent = `${run.provider} · ${run.device}`;
-    detailSubtitle.textContent = `${run.benchmark} · ${runMetricWithError} · ${formatTimestamp(run.timestamp)}`;
+    detailSubtitle.textContent = `${run.benchmark} · ${runOutcome ? REPORTED_OUTCOME_LABELS[runOutcome] : runMetricWithError} · ${formatTimestamp(run.timestamp)}`;
     detailBody.innerHTML = `
     ${lifecycleNote}
+    ${runOutcome ? renderRunOutcomeHtml(run, runOutcome) : ''}
     <section class="detail-section">
       <h5>Job parameters</h5>
       ${renderJobParams(run)}
@@ -3376,6 +3464,40 @@ function openRunDetail(run) {
     </section>
   `;
     showDetailModal();
+}
+function renderRunOutcomeChipHtml(run) {
+    const outcome = normalizeRecordOutcome(run?.outcome);
+    if (!outcome)
+        return '';
+    const reason = run?.outcomeDetail?.reason;
+    const title = `${REPORTED_OUTCOME_LABELS[outcome]}: ${REPORTED_OUTCOME_DESCRIPTIONS[outcome]}.${reason ? ` ${reason}.` : ''} No score; open the row for details.`;
+    return `<span class="component-status ${reportedOutcomeChipClass(outcome)}" title="${escapeAttr(title)}">${escapeHtml(REPORTED_OUTCOME_LABELS[outcome])}</span>`;
+}
+function renderRunOutcomeHtml(run, outcome) {
+    const detail = run?.outcomeDetail || {};
+    const rows = [
+        `<tr><td>Outcome</td><td><span class="component-status ${reportedOutcomeChipClass(outcome)}">${escapeHtml(REPORTED_OUTCOME_LABELS[outcome])}</span> <span class="meta">${escapeHtml(REPORTED_OUTCOME_DESCRIPTIONS[outcome])}</span></td></tr>`,
+        `<tr><td>As of</td><td>${escapeHtml(formatTimestamp(run?.timestamp))}</td></tr>`,
+    ];
+    if (detail.reason)
+        rows.push(`<tr><td>Reason</td><td>${escapeHtml(detail.reason)}</td></tr>`);
+    if (detail.source)
+        rows.push(`<tr><td>Source</td><td>${escapeHtml(detail.source)}</td></tr>`);
+    if (detail.sourceUrl && /^https?:\/\//i.test(detail.sourceUrl)) {
+        rows.push(`<tr><td>Source URL</td><td><a href="${escapeAttr(detail.sourceUrl)}" target="_blank" rel="noopener">${escapeHtml(detail.sourceUrl)}</a></td></tr>`);
+    }
+    if (detail.errorMessage) {
+        rows.push(`<tr><td>Error</td><td><pre class="detail-outcome-error">${escapeHtml(detail.errorMessage)}</pre></td></tr>`);
+    }
+    return `
+    <section class="detail-section">
+      <h5>Reported outcome</h5>
+      <div class="meta" style="margin-bottom:8px;">This record reports the outcome of an attempt rather than a result. It contributes no score, and a later successful run of the same benchmark instance supersedes it.</div>
+      <table class="smart-table">
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+    </section>`;
 }
 function closeDetail() {
     if (!detailModal || detailModal.hidden)
@@ -3857,7 +3979,7 @@ function applyTableFilters(values) {
         if (tableState.filterBenchmark !== 'all' && String(v.benchmark || '') !== tableState.filterBenchmark)
             return false;
         if (q) {
-            const blob = `${v.timestamp || ''} ${v.provider || ''} ${v.device || ''} ${v.benchmark || ''} ${v.num_qubits ?? ''}`.toLowerCase();
+            const blob = `${v.timestamp || ''} ${v.provider || ''} ${v.device || ''} ${v.benchmark || ''} ${v.num_qubits ?? ''} ${v.outcome ? REPORTED_OUTCOME_LABELS[v.outcome] : ''}`.toLowerCase();
             if (!blob.includes(q))
                 return false;
         }
@@ -3972,7 +4094,9 @@ function renderStaticTable(values) {
                 ? `${formatMetricValue(mv, def.format || '.3f', def.unit)} ± ${formatMetricValue(me, def.format || '.3f', def.unit)}`
                 : formatMetricValue(mv, def.format || '.3f', def.unit);
             const isScore = def.id === 'score';
-            const content = isScore ? `<a href="#" class="metric-link" data-role="score">${disp}</a>` : disp;
+            // An outcome record has no score; show what was reported where the score would be.
+            const outcomeChip = isScore && mv === null ? renderRunOutcomeChipHtml(run) : '';
+            const content = isScore ? `<a href="#" class="metric-link" data-role="score">${outcomeChip || disp}</a>` : disp;
             return `<td class="num">${content}</td>`;
         }).join('');
         const variantLabel = variantSummaries.get(run) || '';
