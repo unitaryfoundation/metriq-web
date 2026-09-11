@@ -62,7 +62,7 @@ class MetriqTour {
                 element: '.tabs--views',
                 popover: {
                     title: 'Primary Navigation',
-                    description: 'Switch between the high-level platform leaderboard, explore individual benchmark results, and read benchmark definitions',
+                    description: 'Explore the platform leaderboard, individual benchmark results, benchmark documentation, and the latest Metriq news.',
                     side: 'bottom',
                     align: 'center'
                 }
