@@ -28,9 +28,12 @@ const viewBenchmarksBtn = document.getElementById('view-benchmarks-btn');
 const viewResults = document.getElementById('view-results');
 const viewPlatforms = document.getElementById('view-platforms');
 const viewBenchmarks = document.getElementById('view-benchmarks');
+const viewNews = document.getElementById('view-news');
+const insightsSection = document.querySelector('.insights');
 const heroResultsLead = document.getElementById('hero-results-lead');
 const heroPlatformsLead = document.getElementById('hero-platforms-lead');
 const heroBenchmarksLead = document.getElementById('hero-benchmarks-lead');
+const heroNewsLead = document.getElementById('hero-news-lead');
 const benchmarksDocsIframe = document.getElementById('benchmarks-docs');
 const captionLinks = Array.from(document.querySelectorAll('.view-caption a[href^="#"]'));
 // No extra filters for Platforms
@@ -501,7 +504,8 @@ function dedupeRunsForDisplayWithMetric(runs, metricId) {
     return dedupeRunsForDisplay(runs, recordAggMode, (run) => getMetricValue(run, metricId));
 }
 function syncRecordModeToggle() {
-    syncCaptionRecordMode(captionLinks, recordAggMode);
+    const newsLinks = Array.from(document.querySelectorAll('[data-news-link]'));
+    syncCaptionRecordMode([...captionLinks, ...newsLinks], recordAggMode);
     document.querySelectorAll('[data-record-mode]').forEach((btn) => {
         const isCurrent = btn.getAttribute('data-record-mode') === recordAggMode;
         btn.classList.toggle('is-current', isCurrent);
@@ -569,9 +573,18 @@ async function initBenchmarksDocsView() {
     }
 }
 function activateView(which, skipHashUpdate = false) {
+    // Give navigation into and out of the archive its own history entry, so Back
+    // returns to the update or view the reader came from.
+    if (!skipHashUpdate && (which === 'news' || (viewNews && !viewNews.hidden))) {
+        const params = new URLSearchParams({ view: which });
+        appendRecordModeParam(params);
+        navigateToHash(which === 'platforms' ? buildPlatformsListHash() : '#' + params.toString());
+        return;
+    }
     const isResults = which === 'results';
     const isPlatforms = which === 'platforms';
     const isBenchmarks = which === 'benchmarks';
+    const isNews = which === 'news';
     viewResultsBtn?.classList.toggle('is-active', isResults);
     viewResultsBtn?.setAttribute('aria-selected', String(isResults));
     viewPlatformsBtn?.classList.toggle('is-active', isPlatforms);
@@ -584,12 +597,18 @@ function activateView(which, skipHashUpdate = false) {
         heroPlatformsLead.hidden = !isPlatforms;
     if (heroBenchmarksLead)
         heroBenchmarksLead.hidden = !isBenchmarks;
+    if (heroNewsLead)
+        heroNewsLead.hidden = !isNews;
     if (viewResults)
         viewResults.hidden = !isResults;
     if (viewPlatforms)
         viewPlatforms.hidden = !isPlatforms;
     if (viewBenchmarks)
         viewBenchmarks.hidden = !isBenchmarks;
+    if (viewNews)
+        viewNews.hidden = !isNews;
+    if (insightsSection)
+        insightsSection.hidden = isNews;
     // When hash routing is driving view changes, it will load the relevant sub-view
     // (platform list vs platform detail vs help page). Avoid racing those renders here.
     if (!skipHashUpdate) {
@@ -626,25 +645,44 @@ function buildFallbackUpdateId(item, index) {
     const hash = stableHash(signature || `update-${index + 1}`);
     return `${stem || 'update'}-${hash}`;
 }
-function focusUpdateFromHash(section, track) {
-    const targetId = String(parseHash().update || '').trim();
-    if (!targetId)
+function focusNewsFromHash() {
+    if (!viewNews || viewNews.hidden)
         return;
-    const cards = Array.from(track.querySelectorAll('[data-update-id]'));
+    const targetId = String(parseHash().update || '').trim();
+    const cards = Array.from(viewNews.querySelectorAll('[data-update-id]'));
     const match = cards.find((card) => String(card.getAttribute('data-update-id') || '') === targetId);
+    const target = match || document.getElementById('news-heading');
+    target?.scrollIntoView({ block: 'start' });
+    target?.focus({ preventScroll: true });
     if (!match)
         return;
-    section.scrollIntoView({ block: 'start' });
-    match.scrollIntoView({ block: 'nearest' });
     match.classList.add('update-card--highlight');
     setTimeout(() => match.classList.remove('update-card--highlight'), 2400);
-    match.focus({ preventScroll: true });
 }
-async function initUpdatesCarousel(config) {
+let updatesPromise = null;
+function initUpdates() {
+    if (!updatesPromise)
+        updatesPromise = loadAppConfig().then(renderUpdates);
+    return updatesPromise;
+}
+function renderUpdateCard(u, archive = false) {
+    const dateLabel = u.date ? formatDateOnly(u.date) : '';
+    const meta = dateLabel ? `<p class="update-card__meta"><time datetime="${escapeAttr(u.date)}">${escapeHtml(dateLabel)}</time></p>` : '';
+    const permalink = '#view=news&update=' + encodeURIComponent(u.id);
+    const heading = archive ? 'h3' : 'h4';
+    const title = u.title ? `<${heading} class="update-card__title"><a href="${escapeAttr(permalink)}" data-news-link>${escapeHtml(u.title)}</a></${heading}>` : '';
+    const body = u.body ? `<p class="update-card__body">${escapeHtml(u.body)}</p>` : '';
+    const link = u.href
+        ? `<a class="update-card__link" href="${escapeAttr(u.href)}" target="_blank" rel="noopener">${escapeHtml(u.linkText || 'Learn more')}</a>`
+        : '';
+    return `<article class="update-card" id="${archive ? 'news-' : ''}update-${escapeAttr(u.id)}" data-update-id="${escapeAttr(u.id)}" role="listitem" tabindex="-1">${meta}${title}${body}${link}</article>`;
+}
+async function renderUpdates(config) {
     const section = document.getElementById('updates-section');
-    const viewport = document.getElementById('updates-viewport');
     const track = document.getElementById('updates-track');
-    if (!section || !viewport || !track)
+    const newsList = document.getElementById('news-list');
+    const newsStatus = document.getElementById('news-status');
+    if (!section || !track || !newsList || !newsStatus)
         return;
     const url = (config && typeof config.updatesUrl === 'string' && String(config.updatesUrl).trim())
         ? String(config.updatesUrl).trim()
@@ -655,11 +693,12 @@ async function initUpdatesCarousel(config) {
         if (!resp.ok)
             throw new Error(`HTTP ${resp.status}`);
         const json = await resp.json();
-        if (Array.isArray(json))
-            items = json;
+        if (!Array.isArray(json))
+            throw new Error('Invalid updates list');
+        items = json;
     }
     catch (err) {
-        // No updates is a valid state; keep section hidden.
+        newsStatus.textContent = 'Updates could not be loaded. Please try again later.';
         return;
     }
     const usedUpdateIds = new Set();
@@ -684,28 +723,24 @@ async function initUpdatesCarousel(config) {
         };
     })
         .filter((u) => u.title || u.body);
-    if (!normalized.length)
+    if (!normalized.length) {
+        newsStatus.textContent = 'No updates yet. Check back soon.';
         return;
+    }
     const sorted = normalized
         .slice()
         .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
-    track.innerHTML = sorted.map((u) => {
-        const dateLabel = u.date ? formatDateOnly(u.date) : '';
-        const meta = dateLabel ? `<p class="update-card__meta">${escapeHtml(dateLabel)}</p>` : '';
-        const title = u.title ? `<h4 class="update-card__title">${escapeHtml(u.title)}</h4>` : '';
-        const body = u.body ? `<p class="update-card__body">${escapeHtml(u.body)}</p>` : '';
-        const link = u.href
-            ? `<a class="update-card__link" href="${escapeAttr(u.href)}" target="_blank" rel="noopener">${escapeHtml(u.linkText || 'Learn more')}</a>`
-            : '';
-        return `<article class="update-card" id="update-${escapeAttr(u.id)}" data-update-id="${escapeAttr(u.id)}" role="listitem" tabindex="-1">${meta}${title}${body}${link}</article>`;
-    }).join('');
+    track.innerHTML = sorted.map((u) => renderUpdateCard(u)).join('');
+    newsList.innerHTML = sorted.map((u) => renderUpdateCard(u, true)).join('');
+    bindCaptionLinks(Array.from(document.querySelectorAll('.update-card [data-news-link]')), navigateToHash);
+    syncRecordModeToggle();
     section.hidden = false;
-    focusUpdateFromHash(section, track);
+    newsStatus.hidden = true;
 }
 (async () => {
     const config = await loadAppConfig();
     setupBenchmarkSearch(config);
-    initUpdatesCarousel(config);
+    void initUpdates();
     // Wire data download links (force download via Blob when possible)
     const wireDownload = (selector, url, fallbackName, preferFallbackName = false) => {
         document.querySelectorAll(selector).forEach(a => {
@@ -913,7 +948,7 @@ function updateHash(next) {
             || merged.results_benchmark
             || merged.results_timestamp
             || merged.results_tab);
-        if (hasScopedRoute || ('view' in next && next.view !== 'platforms')) {
+        if (hasScopedRoute || ('view' in next && next.view !== 'news')) {
             delete merged.update;
         }
         const p = new URLSearchParams();
@@ -1138,13 +1173,19 @@ async function applyHashRouting() {
     if (suppressHashHandler)
         return;
     const h = parseHash();
-    const viewParam = String(h.view || 'platforms');
+    // Keep existing RSS and shared #update=… links working in the archive.
+    const viewParam = String(h.view || (h.update ? 'news' : 'platforms'));
     const view = (viewParam === 'platforms')
         ? 'platforms'
-        : (viewParam === 'benchmarks' ? 'benchmarks' : 'results');
+        : (viewParam === 'news' ? 'news' : (viewParam === 'benchmarks' ? 'benchmarks' : 'results'));
     activateView(view, true);
+    applyRecordModeFromRoute(h);
+    if (view === 'news') {
+        await initUpdates();
+        focusNewsFromHash();
+        return;
+    }
     if (view === 'platforms') {
-        applyRecordModeFromRoute(h);
         await rerenderPlatformsRoute(h);
         return;
     }
@@ -1190,14 +1231,16 @@ async function rerenderPlatformsRoute(h = parseHash()) {
     applyPlatformListRoute(h);
     await initPlatformsView(true);
 }
-bindCaptionLinks(captionLinks, (hash) => {
+function navigateToHash(hash) {
     suppressHashHandler = false;
     // The regular Graph/Table tabs can change panels without changing the URL.
     if (location.hash === hash)
         void applyHashRouting();
     else
         location.hash = hash;
-});
+}
+bindCaptionLinks(captionLinks, navigateToHash);
+bindCaptionLinks(Array.from(document.querySelectorAll('[data-news-link]')), navigateToHash);
 window.addEventListener('hashchange', () => { applyHashRouting(); });
 applyHashRouting();
 async function loadBenchmarks() {
