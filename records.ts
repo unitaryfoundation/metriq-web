@@ -10,6 +10,48 @@
 export type RecordAggMode = 'all-time' | 'latest';
 export const DEFAULT_HIDDEN_PROVIDERS = ['local'];
 
+// ---- Record outcomes ----
+// metriq-data records may carry a non-completed `outcome` (see the "Record
+// outcomes" section of the metriq-data README): `error` = the attempt failed,
+// `unsupported` = the device structurally cannot run this benchmark instance,
+// `not_applicable` = the benchmark does not apply to the device category. A
+// record without the field (or with `completed`) is a completed run. The
+// vocabulary is strict and lowercase; anything else is treated as absent so a
+// malformed value can never be mistaken for a reported outcome.
+export type RecordOutcome = 'error' | 'unsupported' | 'not_applicable';
+export const RECORD_OUTCOMES: readonly RecordOutcome[] = ['error', 'unsupported', 'not_applicable'];
+
+export type RecordOutcomeDetail = {
+  reason: string | null;
+  errorMessage: string | null;
+  source: string | null;
+  sourceUrl: string | null;
+};
+
+export function normalizeRecordOutcome(value: unknown): RecordOutcome | null {
+  return typeof value === 'string' && (RECORD_OUTCOMES as readonly string[]).includes(value)
+    ? value as RecordOutcome
+    : null;
+}
+
+function optionalText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+export function normalizeRecordOutcomeDetail(value: unknown): RecordOutcomeDetail | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const detail = value as Record<string, unknown>;
+  const normalized: RecordOutcomeDetail = {
+    reason: optionalText(detail.reason),
+    errorMessage: optionalText(detail.error_message),
+    source: optionalText(detail.source),
+    sourceUrl: optionalText(detail.source_url),
+  };
+  return Object.values(normalized).some((v) => v !== null) ? normalized : null;
+}
+
 // Providers can remain in metriq-data as source-of-truth records while being
 // omitted from a particular UI deployment (for example, local simulators on
 // the production website). Matching is case-insensitive and whitespace-safe.

@@ -1,11 +1,39 @@
+import { RecordOutcome, normalizeRecordOutcome } from './records.js';
+
 export type PlatformScoreComponentEntry = [string, any];
 
-export type PlatformScoreComponentStatus = 'submitted' | 'unsupported' | 'missing';
+// Component status, in precedence order:
+//   submitted      — a completed record exists (always wins).
+//   unsupported    — the device cannot run this instance: either reported by
+//                    an outcome record, or derived from the device having
+//                    fewer qubits than the component requires.
+//   error          — a reported attempt failed (possibly transiently). Still
+//                    runnable, so it stays in the coverage denominator.
+//   not_applicable — reported: the benchmark does not apply to this device.
+//   missing        — nothing recorded; a runnable benchmark awaiting a run.
+export type PlatformScoreComponentStatus = 'submitted' | 'unsupported' | 'error' | 'not_applicable' | 'missing';
 
 export type PlatformScoreComponentAvailability = {
   status: PlatformScoreComponentStatus;
   hasResult: boolean;
   requiredNumQubits: number | null;
+  // Outcome stamped by metriq-data onto the component (`reported_outcome`,
+  // `reported_outcome_reason`, `reported_outcome_timestamp`); null when the
+  // status was derived from device metadata or nothing is recorded.
+  reportedOutcome: RecordOutcome | null;
+  reportedOutcomeReason: string | null;
+  reportedOutcomeTimestamp: string | null;
+};
+
+export type PlatformCoverage = {
+  covered: number;
+  // Components the device can run: everything except unsupported and
+  // not-applicable ones. Reported errors stay runnable but uncovered.
+  runnable: number;
+  unsupported: number;
+  notApplicable: number;
+  errored: number;
+  total: number;
 };
 
 export type PlatformScoreComparison = {
@@ -74,6 +102,12 @@ function finiteNumber(value: unknown) {
   return Number.isFinite(number) ? number : null;
 }
 
+function optionalText(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
 export function classifyPlatformScoreComponent(
   component: any,
   deviceNumQubits: number | null,
@@ -84,16 +118,63 @@ export function classifyPlatformScoreComponent(
     || finiteNumber(component?.raw) !== null
     || Boolean(component?.timestamp || component?.normalized_timestamp || component?.raw_timestamp);
   const requiredNumQubits = finiteNumber(component?.required_num_qubits);
-  const unsupported = !hasResult
+  // A completed record supersedes any reported outcome for the instance (the
+  // ETL never stamps both, but never show a stale claim next to a result).
+  const reportedOutcome = hasResult ? null : normalizeRecordOutcome(component?.reported_outcome);
+  const reportedOutcomeReason = reportedOutcome ? optionalText(component?.reported_outcome_reason) : null;
+  const reportedOutcomeTimestamp = reportedOutcome ? optionalText(component?.reported_outcome_timestamp) : null;
+  // The qubit-count heuristic only applies when nothing was reported: a
+  // reported outcome is evidence from an actual attempt and takes precedence
+  // in both directions (a device may have enough qubits but not enough
+  // connected ones, or a reported error may contradict a count-based guess).
+  const derivedUnsupported = !hasResult
+    && reportedOutcome === null
     && requiredNumQubits !== null
     && deviceNumQubits !== null
     && deviceNumQubits < requiredNumQubits;
 
+  let status: PlatformScoreComponentStatus;
+  if (hasResult) status = 'submitted';
+  else if (reportedOutcome) status = reportedOutcome;
+  else if (derivedUnsupported) status = 'unsupported';
+  else status = 'missing';
+
   return {
-    status: hasResult ? 'submitted' : unsupported ? 'unsupported' : 'missing',
+    status,
     hasResult,
     requiredNumQubits,
+    reportedOutcome,
+    reportedOutcomeReason,
+    reportedOutcomeTimestamp,
   };
+}
+
+// One resolution shared by the Coverage column, the compare view and the
+// per-component status chips, so the percentage always matches the chips.
+export function summarizePlatformCoverage(
+  components: unknown,
+  deviceNumQubits: number | null,
+): PlatformCoverage | null {
+  if (!components || typeof components !== 'object' || Array.isArray(components)) return null;
+  const values = Object.values(components as Record<string, any>);
+  if (!values.length) return null;
+  const coverage: PlatformCoverage = {
+    covered: 0,
+    runnable: 0,
+    unsupported: 0,
+    notApplicable: 0,
+    errored: 0,
+    total: values.length,
+  };
+  values.forEach((component) => {
+    const { status } = classifyPlatformScoreComponent(component, deviceNumQubits);
+    if (status === 'submitted') coverage.covered += 1;
+    else if (status === 'unsupported') coverage.unsupported += 1;
+    else if (status === 'not_applicable') coverage.notApplicable += 1;
+    else if (status === 'error') coverage.errored += 1;
+  });
+  coverage.runnable = coverage.total - coverage.unsupported - coverage.notApplicable;
+  return coverage;
 }
 
 export function comparePlatformScoreValues(

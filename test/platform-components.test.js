@@ -9,7 +9,11 @@ import {
   resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
+  summarizePlatformCoverage,
 } from '../platform-components.js';
+
+// Fields every classification carries when nothing was reported.
+const noOutcome = { reportedOutcome: null, reportedOutcomeReason: null, reportedOutcomeTimestamp: null };
 
 const entry = (name, group, weight, normalized = 1) => [name, { group, weight, normalized }];
 
@@ -99,7 +103,7 @@ test('classifies submitted platform score components from values or timestamps',
   ]) {
     assert.deepEqual(
       classifyPlatformScoreComponent(component, 5),
-      { status: 'submitted', hasResult: true, requiredNumQubits: null },
+      { status: 'submitted', hasResult: true, requiredNumQubits: null, ...noOutcome },
     );
   }
 });
@@ -107,25 +111,139 @@ test('classifies submitted platform score components from values or timestamps',
 test('distinguishes unsupported components from missing submissions', () => {
   assert.deepEqual(
     classifyPlatformScoreComponent({ required_num_qubits: '20' }, 10),
-    { status: 'unsupported', hasResult: false, requiredNumQubits: 20 },
+    { status: 'unsupported', hasResult: false, requiredNumQubits: 20, ...noOutcome },
   );
   assert.deepEqual(
     classifyPlatformScoreComponent({ required_num_qubits: 10 }, 10),
-    { status: 'missing', hasResult: false, requiredNumQubits: 10 },
+    { status: 'missing', hasResult: false, requiredNumQubits: 10, ...noOutcome },
   );
   assert.deepEqual(
     classifyPlatformScoreComponent({ required_num_qubits: 20 }, null),
-    { status: 'missing', hasResult: false, requiredNumQubits: 20 },
+    { status: 'missing', hasResult: false, requiredNumQubits: 20, ...noOutcome },
     'unknown device capacity must not be guessed as unsupported',
   );
   assert.deepEqual(
     classifyPlatformScoreComponent({ normalized: 'not-a-number', raw: Infinity }, 10),
-    { status: 'missing', hasResult: false, requiredNumQubits: null },
+    { status: 'missing', hasResult: false, requiredNumQubits: null, ...noOutcome },
   );
   assert.deepEqual(
     classifyPlatformScoreComponent({ required_num_qubits: true }, 0),
-    { status: 'missing', hasResult: false, requiredNumQubits: null },
+    { status: 'missing', hasResult: false, requiredNumQubits: null, ...noOutcome },
   );
+});
+
+// ---- Reported outcomes (metriq-data #518 / #532) ----
+// The ETL stamps `reported_outcome`, `reported_outcome_reason` and
+// `reported_outcome_timestamp` onto a component when an outcome record exists
+// for its benchmark instance and no completed record does.
+
+const stamped = (outcome, extra = {}) => ({
+  normalized_available: false,
+  raw_available: false,
+  required_num_qubits: 100,
+  reported_outcome: outcome,
+  reported_outcome_reason: 'Compiler rejects 100-qubit circuits',
+  reported_outcome_timestamp: '2026-08-07T12:00:00',
+  ...extra,
+});
+
+test('reported outcomes classify by their own vocabulary', () => {
+  for (const [outcome, status] of [['unsupported', 'unsupported'], ['error', 'error'], ['not_applicable', 'not_applicable']]) {
+    assert.deepEqual(
+      classifyPlatformScoreComponent(stamped(outcome), 108),
+      {
+        status,
+        hasResult: false,
+        requiredNumQubits: 100,
+        reportedOutcome: outcome,
+        reportedOutcomeReason: 'Compiler rejects 100-qubit circuits',
+        reportedOutcomeTimestamp: '2026-08-07T12:00:00',
+      },
+    );
+  }
+});
+
+test('a reported outcome takes precedence over the qubit-count heuristic in both directions', () => {
+  // Enough qubits by count, but reported unsupported (e.g. connectivity limits).
+  assert.equal(classifyPlatformScoreComponent(stamped('unsupported'), 108).status, 'unsupported');
+  // Too few qubits by count, but a run was attempted and reported as an error.
+  assert.equal(classifyPlatformScoreComponent(stamped('error'), 20).status, 'error');
+  // Not applicable is reported regardless of capacity.
+  assert.equal(classifyPlatformScoreComponent(stamped('not_applicable'), 20).status, 'not_applicable');
+});
+
+test('a completed result supersedes any stamped outcome', () => {
+  const availability = classifyPlatformScoreComponent(
+    stamped('unsupported', { normalized_available: true, normalized: 0.4, timestamp: '2026-09-01T00:00:00' }),
+    108,
+  );
+  assert.equal(availability.status, 'submitted');
+  assert.deepEqual(
+    { reportedOutcome: availability.reportedOutcome, reason: availability.reportedOutcomeReason, ts: availability.reportedOutcomeTimestamp },
+    { reportedOutcome: null, reason: null, ts: null },
+    'a stale claim must never be shown next to a result',
+  );
+});
+
+test('unknown or malformed outcome values fall back to the derived status', () => {
+  for (const bad of ['Unsupported', ' unsupported', 'completed', 'failed', 42, true, null, undefined, { value: 'error' }]) {
+    const tooFew = classifyPlatformScoreComponent(stamped(bad), 20);
+    assert.equal(tooFew.status, 'unsupported', `${JSON.stringify(bad)} with too few qubits derives unsupported`);
+    assert.equal(tooFew.reportedOutcome, null);
+    const enough = classifyPlatformScoreComponent(stamped(bad), 108);
+    assert.equal(enough.status, 'missing', `${JSON.stringify(bad)} with enough qubits is missing`);
+  }
+});
+
+test('reported outcome reason and timestamp are optional and trimmed', () => {
+  assert.deepEqual(
+    classifyPlatformScoreComponent(stamped('error', { reported_outcome_reason: null, reported_outcome_timestamp: '  2026-09-04T11:26:40.462322 ' }), 108),
+    {
+      status: 'error',
+      hasResult: false,
+      requiredNumQubits: 100,
+      reportedOutcome: 'error',
+      reportedOutcomeReason: null,
+      reportedOutcomeTimestamp: '2026-09-04T11:26:40.462322',
+    },
+  );
+  assert.equal(classifyPlatformScoreComponent(stamped('error', { reported_outcome_reason: '   ' }), 108).reportedOutcomeReason, null);
+  assert.equal(classifyPlatformScoreComponent(stamped('error', { reported_outcome_timestamp: 5 }), 108).reportedOutcomeTimestamp, null);
+});
+
+test('coverage summary shares the component resolution', () => {
+  const components = {
+    'EPLG-100': { normalized_available: true, normalized: 0.5 },          // covered
+    'QFT-20:score': stamped('error'),                                       // runnable, uncovered
+    'Linear Ramp QAOA (100q):score': stamped('unsupported'),                // reported unsupported
+    'WIT-100:score': { required_num_qubits: 100 },                         // derived unsupported (device has 20)
+    'CLOPS:score': stamped('not_applicable'),                               // not applicable
+    'BSEQ:score': {},                                                       // missing
+  };
+  assert.deepEqual(summarizePlatformCoverage(components, 20), {
+    covered: 1,
+    runnable: 3,
+    unsupported: 2,
+    notApplicable: 1,
+    errored: 1,
+    total: 6,
+  });
+  // With enough qubits, the derived case becomes runnable-but-missing while
+  // the reported ones are unchanged.
+  assert.deepEqual(summarizePlatformCoverage(components, 200), {
+    covered: 1,
+    runnable: 4,
+    unsupported: 1,
+    notApplicable: 1,
+    errored: 1,
+    total: 6,
+  });
+});
+
+test('coverage summary rejects non-object or empty component maps', () => {
+  for (const bad of [null, undefined, [], 'components', 7, {}]) {
+    assert.equal(summarizePlatformCoverage(bad, 10), null);
+  }
 });
 
 test('compares left device scores using the right device as the percentage baseline', () => {
