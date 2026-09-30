@@ -1,0 +1,99 @@
+name: Deploy PR Preview
+
+on:
+  workflow_run:
+    workflows: [PR Preview]
+    types: [completed]
+  pull_request_target:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: read
+
+# Serialize preview updates, cleanup, and production writes to gh-pages.
+concurrency:
+  group: 'metriq-pages'
+  queue: max
+
+jobs:
+  publish-preview:
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      # Never check out a PR ref or execute code from its artifact in this job.
+      - name: Checkout trusted deployment scripts
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Resolve current preview target
+        id: target
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { resolvePreviewTarget } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/resolve-pr-preview.mjs`);
+            await resolvePreviewTarget({ github, context, core });
+
+      - name: Download this run's preview site
+        if: steps.target.outputs.action == 'deploy'
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ steps.target.outputs.artifact-id }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/pr-preview-site
+          digest-mismatch: error
+
+      - name: Validate preview files
+        if: steps.target.outputs.action == 'deploy'
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_DIRECTORY: ${{ runner.temp }}/pr-preview-site
+        with:
+          script: |
+            const { validatePreviewFiles } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/validate-pr-preview.mjs`);
+            await validatePreviewFiles(process.env.PREVIEW_DIRECTORY);
+
+      - name: Publish or remove PR preview
+        if: steps.target.outputs.action != ''
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ${{ runner.temp }}/pr-preview-site
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+          pages-base-url: metriq.info
+          wait-for-pages-deployment: false
+          action: ${{ steps.target.outputs.action }}
+          pr-number: ${{ steps.target.outputs.pr-number }}
+          deploy-commit-message: Deploy preview for PR ${{ steps.target.outputs.pr-number }}
+          remove-commit-message: Remove preview for PR ${{ steps.target.outputs.pr-number }}
+          # v1 does not forward pr-number to its comment action on workflow_run.
+          comment: false
+
+      - name: Link to deployed preview
+        if: steps.target.outputs.action == 'deploy'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-preview
+          number: ${{ steps.target.outputs.pr-number }}
+          message: |
+            Preview: https://metriq.info/pr-preview/pr-${{ steps.target.outputs.pr-number }}/
+
+            Built from commit `${{ github.event.workflow_run.head_sha }}` ([build run](${{ github.event.workflow_run.html_url }})). The preview will be ready when the GitHub Pages deployment completes.
+
+      - name: Mark preview as removed
+        if: steps.target.outputs.action == 'remove'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: pr-preview
+          number: ${{ steps.target.outputs.pr-number }}
+          message: Preview removed because this pull request is closed.
