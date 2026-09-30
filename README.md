@@ -5,17 +5,15 @@ The shipped entrypoint is `main.js`, which is generated from the versioned `main
 
 ## Local development (watch + reload)
 
-Run a TypeScript watcher and a live-reloading static server in two terminals:
+From the repository root, run a TypeScript watcher and a live-reloading static server in two terminals:
 
 ```bash
 # Terminal 1: compile TypeScript on save
-cd metriq-web
 npx tsc -p . --watch --preserveWatchOutput
 ```
 
 ```bash
 # Terminal 2: serve the static site and auto-reload when main.js changes
-cd metriq-web
 npx live-server . --port=8080
 ```
 
@@ -26,7 +24,6 @@ Then open `http://localhost:8080`.
 `tsconfig.json` defaults to `"sourceMap": false` for the shipped bundle, but you can enable sourcemaps for local debugging by passing flags to `tsc`:
 
 ```bash
-cd metriq-web
 npx tsc -p . --watch --sourceMap --inlineSources --preserveWatchOutput
 ```
 
