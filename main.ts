@@ -2515,10 +2515,12 @@ function renderSparkline(values: number[], width=100, height=24, stroke='#2563eb
   return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${base}${polyline}</svg>`;
 }
 
+const GLOBAL_TOOLTIP_ID = 'global-tooltip';
+
 let globalTooltipHideTimer: any = null;
 
 function hideGlobalTooltipSoon(ms = 180) {
-  const tip = document.getElementById('global-tooltip') as HTMLDivElement | null;
+  const tip = document.getElementById(GLOBAL_TOOLTIP_ID) as HTMLDivElement | null;
   if (!tip) return;
   clearTimeout(globalTooltipHideTimer);
   globalTooltipHideTimer = setTimeout(() => { tip.hidden = true; }, ms);
@@ -2529,10 +2531,10 @@ function cancelHideGlobalTooltip() {
 }
 
 function ensureGlobalTooltip() {
-  let tip = document.getElementById('global-tooltip') as HTMLDivElement | null;
+  let tip = document.getElementById(GLOBAL_TOOLTIP_ID) as HTMLDivElement | null;
   if (tip) return tip;
   tip = document.createElement('div');
-  tip.id = 'global-tooltip';
+  tip.id = GLOBAL_TOOLTIP_ID;
   tip.className = 'global-tooltip';
   tip.hidden = true;
   tip.setAttribute('role', 'tooltip');
@@ -2656,6 +2658,8 @@ function ensureHeaderHelpTooltipsBound(table: HTMLTableElement) {
     const which = el.getAttribute('data-tip') || '';
     const html = tipHtmlFor(which);
     if (!html) return;
+    ensureGlobalTooltip();
+    el.setAttribute('aria-describedby', GLOBAL_TOOLTIP_ID);
     const show = () => showGlobalTooltip(el, html);
     const hide = () => hideGlobalTooltipSoon();
     el.addEventListener('mouseenter', show);
@@ -2860,6 +2864,11 @@ function renderPlatformsTable() {
 			    const headCellsInit = table.querySelectorAll<HTMLTableCellElement>('thead th[data-col]');
 			    headCellsInit.forEach((th) => {
 			      th.style.cursor = 'pointer';
+			      th.addEventListener('keydown', (ev: KeyboardEvent) => {
+			        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+			        ev.preventDefault();
+			        th.click();
+			      });
 			      th.addEventListener('click', (ev) => {
 		        const clickCol = String(th.getAttribute('data-col')) as typeof platformSortKey;
 		        if (platformSortKey === clickCol) {
@@ -3008,6 +3017,7 @@ function renderPlatformsTable() {
 			    const baseLabel = th.getAttribute('data-label') || th.textContent || '';
 			    const isActive = platformSortKey === col;
 			    th.classList.toggle('is-sorted', isActive);
+			    th.setAttribute('aria-sort', isActive ? (platformSortDir === 'asc' ? 'ascending' : 'descending') : 'none');
 			    const icon = isActive ? `<span class="sort-icon" aria-hidden="true">${platformSortDir === 'asc' ? '▲' : '▼'}</span>` : '';
 			    if (col === 'score') {
 			      th.innerHTML = `
@@ -4269,6 +4279,13 @@ function renderStaticTable(values: any[]) {
   // Attach sort handlers
   table.querySelectorAll('th[data-sort]')
     .forEach((th: any) => {
+      const isSorted = String(th.getAttribute('data-sort')) === tableState.sortKey;
+      th.setAttribute('aria-sort', isSorted ? (tableState.sortDir === 'asc' ? 'ascending' : 'descending') : 'none');
+      th.addEventListener('keydown', (ev: KeyboardEvent) => {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        ev.preventDefault();
+        th.click();
+      });
       th.addEventListener('click', () => {
         const key = String(th.getAttribute('data-sort')) as SortKey;
         if (tableState.sortKey === key) {
