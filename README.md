@@ -86,18 +86,6 @@ Deploying the static site is handled by `.github/workflows/deploy-pages.yml`. Th
 
 Push to `main` (or trigger `workflow_dispatch`) and GitHub Pages will publish the latest build.
 
-Pull requests targeting `main`, including forks, run tests and build a preview in
-the read-only `PR Preview` workflow. `Deploy PR Preview` publishes the resulting
-artifact to `https://metriq.info/pr-preview/pr-<number>/` and updates the PR's preview
-comment. It uses deployment scripts from `main`, checks that the PR is still open
-at the built commit, and never runs code from the artifact. Closing a PR removes
-its preview. Publishing and cleanup share the production deployment queue.
-
-GitHub may require a maintainer to approve a fork's workflow run. The publisher
-must exist on `main` before previews can deploy. After first enabling it, existing
-PRs need a new build using the updated `PR Preview` workflow; rerunning an older
-run that skipped forks will not create the required artifact.
-
 ## Metrics support
 
 - By default the app visualizes a single `score` (scalar) per run when present in the dataset (normalized from the ETL `metriq_score`). This is the only metric shown in the chart and table.
