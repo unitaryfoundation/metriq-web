@@ -2648,7 +2648,7 @@ function ensureHeaderHelpTooltipsBound(table: HTMLTableElement) {
       return `Physical qubits available on this device, from its device metadata.`;
     }
     if (which === 'results-qubits') {
-      return `Qubits used by the benchmark instance in this row, from its job parameters. Mirror Circuits report this as width and EPLG as num_qubits_in_chain, so the number describes the circuit and not the device. A dash means the benchmark declares no circuit width.`;
+      return `Qubits used by the benchmark instance in this row, from its job parameters. A dash means the benchmark declares no circuit width.`;
     }
     return '';
   };
