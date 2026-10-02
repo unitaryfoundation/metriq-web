@@ -209,17 +209,25 @@ iframe{width:100%;height:100%;border:0;display:block;background:#fff}
 .compare-with-link:hover{background:rgba(37,99,235,.16);text-decoration:none}
 .compare-with-link--disabled{background:rgba(100,116,139,.10);color:#64748b}
 
-/* Platforms table header help affordance */
-#platforms-table-wrap th .th-help{
+/* Table header help affordance */
+#platforms-table-wrap th .th-help,
+#smart-table-wrap th .th-help{
   display:inline-block;
   cursor:help;
   text-decoration: underline dotted rgba(15,23,42,.35);
   text-underline-offset: 3px;
 }
 #platforms-table-wrap th .th-help:hover,
-#platforms-table-wrap th .th-help:focus{
+#platforms-table-wrap th .th-help:focus,
+#smart-table-wrap th .th-help:hover,
+#smart-table-wrap th .th-help:focus{
   text-decoration-color: rgba(37,99,235,.55);
-  outline:none;
+}
+#platforms-table-wrap th .th-help:focus,
+#smart-table-wrap th .th-help:focus{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+  border-radius:2px;
 }
 
 #platforms-table-wrap th .th-filter-btn{

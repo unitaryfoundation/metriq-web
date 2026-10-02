@@ -2,7 +2,7 @@
 // Runs against the compiled records.js: `npm test` builds first.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dedupeRunsForDisplay, isProviderHidden, normalizeRecordOutcome, normalizeRecordOutcomeDetail, recordInstanceSig, variantParamSummaries, withoutHiddenProviders } from '../records.js';
+import { benchmarkWidthFromParams, dedupeRunsForDisplay, isProviderHidden, normalizeRecordOutcome, normalizeRecordOutcomeDetail, recordInstanceSig, variantParamSummaries, withoutHiddenProviders } from '../records.js';
 
 const getScore = (run) => {
   const v = run?.metrics?.score;
@@ -75,10 +75,10 @@ test('variantParamSummaries labels only params that vary and skips excluded ones
   assert.equal(summaries.get(lonely), '', 'runs with no siblings get no badge');
 });
 
-test('qubit-count-only variants get no badge (Qubits column covers them)', () => {
+test('qubit-count-only variants get no badge (benchmark size column covers them)', () => {
   const q10 = makeRun({ rawParams: { benchmark_name: 'Linear Ramp QAOA', num_qubits: 10 } });
   const q20 = makeRun({ rawParams: { benchmark_name: 'Linear Ramp QAOA', num_qubits: 20 } });
-  const summaries = variantParamSummaries([q10, q20], ['benchmark_name', 'num_qubits', 'max_qubits', 'width']);
+  const summaries = variantParamSummaries([q10, q20], ['benchmark_name', 'num_qubits', 'max_qubits', 'width', 'num_qubits_in_chain']);
   assert.equal(summaries.get(q10), '');
   assert.equal(summaries.get(q20), '');
 });
@@ -172,4 +172,32 @@ test('outcome records for a different benchmark instance stay visible', () => {
     const kept = dedupeRunsForDisplay([completed50, error100], mode, getScore);
     assert.equal(kept.length, 2, `${mode}: a 50q result must not hide the 100q outcome`);
   }
+});
+
+// ---- Benchmark size resolution (issue #51) ----
+
+test('benchmarkWidthFromParams reads the width key each benchmark uses', () => {
+  assert.equal(benchmarkWidthFromParams({ benchmark_name: 'Mirror Circuits', width: 12 }), 12);
+  assert.equal(benchmarkWidthFromParams({ benchmark_name: 'EPLG', num_qubits_in_chain: 100 }), 100);
+  assert.equal(benchmarkWidthFromParams({ benchmark_name: 'CLOPS', num_qubits: 100 }), 100);
+  assert.equal(benchmarkWidthFromParams({ benchmark_name: 'WIT', num_qubits: '7' }), 7);
+});
+
+test('an eplg record reports its chain width instead of a blank cell', () => {
+  const eplg = { benchmark_name: 'EPLG', lengths: [2, 4, 8, 16], num_qubits_in_chain: 18, num_samples: 5, shots: 500 };
+  assert.equal(benchmarkWidthFromParams(eplg), 18);
+});
+
+test('device capacity is never read as a benchmark width', () => {
+  assert.equal(benchmarkWidthFromParams({ device_metadata: { num_qubits: 20 } }), null);
+  assert.equal(benchmarkWidthFromParams({ benchmark_name: 'BSEQ', shots: 1000 }), null);
+  assert.equal(benchmarkWidthFromParams(null), null);
+});
+
+test('eplg chain width gets no variant badge either', () => {
+  const shorter = makeRun({ benchmark: 'EPLG', rawParams: { benchmark_name: 'EPLG', num_qubits_in_chain: 18 } });
+  const longer = makeRun({ benchmark: 'EPLG', rawParams: { benchmark_name: 'EPLG', num_qubits_in_chain: 20 } });
+  const summaries = variantParamSummaries([shorter, longer], ['benchmark_name', 'num_qubits', 'max_qubits', 'width', 'num_qubits_in_chain']);
+  assert.equal(summaries.get(shorter), '');
+  assert.equal(summaries.get(longer), '');
 });
