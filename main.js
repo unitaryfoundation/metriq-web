@@ -1,4 +1,4 @@
-import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders, normalizeRecordOutcome, normalizeRecordOutcomeDetail } from './records.js';
+import { recordInstanceSig, dedupeRunsForDisplay, variantParamSummaries, isProviderHidden, withoutHiddenProviders, normalizeRecordOutcome, normalizeRecordOutcomeDetail, benchmarkWidthFromParams, parseNumQubits } from './records.js';
 import { normalizeDatasetGeneratedDate } from './dataset-metadata.js';
 import { bindCaptionLinks, syncCaptionRecordMode } from './caption-links.js';
 import { parsePlatformListRoute, serializePlatformListRoute } from './platform-route.js';
@@ -496,10 +496,8 @@ let recordAggMode = 'all-time';
 // Runs indexed by provider::device::benchmark, with per-run instance
 // signatures precomputed, so score adjustments avoid rescanning all runs.
 let benchmarkRunsByGroup = null;
-// Params whose values already have a dedicated display slot, so variant badges
-// and tooltips don't need to repeat them (the Qubits column/tooltip covers the
-// qubit-count aliases; the Benchmark column shows the benchmark name).
-const VARIANT_BADGE_EXCLUDED_PARAMS = ['benchmark_name', 'num_qubits', 'max_qubits', 'width'];
+// Params that already have a dedicated display slot, so badges omit them.
+const VARIANT_BADGE_EXCLUDED_PARAMS = ['benchmark_name', 'num_qubits', 'max_qubits', 'width', 'num_qubits_in_chain'];
 function dedupeRunsForDisplayWithMetric(runs, metricId) {
     return dedupeRunsForDisplay(runs, recordAggMode, (run) => getMetricValue(run, metricId));
 }
@@ -1575,7 +1573,7 @@ function normalizeCompareSelection(provider, device, fallback) {
 }
 function extractDeviceMetadataRows(details) {
     const fields = [
-        ['num_qubits', 'Qubits'],
+        ['num_qubits', 'Device qubits'],
         ['quantum_volume', 'Quantum volume'],
         ['processor_type', 'Processor type'],
         ['basis_gates', 'Basis gates'],
@@ -2435,9 +2433,10 @@ function renderSparkline(values, width = 100, height = 24, stroke = '#2563eb') {
     const base = `<line x1="0" y1="${height}" x2="${width}" y2="${height}" stroke="rgba(0,0,0,.12)" stroke-width="1"/>`;
     return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${base}${polyline}</svg>`;
 }
+const GLOBAL_TOOLTIP_ID = 'global-tooltip';
 let globalTooltipHideTimer = null;
 function hideGlobalTooltipSoon(ms = 180) {
-    const tip = document.getElementById('global-tooltip');
+    const tip = document.getElementById(GLOBAL_TOOLTIP_ID);
     if (!tip)
         return;
     clearTimeout(globalTooltipHideTimer);
@@ -2447,11 +2446,11 @@ function cancelHideGlobalTooltip() {
     clearTimeout(globalTooltipHideTimer);
 }
 function ensureGlobalTooltip() {
-    let tip = document.getElementById('global-tooltip');
+    let tip = document.getElementById(GLOBAL_TOOLTIP_ID);
     if (tip)
         return tip;
     tip = document.createElement('div');
-    tip.id = 'global-tooltip';
+    tip.id = GLOBAL_TOOLTIP_ID;
     tip.className = 'global-tooltip';
     tip.hidden = true;
     tip.setAttribute('role', 'tooltip');
@@ -2536,7 +2535,7 @@ function closeGlobalPopover() {
         pop.hidden = true;
     globalPopoverCloseFn = null;
 }
-function ensurePlatformsHeaderTooltipsBound(table) {
+function ensureHeaderHelpTooltipsBound(table) {
     const tipHtmlFor = (which) => {
         if (which === 'platforms-activity') {
             return `Runs per week over the last 12 weeks (newest week on the right).`;
@@ -2547,6 +2546,12 @@ function ensurePlatformsHeaderTooltipsBound(table) {
         if (which === 'platforms-score') {
             return `Aggregate score for the device. The current benchmark suite version is shown above the table; each device detail identifies its separate data series. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
         }
+        if (which === 'platforms-qubits') {
+            return `Physical qubits available on this device, from its device metadata.`;
+        }
+        if (which === 'results-qubits') {
+            return `Qubits used by the benchmark instance in this row, from its job parameters. A dash means the benchmark declares no circuit width.`;
+        }
         return '';
     };
     const bindHeaderTip = (el) => {
@@ -2556,6 +2561,8 @@ function ensurePlatformsHeaderTooltipsBound(table) {
         const html = tipHtmlFor(which);
         if (!html)
             return;
+        ensureGlobalTooltip();
+        el.setAttribute('aria-describedby', GLOBAL_TOOLTIP_ID);
         const show = () => showGlobalTooltip(el, html);
         const hide = () => hideGlobalTooltipSoon();
         el.addEventListener('mouseenter', show);
@@ -2723,7 +2730,7 @@ function renderPlatformsTable() {
 		      <thead>
 		        <tr>
 		          <th data-col="device" data-label="Device" class="sortable">Device</th>
-		          <th data-col="num_qubits" data-label="Qubits" class="sortable">Qubits</th>
+		          <th data-col="num_qubits" data-label="Qubits" class="sortable"><span class="th-help" tabindex="0" data-tip="platforms-qubits">Qubits</span></th>
 		          <th data-col="provider" data-label="Provider" class="sortable">${renderPlatformsProviderHeaderHtml()}</th>
 		          <th data-col="score" data-label="Metriq Score" class="sortable num">
 		            <span class="th-help" tabindex="0" data-tip="platforms-score">Metriq Score</span>
@@ -2741,11 +2748,17 @@ function renderPlatformsTable() {
         tbody = table.querySelector('tbody');
         wrap.appendChild(table);
         container.appendChild(wrap);
-        ensurePlatformsHeaderTooltipsBound(table);
+        ensureHeaderHelpTooltipsBound(table);
         ensurePlatformsProviderFilterBound(table);
         const headCellsInit = table.querySelectorAll('thead th[data-col]');
         headCellsInit.forEach((th) => {
             th.style.cursor = 'pointer';
+            th.addEventListener('keydown', (ev) => {
+                if (ev.key !== 'Enter' && ev.key !== ' ')
+                    return;
+                ev.preventDefault();
+                th.click();
+            });
             th.addEventListener('click', (ev) => {
                 const clickCol = String(th.getAttribute('data-col'));
                 if (platformSortKey === clickCol) {
@@ -2904,11 +2917,15 @@ function renderPlatformsTable() {
         const baseLabel = th.getAttribute('data-label') || th.textContent || '';
         const isActive = platformSortKey === col;
         th.classList.toggle('is-sorted', isActive);
+        th.setAttribute('aria-sort', isActive ? (platformSortDir === 'asc' ? 'ascending' : 'descending') : 'none');
         const icon = isActive ? `<span class="sort-icon" aria-hidden="true">${platformSortDir === 'asc' ? '▲' : '▼'}</span>` : '';
         if (col === 'score') {
             th.innerHTML = `
 			        <span class="th-help" tabindex="0" data-tip="platforms-score">${escapeHtml(baseLabel)}</span>${icon}
 			      `.trim();
+        }
+        else if (col === 'num_qubits') {
+            th.innerHTML = `<span class="th-help" tabindex="0" data-tip="platforms-qubits">${escapeHtml(baseLabel)}</span>${icon}`;
         }
         else if (col === 'coverage') {
             th.innerHTML = `
@@ -2923,7 +2940,7 @@ function renderPlatformsTable() {
         }
     });
     // Sorting indicator updates overwrite header markup; re-bind tooltip triggers after update.
-    ensurePlatformsHeaderTooltipsBound(table);
+    ensureHeaderHelpTooltipsBound(table);
     ensurePlatformsProviderFilterBound(table);
     syncRecordModeToggle();
 }
@@ -2934,8 +2951,7 @@ function adaptMetriqEtlRow(row) {
     const params = (row && typeof row.params === 'object') ? row.params : {};
     const jobType = row?.job_type ?? null;
     const benchmark = params?.benchmark_name ?? jobType ?? 'Unknown';
-    const numQubitsRaw = params?.num_qubits ?? params?.max_qubits ?? params?.width;
-    const num_qubits = parseNumQubits(numQubitsRaw);
+    const num_qubits = benchmarkWidthFromParams(params);
     // Prefer ETL 'metriq_score' but expose it as 'score' (single-benchmark score).
     // Keep raw results/errors for detail view, but do not surface them as chart/table metrics.
     const rawResults = (row && typeof row.results === 'object' && row.results != null) ? row.results : {};
@@ -3044,19 +3060,6 @@ function normalizeRun(run) {
         delete clone.num_qubits;
     }
     return clone;
-}
-function parseNumQubits(value) {
-    if (typeof value === 'number' && Number.isFinite(value))
-        return value;
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (!trimmed)
-            return null;
-        const num = Number(trimmed);
-        if (Number.isFinite(num))
-            return num;
-    }
-    return null;
 }
 function loadAppConfig() {
     if (!appConfigPromise) {
@@ -3809,7 +3812,7 @@ async function renderChart(values, token, metric) {
                     { field: 'device', title: 'Device' },
                     { field: 'provider', title: 'Provider' },
                     { field: 'benchmark', title: 'Benchmark' },
-                    { field: 'num_qubits', title: 'Qubits' },
+                    { field: 'num_qubits', title: 'Benchmark size (qubits)' },
                     { field: 'variantParams', title: 'Params' },
                     { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
                     { field: 'metricError', title: 'Error', type: 'quantitative', format: tooltipFormat },
@@ -4107,7 +4110,7 @@ function renderStaticTable(values) {
 	        <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
 	        <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
 	        <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
-	        <th data-sort="num_qubits" class="sortable num">Qubits${sortIcon('num_qubits')}</th>
+	        <th data-sort="num_qubits" class="sortable num"><span class="th-help" tabindex="0" data-tip="results-qubits">Benchmark size (qubits)</span>${sortIcon('num_qubits')}</th>
 	        ${metricHeaders}
 	        <th data-sort="timestamp" class="sortable num">Date${sortIcon('timestamp')}</th>
 	      </tr>
@@ -4179,6 +4182,14 @@ function renderStaticTable(values) {
     // Attach sort handlers
     table.querySelectorAll('th[data-sort]')
         .forEach((th) => {
+        const isSorted = String(th.getAttribute('data-sort')) === tableState.sortKey;
+        th.setAttribute('aria-sort', isSorted ? (tableState.sortDir === 'asc' ? 'ascending' : 'descending') : 'none');
+        th.addEventListener('keydown', (ev) => {
+            if (ev.key !== 'Enter' && ev.key !== ' ')
+                return;
+            ev.preventDefault();
+            th.click();
+        });
         th.addEventListener('click', () => {
             const key = String(th.getAttribute('data-sort'));
             if (tableState.sortKey === key) {
@@ -4215,6 +4226,7 @@ function renderStaticTable(values) {
     });
     wrap.innerHTML = '';
     wrap.appendChild(table);
+    ensureHeaderHelpTooltipsBound(table);
     if (skeletonTable)
         skeletonTable.style.display = 'none';
 }

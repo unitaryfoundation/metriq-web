@@ -56,6 +56,30 @@ export function withoutHiddenProviders(items, config) {
 }
 // Params that describe sampling effort rather than the benchmark instance.
 export const RECORD_SIG_EXCLUDED_PARAMS = new Set(['shots', 'num_circuits', 'num_random_trials', 'trials', 'seed', 'confidence_level']);
+// Benchmark size key per benchmark: mirror-circuits use width, eplg uses num_qubits_in_chain.
+export const WIDTH_PARAM_KEYS = ['num_qubits', 'max_qubits', 'width', 'num_qubits_in_chain'];
+export function parseNumQubits(value) {
+    if (typeof value === 'number' && Number.isFinite(value))
+        return value;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        const num = Number(trimmed);
+        if (Number.isFinite(num))
+            return num;
+    }
+    return null;
+}
+export function benchmarkWidthFromParams(params) {
+    const p = (params && typeof params === 'object') ? params : {};
+    for (const key of WIDTH_PARAM_KEYS) {
+        const width = parseNumQubits(p[key]);
+        if (width !== null)
+            return width;
+    }
+    return null;
+}
 export function recordInstanceSig(params) {
     const p = (params && typeof params === 'object') ? params : {};
     const keys = Object.keys(p).filter((k) => !RECORD_SIG_EXCLUDED_PARAMS.has(k)).sort();
@@ -103,7 +127,7 @@ export function dedupeRunsForDisplay(runs, mode, getValue) {
 // For displayed runs that share a provider/device/benchmark, summarize the
 // params that distinguish each run from its siblings (e.g. "num_layers=4").
 // Sampling-effort params and params listed in extraExcludedKeys (ones already
-// shown elsewhere, like num_qubits in the Qubits column) are left out. Runs
+// shown elsewhere, like the benchmark size column) are left out. Runs
 // with nothing to distinguish map to ''.
 export function variantParamSummaries(runs, extraExcludedKeys = []) {
     const summaries = new Map();
