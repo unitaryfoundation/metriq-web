@@ -2645,7 +2645,7 @@ function ensureHeaderHelpTooltipsBound(table: HTMLTableElement) {
       return `Aggregate score for the device. The current benchmark suite version is shown above the table; each device detail identifies its separate data series. Click a score cell to see the breakdown. <a href="${escapeAttr(buildPlatformsHelpHash('metriq-score'))}">Learn more</a>`;
     }
     if (which === 'platforms-qubits') {
-      return `Physical qubits available on this device, from its device metadata. Other tables report the size of the circuit a benchmark ran, which is not the same number.`;
+      return `Physical qubits available on this device, from its device metadata.`;
     }
     if (which === 'results-qubits') {
       return `Qubits used by the benchmark instance in this row, from its job parameters. Mirror Circuits report this as width and EPLG as num_qubits_in_chain, so the number describes the circuit and not the device. A dash means the benchmark declares no circuit width.`;
