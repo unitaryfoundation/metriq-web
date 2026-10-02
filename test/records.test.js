@@ -75,7 +75,7 @@ test('variantParamSummaries labels only params that vary and skips excluded ones
   assert.equal(summaries.get(lonely), '', 'runs with no siblings get no badge');
 });
 
-test('qubit-count-only variants get no badge (circuit width column covers them)', () => {
+test('qubit-count-only variants get no badge (benchmark size column covers them)', () => {
   const q10 = makeRun({ rawParams: { benchmark_name: 'Linear Ramp QAOA', num_qubits: 10 } });
   const q20 = makeRun({ rawParams: { benchmark_name: 'Linear Ramp QAOA', num_qubits: 20 } });
   const summaries = variantParamSummaries([q10, q20], ['benchmark_name', 'num_qubits', 'max_qubits', 'width', 'num_qubits_in_chain']);
@@ -174,7 +174,7 @@ test('outcome records for a different benchmark instance stay visible', () => {
   }
 });
 
-// ---- Circuit width resolution (issue #51) ----
+// ---- Benchmark size resolution (issue #51) ----
 
 test('benchmarkWidthFromParams reads the width key each benchmark uses', () => {
   assert.equal(benchmarkWidthFromParams({ benchmark_name: 'Mirror Circuits', width: 12 }), 12);

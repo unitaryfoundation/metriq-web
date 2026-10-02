@@ -3914,7 +3914,7 @@ async function renderChart(values, token, metric) {
           { field: 'device', title: 'Device' },
           { field: 'provider', title: 'Provider' },
           { field: 'benchmark', title: 'Benchmark' },
-          { field: 'num_qubits', title: 'Circuit width' },
+          { field: 'num_qubits', title: 'Benchmark size (qubits)' },
           { field: 'variantParams', title: 'Params' },
           { field: 'metricValue', title: metricLabel, type: 'quantitative', format: tooltipFormat },
           { field: 'metricError', title: 'Error', type: 'quantitative', format: tooltipFormat },
@@ -4206,7 +4206,7 @@ function renderStaticTable(values: any[]) {
 	        <th data-sort="provider" class="sortable">Provider${sortIcon('provider')}</th>
 	        <th data-sort="device" class="sortable">Device${sortIcon('device')}</th>
 	        <th data-sort="benchmark" class="sortable">Benchmark${sortIcon('benchmark')}</th>
-	        <th data-sort="num_qubits" class="sortable num"><span class="th-help" tabindex="0" data-tip="results-qubits">Circuit width</span>${sortIcon('num_qubits')}</th>
+	        <th data-sort="num_qubits" class="sortable num"><span class="th-help" tabindex="0" data-tip="results-qubits">Benchmark size (qubits)</span>${sortIcon('num_qubits')}</th>
 	        ${metricHeaders}
 	        <th data-sort="timestamp" class="sortable num">Date${sortIcon('timestamp')}</th>
 	      </tr>
