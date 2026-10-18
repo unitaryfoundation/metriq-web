@@ -4,8 +4,11 @@ import {
   buildMetriqGymDispatchInstructions,
   classifyPlatformScoreComponent,
   comparePlatformScoreValues,
+  formatMetriqScoreValue,
   isSameMetriqGymSuiteRelease,
   mergePlatformScoreComponents,
+  METRIQ_SCORE_UNAVAILABLE_TEXT,
+  parsePlatformScoreValue,
   resolveMetriqGymSuiteMetadata,
   resolveMetriqGymSuiteDispatch,
   sortPlatformScoreComponents,
@@ -612,4 +615,26 @@ test('dispatch command arguments are shell-quoted and control characters are rej
     }),
     null,
   );
+});
+
+// Issue #3: an undefined score must never be coerced into a displayed 0.00.
+test('undefined Metriq scores parse as unavailable instead of zero', () => {
+  for (const value of [null, undefined, '', '  ', 'n/a', NaN, Infinity, -Infinity, true, [], {}]) {
+    assert.equal(parsePlatformScoreValue(value), null, `expected null for ${String(value)}`);
+  }
+  // Number(null) === 0 was the coercion behind the 0.00 display; reject it.
+  assert.notEqual(parsePlatformScoreValue(null), 0);
+  assert.equal(parsePlatformScoreValue(0), 0, 'a genuine zero score is still a value');
+  assert.equal(parsePlatformScoreValue('100.5'), 100.5);
+});
+
+test('formats Metriq scores as N/A when undefined (issue #3)', () => {
+  assert.equal(formatMetriqScoreValue(100.00000000000003), '100.00');
+  assert.equal(formatMetriqScoreValue(0), '0.00');
+  assert.equal(formatMetriqScoreValue('1.239'), '1.24');
+  assert.equal(formatMetriqScoreValue(1.5, 3), '1.500');
+  for (const value of [null, undefined, '', 'n/a', NaN, Infinity, -Infinity]) {
+    assert.equal(formatMetriqScoreValue(value), METRIQ_SCORE_UNAVAILABLE_TEXT);
+  }
+  assert.equal(METRIQ_SCORE_UNAVAILABLE_TEXT, 'N/A');
 });

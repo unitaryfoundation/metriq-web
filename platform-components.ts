@@ -177,6 +177,21 @@ export function summarizePlatformCoverage(
   return coverage;
 }
 
+// Placeholder shown wherever a Metriq Score would appear but no score exists:
+// an undefined score must read N/A, never 0.00 (issue #3).
+export const METRIQ_SCORE_UNAVAILABLE_TEXT = 'N/A';
+
+// Number(null) === 0, which would turn a null published score into a displayed
+// 0.00. Parse score payloads strictly so "missing" never coerces to zero.
+export function parsePlatformScoreValue(value: unknown): number | null {
+  return finiteNumber(value);
+}
+
+export function formatMetriqScoreValue(value: unknown, digits = 2): string {
+  const score = finiteNumber(value);
+  return score === null ? METRIQ_SCORE_UNAVAILABLE_TEXT : score.toFixed(digits);
+}
+
 export function comparePlatformScoreValues(
   leftValue: unknown,
   rightValue: unknown,

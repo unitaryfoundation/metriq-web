@@ -9,10 +9,13 @@ import {
   buildMetriqGymDispatchInstructions,
   classifyPlatformScoreComponent,
   comparePlatformScoreValues,
+  formatMetriqScoreValue,
   isSameMetriqGymSuiteRelease,
   mergePlatformScoreComponents,
+  METRIQ_SCORE_UNAVAILABLE_TEXT,
   MetriqGymDispatchInstructions,
   MetriqGymSuiteMetadata,
+  parsePlatformScoreValue,
   PlatformCoverage,
   PlatformScoreComponentAvailability,
   resolveMetriqGymSuiteMetadata,
@@ -1448,7 +1451,7 @@ async function loadPlatformScores() {
       if (!platformDetailsCache) platformDetailsCache = new Map();
       platformDetailsCache.set(key, json);
       const ms = json && json.metriq_score;
-      const val = ms && typeof ms.value === 'number' ? Number(ms.value) : null;
+      const val = ms ? parsePlatformScoreValue(ms.value) : null;
       if (val !== null && Number.isFinite(val)) {
         platformScoresCache!.set(key, val);
       }
@@ -1597,7 +1600,7 @@ function sortPlatformsForComparison(platforms: any[]) {
       const provider = String(p.provider || '');
       const device = String(p.device || '');
       const score = platformScoresCache?.get(getDeviceKey(provider, device));
-      return { ...p, provider, device, score: Number(score) };
+      return { ...p, provider, device, score: parsePlatformScoreValue(score) };
     })
     .filter((p: any) => p.provider && p.device)
     .sort((a: any, b: any) => {
@@ -1672,8 +1675,8 @@ function renderCompareMetricRowHtml(labelHtml: string, aHtml: string, bHtml: str
   return `<tr><th scope="row">${labelHtml}</th><td>${aHtml}</td><td>${bHtml}</td></tr>`;
 }
 
-function renderCompareMaybeBetterNumber(value: number | null, otherValue: number | null, digits: number) {
-  const valueHtml = value !== null && Number.isFinite(value) ? value.toFixed(digits) : '–';
+function renderCompareMaybeBetterNumber(value: number | null, otherValue: number | null, digits: number, unavailableText = '–') {
+  const valueHtml = value !== null && Number.isFinite(value) ? value.toFixed(digits) : unavailableText;
   const isBetter = value !== null && otherValue !== null && Number.isFinite(value) && Number.isFinite(otherValue) && value > otherValue;
   return isBetter ? `<strong class="compare-better-value">${escapeHtml(valueHtml)}</strong>` : escapeHtml(valueHtml);
 }
@@ -2035,8 +2038,8 @@ function renderPlatformComparePage(left: any, right: any) {
   const rightDevice = String(right?.device || 'Unknown');
   const leftScoreRaw = left?.metriq_score?.value;
   const rightScoreRaw = right?.metriq_score?.value;
-  const leftScore = leftScoreRaw === null || leftScoreRaw === undefined ? null : Number(leftScoreRaw);
-  const rightScore = rightScoreRaw === null || rightScoreRaw === undefined ? null : Number(rightScoreRaw);
+  const leftScore = parsePlatformScoreValue(leftScoreRaw);
+  const rightScore = parsePlatformScoreValue(rightScoreRaw);
   const leftCoverage = extractPlatformCoverage(left);
   const rightCoverage = extractPlatformCoverage(right);
   const leftComponents = left?.metriq_score?.components && typeof left?.metriq_score?.components === 'object' ? left.metriq_score.components : {};
@@ -2052,7 +2055,7 @@ function renderPlatformComparePage(left: any, right: any) {
   const leftHeaderHtml = renderCompareDeviceHeaderLink(leftProvider, leftDevice);
   const rightHeaderHtml = renderCompareDeviceHeaderLink(rightProvider, rightDevice);
   const summaryRows = [
-    renderCompareMetricRow('Metriq Score', leftScore !== null && Number.isFinite(leftScore) ? leftScore.toFixed(2) : '–', rightScore !== null && Number.isFinite(rightScore) ? rightScore.toFixed(2) : '–'),
+    renderCompareMetricRow('Metriq Score', formatMetriqScoreValue(leftScore), formatMetriqScoreValue(rightScore)),
   ].join('');
   const dataRows = [
     renderCompareMetricRow('Benchmark coverage', formatCompareCoverage(leftCoverage), formatCompareCoverage(rightCoverage)),
@@ -2104,8 +2107,8 @@ function renderPlatformComparePage(left: any, right: any) {
   const overlapRow = renderCompareComponentRowHtml(
     `${renderCompareOverlapScoreLabelHtml()}<div class="compare-subvalue">${escapeHtml(overlapCountLabel)}</div>`,
     '–',
-    renderCompareMaybeBetterNumber(leftOverlapScore, rightOverlapScore, 2),
-    renderCompareMaybeBetterNumber(rightOverlapScore, leftOverlapScore, 2),
+    renderCompareMaybeBetterNumber(leftOverlapScore, rightOverlapScore, 2, METRIQ_SCORE_UNAVAILABLE_TEXT),
+    renderCompareMaybeBetterNumber(rightOverlapScore, leftOverlapScore, 2, METRIQ_SCORE_UNAVAILABLE_TEXT),
     renderCompareComponentDifferenceHtml(leftOverlapScore, rightOverlapScore),
     '',
     '',
@@ -2341,7 +2344,7 @@ function renderPlatformDetailPage(detail: any, suiteDefinition: unknown = null) 
       <div class="meta" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         ${metriqGymSuiteMetadata ? `<span data-suite-version-context style="display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#312e81;padding:4px 10px;border-radius:999px;font-weight:600;" title="Current benchmark suite definition; distinct from the score data series">Current suite: ${escapeHtml(metriqGymSuiteMetadata.version)}</span>` : ''}
         <span style="display:inline-flex;align-items:center;gap:6px;background:#f8fafc;color:#334155;padding:4px 10px;border-radius:999px;font-weight:600;">Data series: ${escapeHtml(series || '')}</span>
-        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${val !== null && Number.isFinite(val) ? val.toFixed(2) : '–'}</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;background:#ecfeff;color:#164e63;padding:4px 10px;border-radius:999px;font-weight:600;">Value: ${formatMetriqScoreValue(val)}</span>
         <span style="display:inline-flex;align-items:center;gap:6px;background:#f0fdf4;color:#166534;padding:4px 10px;border-radius:999px;font-weight:600;" title="Which record is used when a benchmark has multiple submissions">Records: ${recordAggMode === 'all-time' ? 'All-time best' : 'Latest'}</span>
       </div>
       ${renderPlatformComponentNotesHtml(derivedUnsupportedCount, reportedOutcomeCount)}
@@ -2776,8 +2779,8 @@ function renderPlatformsTable() {
     if (recordAggMode === 'all-time' && platformDetailsCache) {
       const detail = platformDetailsCache.get(key);
       if (detail) {
-        const adj = Number(withAdjustedMetriqScore(detail)?.metriq_score?.value);
-        if (Number.isFinite(adj)) v = adj;
+        const adj = parsePlatformScoreValue(withAdjustedMetriqScore(detail)?.metriq_score?.value);
+        if (adj !== null) v = adj;
       }
     }
     if (v !== undefined && Number.isFinite(v)) displayScores.set(key, Number(v));
@@ -2966,7 +2969,7 @@ function renderPlatformsTable() {
     const isRetired = lifecycle?.status === 'retired';
     const deviceLabel = renderDeviceLabelHtml(provider, device, p);
     const scoreVal = displayScores.get(key);
-    const scoreText = (scoreVal !== undefined && Number.isFinite(scoreVal)) ? scoreVal.toFixed(2) : '–';
+    const scoreText = formatMetriqScoreValue(scoreVal);
     // Show the ratio as a percentage so rows stay comparable: the denominator is
     // the number of benchmarks each device can actually run, which differs per
     // device. The counts behind it live in the tooltip.
